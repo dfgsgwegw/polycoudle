@@ -1020,7 +1020,7 @@ function renderSigs(sigs){
 }
 
 function renderChart(metars, wuData){
-  const c=document.getElementById('temp-chart');
+  const c=document.querySelector('canvas#temp-chart, #temp-chart canvas');
   if(!c) return;
 
   // Filter today's METAR
@@ -1709,7 +1709,7 @@ window.fetchAll = fetchAll;
     return Object.values(by).sort((a,b)=>sm(a.slot)-sm(b.slot));
   }
   function draw(hist){
-    const c=document.getElementById('temp-chart'); if(!c||!hist)return;
+    const c=document.querySelector('canvas#temp-chart, #temp-chart canvas'); if(!c || typeof c.getContext!=='function' || !hist){ console.warn('temp-chart canvas not found'); return; }
     const ctx=c.getContext('2d'), dpr=devicePixelRatio||1;
     c.width=c.clientWidth*dpr; c.height=c.clientHeight*dpr; ctx.setTransform(dpr,0,0,dpr,0,0);
     const w=c.clientWidth,h=c.clientHeight; ctx.clearRect(0,0,w,h);
