@@ -1,4 +1,4 @@
-name = "vilk-weather-d1"
+name = "polycoudle"
 main = "src/worker.js"
 compatibility_date = "2025-05-01"
 
