@@ -1,0 +1,6 @@
+WU grouping fixed:
+12:01-12:30 -> 12:30 row
+12:31-13:00 -> 13:00 row
+13:01-13:30 -> 13:30 row
+Adds two pending rows after latest slot.
+node check: 0
