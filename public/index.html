@@ -1442,68 +1442,156 @@ window.fetchAll = fetchAll;
 
 
 
-<script>
+
+
+
+<script id="final-d1-ui-fix">
 (function(){
-  function todayIST(){return new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});}
-  function nowIST(){return new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Kolkata'}));}
-  function p2(n){return String(n).padStart(2,'0');}
-  function sm(slot){const m=String(slot||'').match(/(\d{1,2}):(\d{2})/);return m?+m[1]*60+ +m[2]:null;}
-  function ms(min){min=((min%1440)+1440)%1440;return p2(Math.floor(min/60))+':'+p2(min%60);}
-  function lab(slot){const x=sm(slot);if(x==null)return slot||'';return new Date(2000,0,1,Math.floor(x/60),x%60).toLocaleTimeString('en-IN',{hour:'numeric',minute:'2-digit',hour12:true}).replace(' ','');}
-  function ceilWU(t){const m=String(t||'').match(/(\d{1,2}):(\d{2})/);if(!m)return null;let h=+m[1],mm=+m[2];if(mm===0)return p2(h)+':00';if(mm<=30)return p2(h)+':30';return p2((h+1)%24)+':00';}
-  function allowedSlots(){
-    const n=nowIST(), nowM=n.getHours()*60+n.getMinutes();
-    const ceil=Math.ceil(nowM/30)*30, max=Math.min(23*60+30, ceil+60);
-    const set=new Set(); for(let m=0;m<=max;m+=30)set.add(ms(m)); return set;
+  function todayIST(){ return new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'}); }
+  function nowIST(){ return new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Kolkata'})); }
+  function pad2(n){ return String(n).padStart(2,'0'); }
+  function slotMin(slot){ const m=String(slot||'').match(/(\d{1,2}):(\d{2})/); return m ? Number(m[1])*60 + Number(m[2]) : null; }
+  function minSlot(min){ min=((min%1440)+1440)%1440; return pad2(Math.floor(min/60))+':'+pad2(min%60); }
+  function labelSlot(slot){
+    const x=slotMin(slot); if(x==null) return slot||'—';
+    return new Date(2000,0,1,Math.floor(x/60),x%60).toLocaleTimeString('en-IN',{hour:'numeric',minute:'2-digit',hour12:true}).replace(' ','');
   }
-  function chartRows(hist){
-    const allowed=allowedSlots(), by={};
-    (Array.isArray(hist?.metar_rows)?hist.metar_rows:[]).filter(m=>String(m.valid_ist||'').startsWith(todayIST())).forEach(m=>{
-      if(m.slot&&allowed.has(m.slot)&&m.temp_c!=null) by[m.slot]={slot:m.slot,temp:+m.temp_c,type:'METAR'};
+  function ceilWUToNextMetarSlot(t){
+    const m=String(t||'').match(/(\d{1,2}):(\d{2})/); if(!m) return null;
+    let h=Number(m[1]), mm=Number(m[2]);
+    if(mm===0) return pad2(h)+':00';
+    if(mm<=30) return pad2(h)+':30';
+    return pad2((h+1)%24)+':00';
+  }
+  function groupWUByWindow(wuRows){
+    const out={};
+    Object.values(wuRows||{}).forEach(list=>{
+      (Array.isArray(list)?list:[]).forEach(x=>{
+        const sl=ceilWUToNextMetarSlot(x.saved_at);
+        if(!sl || x.temp_c==null) return;
+        (out[sl]=out[sl]||[]).push(x);
+      });
     });
-    Object.values(hist?.wu_obs_rows||{}).forEach(list=>(Array.isArray(list)?list:[]).forEach(x=>{
-      const sl=ceilWU(x.saved_at); if(!sl||!allowed.has(sl)||x.temp_c==null||by[sl])return;
-      by[sl]={slot:sl,temp:+x.temp_c,type:'WU'};
-    }));
-    return Object.values(by).sort((a,b)=>sm(a.slot)-sm(b.slot));
+    Object.keys(out).forEach(sl=>{
+      const seen=new Set();
+      out[sl]=out[sl].filter(x=>{
+        const id=String(x.saved_at)+'|'+x.temp_c;
+        if(seen.has(id)) return false;
+        seen.add(id); return true;
+      }).sort((a,b)=>String(a.saved_at).localeCompare(String(b.saved_at)));
+    });
+    return out;
   }
-  function findChartContainer(){
-    return document.getElementById('temp-chart') ||
-           document.querySelector('[id*="chart" i]') ||
-           document.querySelector('.chart') ||
-           null;
+  function fmtWU(list){
+    const arr=Array.isArray(list)?list:[];
+    if(!arr.length) return '<span style="color:var(--dim)">— waiting for WU</span>';
+    return arr.map((x,i)=>{
+      const p=i?arr[i-1]:null;
+      const d=p ? +(Number(x.temp_c)-Number(p.temp_c)).toFixed(1) : 0;
+      const arrow=d>0?'▲':d<0?'▼':'•';
+      const col=d>0?'var(--red)':d<0?'var(--grn)':'var(--org)';
+      return `<div style="padding:4px 0;border-top:1px dashed rgba(255,255,255,.06)">
+        ↳ WU <span style="color:var(--dim)">${String(x.saved_at||'').slice(0,5)}</span>
+        <b style="color:${col};margin-left:12px">${Number(x.temp_c).toFixed(1)}°C</b>
+        <span style="color:${col}">${arrow}</span>
+        ${d?`<small style="color:${col};margin-left:8px">${d>0?'+':''}${d}</small>`:''}
+        ${x.humidity!=null?`<small style="color:var(--dim);margin-left:10px">💧${x.humidity}%</small>`:''}
+        ${x.condition?`<small style="color:var(--dim);margin-left:12px">${x.condition}</small>`:''}
+      </div>`;
+    }).join('');
   }
-  function renderHTMLChart(hist){
-    const box=findChartContainer();
-    if(!box || !hist){ console.warn('chart container not found'); return; }
-    const data=chartRows(hist);
-    if(!data.length){
-      box.innerHTML='<div style="color:#6b93b5;font-family:monospace;padding:18px">Waiting for today IST data...</div>';
-      return;
-    }
+  function kph(kt){ const n=Number(kt); return Number.isFinite(n) ? Math.round(n*1.852)+'km/h' : '—'; }
+  function allowedChartSlots(){
+    const n=nowIST();
+    const nowM=n.getHours()*60+n.getMinutes();
+    const ceil=Math.ceil(nowM/30)*30;
+    const max=Math.min(23*60+30, ceil+60);
+    const set=new Set();
+    for(let m=0;m<=max;m+=30) set.add(minSlot(m));
+    return set;
+  }
+  function chartRows(hist, groupedWU){
+    const allowed=allowedChartSlots();
+    const by={};
+    (Array.isArray(hist?.metar_rows)?hist.metar_rows:[])
+      .filter(m=>String(m.valid_ist||'').startsWith(todayIST()))
+      .forEach(m=>{ if(m.slot && allowed.has(m.slot) && m.temp_c!=null) by[m.slot]={slot:m.slot,temp:Number(m.temp_c),type:'METAR'}; });
+    Object.keys(groupedWU||{}).forEach(sl=>{
+      if(!allowed.has(sl) || by[sl]) return;
+      const list=groupedWU[sl]||[];
+      const last=list[list.length-1];
+      if(last && last.temp_c!=null) by[sl]={slot:sl,temp:Number(last.temp_c),type:'WU'};
+    });
+    return Object.values(by).sort((a,b)=>slotMin(a.slot)-slotMin(b.slot));
+  }
+  function findChartBox(){ return document.getElementById('temp-chart') || document.querySelector('[id*="chart" i]') || document.querySelector('.chart'); }
+  function renderHTMLChart(hist, groupedWU){
+    const box=findChartBox(); if(!box) return;
+    const data=chartRows(hist, groupedWU);
+    if(!data.length){ box.innerHTML='<div style="color:#6b93b5;font-family:monospace;padding:18px">Waiting for today IST data...</div>'; return; }
     const maxT=Math.max(...data.map(x=>x.temp),42);
     const minT=Math.min(...data.map(x=>x.temp),30);
-    box.innerHTML = `<div style="display:flex;align-items:end;gap:10px;height:190px;padding:12px 8px 4px;overflow-x:auto;border-radius:12px">
+    box.innerHTML=`<div style="display:flex;align-items:end;gap:10px;height:190px;padding:12px 8px 4px;overflow-x:auto;border-radius:12px">
       ${data.map(d=>{
         const pct=Math.max(12, Math.round(((d.temp-minT)/(maxT-minT+0.1))*120)+35);
         const hot=d.temp>=40;
         return `<div style="min-width:46px;text-align:center;font-family:monospace">
           <div style="color:${hot?'#ffcc33':'#00d4ff'};font-weight:800;font-size:13px;margin-bottom:4px">${Math.round(d.temp)}°</div>
           <div style="height:${pct}px;background:${hot?'rgba(255,174,0,.55)':'rgba(0,212,255,.35)'};border-radius:6px 6px 2px 2px;box-shadow:0 0 12px rgba(0,212,255,.08)"></div>
-          <div style="color:#6b93b5;font-size:10px;margin-top:6px;white-space:nowrap">${lab(d.slot)}</div>
+          <div style="color:#6b93b5;font-size:10px;margin-top:6px;white-space:nowrap">${labelSlot(d.slot)}</div>
           <div style="color:${d.type==='WU'?'#00d4ff':'#00ff88'};font-size:9px">${d.type}</div>
         </div>`;
       }).join('')}
     </div>`;
   }
-  async function loadHTMLChart(){
+  function renderTable(hist, groupedWU){
+    const tbl=document.getElementById('history-tbody') || document.querySelector('tbody');
+    if(!tbl) return;
+    const metars=(Array.isArray(hist?.metar_rows)?hist.metar_rows:[])
+      .filter(m=>String(m.valid_ist||'').startsWith(todayIST()))
+      .sort((a,b)=>String(a.valid_utc||'').localeCompare(String(b.valid_utc||'')));
+    const bySlot={}; metars.forEach(m=>{ if(m.slot) bySlot[m.slot]=m; });
+    let slots=[...new Set([...metars.map(m=>m.slot).filter(Boolean), ...Object.keys(groupedWU||{})])]
+      .sort((a,b)=>slotMin(a)-slotMin(b));
+    if(slots.length){
+      const last=slots[slots.length-1];
+      for(let i=1;i<=2;i++){ const sl=minSlot(slotMin(last)+i*30); if(!slots.includes(sl)) slots.push(sl); }
+    }
+    tbl.innerHTML = slots.map(sl=>{
+      const m=bySlot[sl], temp=m?.temp_c, pending=!m;
+      const wx=m?.wx || ((m?.raw_metar||'').match(/\b(HZ|DU|RA|TS|NSC)\b/)||[])[1] || '—';
+      return `<tr style="${temp>=40?'background:rgba(0,255,150,.08)':pending?'background:rgba(255,255,255,.04)':''}">
+        <td style="padding:7px">${labelSlot(sl)}</td>
+        <td style="padding:7px;color:${pending?'var(--dim)':temp>=40?'var(--red)':temp>=38?'var(--org)':'var(--acc)'}"><b>${pending?'⏳ METAR':Number(temp).toFixed(0)+'°C'}</b></td>
+        <td style="padding:7px;color:var(--org)">${fmtWU(groupedWU[sl])}</td>
+        <td style="padding:7px">${m?.dewpoint_c!=null?m.dewpoint_c+'°C':'—'}</td>
+        <td style="padding:7px">${m?kph(m.wind_kt)+' '+(m.wind_dir||'')+(m.wind_dir?'°':''):'—'}</td>
+        <td style="padding:7px">${m?.visibility||'—'}${m?.visibility?'km':''}</td>
+        <td style="padding:7px">${m?wx:'—'}</td>
+        <td style="padding:7px">${m?(m.nosig?'✅ YES':m.becmg?'BECMG':m.tempo?'TEMPO':'NO'):'—'}</td>
+        <td style="padding:7px;color:var(--acc)">—</td>
+        <td style="padding:7px">—</td>
+      </tr>`;
+    }).join('') || `<tr><td colspan="10" style="padding:15px;color:var(--dim)">No rows yet.</td></tr>`;
+    const title=[...document.querySelectorAll('.ch')].find(x=>/METAR readings|METAR ROWS/i.test(x.textContent||''));
+    if(title) title.textContent='TODAY — METAR ROWS + WU WINDOW';
+  }
+  async function loadFinalUI(){
     try{
       const r=await fetch('/api/history?date='+todayIST()+'&t='+Date.now(),{cache:'no-store'});
-      renderHTMLChart(await r.json());
-    }catch(e){console.warn('HTML chart fix failed',e.message);}
+      const hist=await r.json();
+      const groupedWU=groupWUByWindow(hist.wu_obs_rows||{});
+      renderTable(hist, groupedWU);
+      renderHTMLChart(hist, groupedWU);
+      const sync=document.getElementById('supa-sync-status');
+      if(sync && hist?.meta) sync.textContent=`Today rows: WU ${hist.meta.wu_count||0} · METAR ${hist.meta.metar_count||0} · Forecast ${hist.meta.forecast_count||0}`;
+      document.body.classList.add('real-table-ready');
+    }catch(e){ console.warn('final UI load failed', e.message); }
   }
-  window.addEventListener('load',()=>setTimeout(loadHTMLChart,400));
-  setInterval(loadHTMLChart,30000);
+  window.loadFinalUI = loadFinalUI;
+  window.loadRealOnlyFix = loadFinalUI;
+  window.addEventListener('load',()=>setTimeout(loadFinalUI,600));
+  setInterval(loadFinalUI,30000);
 })();
 </script>
 
