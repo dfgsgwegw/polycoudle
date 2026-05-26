@@ -1,0 +1,24 @@
+Your test URL was probably wrong.
+
+Do NOT guess:
+https://polycoudle.randisaazhumai208.workers.dev
+
+Find exact URL:
+Cloudflare Dashboard
+→ Workers & Pages
+→ polycoudle
+→ Settings / Domains & Routes
+→ copy the workers.dev URL shown there
+
+It can look like:
+https://polycoudle.<your-subdomain>.workers.dev
+
+or if this is Pages:
+https://polycoudle.pages.dev
+
+Test:
+<REAL_URL>/api/collect
+<REAL_URL>/api/history
+
+This ZIP also fixes the frontend SyntaxError:
+Unexpected identifier 'D1Metar'
