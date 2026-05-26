@@ -252,6 +252,71 @@ tbody tr:hover{background:rgba(0,212,255,.055)!important}
   .badge,.pill{font-size:11px!important;padding:5px 8px!important}
 }
 
+
+/* ===== SCROLL FIX: chart / score / table must not be cut ===== */
+html, body{
+  overflow-x:auto !important;
+}
+body{
+  min-width:320px !important;
+}
+.wrap,.container,main{
+  max-width:1180px !important;
+  width:calc(100vw - 24px) !important;
+  overflow:visible !important;
+}
+.card,.panel,.box,section{
+  overflow:visible !important;
+}
+.table-scroll-wrap{
+  width:100% !important;
+  overflow-x:auto !important;
+  overflow-y:visible !important;
+  -webkit-overflow-scrolling:touch !important;
+}
+.card:has(table),
+.panel:has(table),
+section:has(table){
+  overflow-x:auto !important;
+  -webkit-overflow-scrolling:touch !important;
+}
+#temp-chart,[id*="chart" i],.chart{
+  width:100% !important;
+  overflow-x:auto !important;
+  overflow-y:hidden !important;
+  -webkit-overflow-scrolling:touch !important;
+}
+#temp-chart > div,[id*="chart" i] > div,.chart > div{
+  min-width:max-content !important;
+}
+.score-scroll,.prediction-scroll,.signal-scroll{
+  width:100% !important;
+  overflow-x:auto !important;
+  -webkit-overflow-scrolling:touch !important;
+}
+@media (max-width: 900px){
+  .wrap,.container,main{
+    width:calc(100vw - 12px) !important;
+  }
+  table{
+    min-width:900px !important;
+  }
+  #temp-chart,[id*="chart" i],.chart{
+    min-height:210px !important;
+  }
+}
+@media (max-width: 520px){
+  .wrap,.container,main{
+    width:calc(100vw - 8px) !important;
+  }
+  table{
+    min-width:820px !important;
+  }
+  #today-banner{
+    display:block !important;
+  }
+}
+
 </style>
 </head>
 <body>
@@ -2015,6 +2080,35 @@ window.fetchAll = fetchAll;
   }
   window.addEventListener('load',()=>{setTimeout(wrapTables,300);setTimeout(compactCards,300);});
   setInterval(wrapTables,3000);
+})();
+</script>
+
+
+<script id="scroll-fix-js">
+(function(){
+  function addScrollFix(){
+    document.querySelectorAll('table').forEach(t=>{
+      if(t.parentElement && t.parentElement.classList.contains('table-scroll-wrap')) return;
+      const w=document.createElement('div');
+      w.className='table-scroll-wrap';
+      t.parentNode.insertBefore(w,t);
+      w.appendChild(t);
+    });
+
+    // Make chart/score sections horizontally scrollable without hiding content.
+    document.querySelectorAll('[id*="chart" i], .chart').forEach(el=>{
+      el.style.overflowX='auto';
+      el.style.webkitOverflowScrolling='touch';
+    });
+
+    // Any very wide children inside cards get a scroll container feel.
+    document.querySelectorAll('.card,.panel,.box,section').forEach(el=>{
+      el.style.overflowX = 'auto';
+      el.style.webkitOverflowScrolling = 'touch';
+    });
+  }
+  window.addEventListener('load',()=>setTimeout(addScrollFix,300));
+  setInterval(addScrollFix,3000);
 })();
 </script>
 
