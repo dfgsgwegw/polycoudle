@@ -1,0 +1,8 @@
+Final signal/score fix:
+- No undefined peak/bin.
+- Signals active only 9AM-6PM IST.
+- After peak likely done, shifts from BUY to PEAK LIKELY DONE and preserves confidence.
+- +5 After 1 PM applies correctly.
+- Predicted peak and target bin always set.
+- node --check: 0
+

@@ -81,6 +81,177 @@ h1 em{color:var(--acc);font-style:normal}
 
 body:not(.real-table-ready) tbody { opacity: 0.15; }
 body.real-table-ready tbody { opacity: 1; transition: opacity .15s ease; }
+
+/* ===== FINAL MOBILE UI POLISH ===== */
+:root{
+  --bg:#050b12;
+  --panel:#0b1724;
+  --panel2:#0e2032;
+  --line:rgba(74,156,217,.28);
+  --txt:#f3f8ff;
+  --muted:#7aa6c7;
+  --acc:#00d4ff;
+  --grn:#00f084;
+  --ylw:#ffd43b;
+  --org:#ff8b3d;
+  --red:#ff5b45;
+}
+*{box-sizing:border-box}
+html,body{max-width:100%;overflow-x:hidden}
+body{
+  background:
+    radial-gradient(circle at top left, rgba(0,212,255,.09), transparent 32rem),
+    radial-gradient(circle at top right, rgba(0,240,132,.06), transparent 24rem),
+    var(--bg)!important;
+  color:var(--txt)!important;
+  font-family:Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif!important;
+  letter-spacing:.01em;
+}
+.wrap,.container,main{
+  width:min(1180px, calc(100vw - 24px))!important;
+  margin-inline:auto!important;
+}
+.card,.panel,.box,section{
+  border:1px solid var(--line)!important;
+  background:linear-gradient(180deg, rgba(15,35,55,.92), rgba(8,20,33,.94))!important;
+  border-radius:18px!important;
+  box-shadow:0 14px 40px rgba(0,0,0,.25)!important;
+}
+.topbar,.header{
+  position:sticky;
+  top:0;
+  z-index:30;
+  backdrop-filter:blur(14px);
+  background:rgba(5,11,18,.78)!important;
+  border-bottom:1px solid rgba(0,212,255,.18);
+  padding:12px 0!important;
+}
+h1,h2,h3,.title{
+  letter-spacing:-.03em!important;
+}
+#main-signal,.hero,.signal,.main-signal{
+  border-radius:22px!important;
+  background:
+    linear-gradient(135deg, rgba(0,240,132,.12), rgba(0,212,255,.06)),
+    rgba(10,22,18,.95)!important;
+  box-shadow:0 22px 60px rgba(0,0,0,.35)!important;
+}
+#main-signal h1,.hero h1,.signal h1{
+  font-size:clamp(28px,5vw,48px)!important;
+  line-height:1.08!important;
+}
+.grid,.cards{
+  display:grid!important;
+  grid-template-columns:repeat(12, minmax(0,1fr))!important;
+  gap:14px!important;
+}
+.grid>*,
+.cards>*{
+  min-width:0;
+}
+.refresh-btn,button{
+  border:0!important;
+  border-radius:13px!important;
+  background:linear-gradient(135deg,#00d4ff,#00a7ff)!important;
+  color:#00101a!important;
+  font-weight:900!important;
+  padding:12px 16px!important;
+  box-shadow:0 10px 24px rgba(0,212,255,.18)!important;
+}
+.badge,.pill{
+  border-radius:999px!important;
+  padding:6px 10px!important;
+  font-weight:800!important;
+  white-space:nowrap;
+}
+table{
+  width:100%!important;
+  border-collapse:collapse!important;
+  font-size:15px!important;
+}
+th{
+  color:#8bc4ee!important;
+  font-size:12px!important;
+  letter-spacing:.08em!important;
+  text-transform:uppercase!important;
+  position:sticky;
+  top:0;
+  background:rgba(8,20,33,.96);
+  z-index:1;
+}
+td,th{padding:10px 9px!important;border-bottom:1px solid rgba(255,255,255,.06)!important}
+tr{transition:background .15s ease}
+tbody tr:hover{background:rgba(0,212,255,.055)!important}
+#temp-chart,[id*="chart" i]{
+  min-height:220px;
+  overflow:hidden;
+}
+.ch{
+  color:#91c7ee!important;
+  letter-spacing:.18em!important;
+  font-size:12px!important;
+}
+.sub,#last-update,small,.muted{
+  color:var(--muted)!important;
+}
+#today-banner{
+  display:grid!important;
+  grid-template-columns:repeat(3,1fr)!important;
+  gap:16px!important;
+  align-items:center;
+}
+#today-banner > div{min-width:0}
+#today-banner b,#today-banner strong{
+  font-size:clamp(18px,4vw,28px)!important;
+}
+@media (max-width: 900px){
+  .wrap,.container,main{width:calc(100vw - 18px)!important}
+  .grid,.cards{grid-template-columns:1fr!important}
+  .card,.panel,.box,section{border-radius:16px!important}
+  #today-banner{grid-template-columns:1fr!important}
+  .topbar,.header{
+    position:relative;
+  }
+  .topbar > div,.header > div{
+    flex-direction:column!important;
+    align-items:flex-start!important;
+    gap:10px!important;
+  }
+  .refresh-btn,button{
+    width:100%!important;
+    min-height:46px!important;
+  }
+  #main-signal,.hero,.signal,.main-signal{
+    padding:18px 12px!important;
+  }
+  table{
+    min-width:880px!important;
+    font-size:14px!important;
+  }
+  .table-wrap,
+  .card:has(table),
+  section:has(table),
+  .panel:has(table){
+    overflow-x:auto!important;
+    -webkit-overflow-scrolling:touch;
+  }
+  td,th{padding:9px 8px!important}
+  #temp-chart,[id*="chart" i]{
+    min-height:180px!important;
+  }
+}
+@media (max-width: 520px){
+  body{font-size:14px!important}
+  .wrap,.container,main{width:calc(100vw - 12px)!important}
+  .card,.panel,.box,section{padding:12px!important;border-radius:14px!important}
+  #main-signal h1,.hero h1,.signal h1{font-size:26px!important}
+  #main-signal div,.hero div,.signal div{font-size:14px!important}
+  .ch{font-size:10px!important;letter-spacing:.12em!important}
+  table{min-width:760px!important;font-size:13px!important}
+  td,th{padding:8px 7px!important}
+  .badge,.pill{font-size:11px!important;padding:5px 8px!important}
+}
+
 </style>
 </head>
 <body>
@@ -1442,68 +1613,408 @@ window.fetchAll = fetchAll;
 
 
 
-<script>
+
+
+
+<script id="final-d1-ui-fix">
 (function(){
-  function todayIST(){return new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});}
-  function nowIST(){return new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Kolkata'}));}
-  function p2(n){return String(n).padStart(2,'0');}
-  function sm(slot){const m=String(slot||'').match(/(\d{1,2}):(\d{2})/);return m?+m[1]*60+ +m[2]:null;}
-  function ms(min){min=((min%1440)+1440)%1440;return p2(Math.floor(min/60))+':'+p2(min%60);}
-  function lab(slot){const x=sm(slot);if(x==null)return slot||'';return new Date(2000,0,1,Math.floor(x/60),x%60).toLocaleTimeString('en-IN',{hour:'numeric',minute:'2-digit',hour12:true}).replace(' ','');}
-  function ceilWU(t){const m=String(t||'').match(/(\d{1,2}):(\d{2})/);if(!m)return null;let h=+m[1],mm=+m[2];if(mm===0)return p2(h)+':00';if(mm<=30)return p2(h)+':30';return p2((h+1)%24)+':00';}
-  function allowedSlots(){
-    const n=nowIST(), nowM=n.getHours()*60+n.getMinutes();
-    const ceil=Math.ceil(nowM/30)*30, max=Math.min(23*60+30, ceil+60);
-    const set=new Set(); for(let m=0;m<=max;m+=30)set.add(ms(m)); return set;
+  function todayIST(){ return new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'}); }
+  function nowIST(){ return new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Kolkata'})); }
+  function pad2(n){ return String(n).padStart(2,'0'); }
+  function slotMin(slot){ const m=String(slot||'').match(/(\d{1,2}):(\d{2})/); return m ? Number(m[1])*60 + Number(m[2]) : null; }
+  function minSlot(min){ min=((min%1440)+1440)%1440; return pad2(Math.floor(min/60))+':'+pad2(min%60); }
+  function labelSlot(slot){
+    const x=slotMin(slot); if(x==null) return slot||'—';
+    return new Date(2000,0,1,Math.floor(x/60),x%60).toLocaleTimeString('en-IN',{hour:'numeric',minute:'2-digit',hour12:true}).replace(' ','');
   }
-  function chartRows(hist){
-    const allowed=allowedSlots(), by={};
-    (Array.isArray(hist?.metar_rows)?hist.metar_rows:[]).filter(m=>String(m.valid_ist||'').startsWith(todayIST())).forEach(m=>{
-      if(m.slot&&allowed.has(m.slot)&&m.temp_c!=null) by[m.slot]={slot:m.slot,temp:+m.temp_c,type:'METAR'};
+  function ceilWUToNextMetarSlot(t){
+    const m=String(t||'').match(/(\d{1,2}):(\d{2})/); if(!m) return null;
+    let h=Number(m[1]), mm=Number(m[2]);
+    if(mm===0) return pad2(h)+':00';
+    if(mm<=30) return pad2(h)+':30';
+    return pad2((h+1)%24)+':00';
+  }
+  function groupWUByWindow(wuRows){
+    const out={};
+    Object.values(wuRows||{}).forEach(list=>{
+      (Array.isArray(list)?list:[]).forEach(x=>{
+        const sl=ceilWUToNextMetarSlot(x.saved_at);
+        if(!sl || x.temp_c==null) return;
+        (out[sl]=out[sl]||[]).push(x);
+      });
     });
-    Object.values(hist?.wu_obs_rows||{}).forEach(list=>(Array.isArray(list)?list:[]).forEach(x=>{
-      const sl=ceilWU(x.saved_at); if(!sl||!allowed.has(sl)||x.temp_c==null||by[sl])return;
-      by[sl]={slot:sl,temp:+x.temp_c,type:'WU'};
-    }));
-    return Object.values(by).sort((a,b)=>sm(a.slot)-sm(b.slot));
+    Object.keys(out).forEach(sl=>{
+      const seen=new Set();
+      out[sl]=out[sl].filter(x=>{
+        const id=String(x.saved_at)+'|'+x.temp_c;
+        if(seen.has(id)) return false;
+        seen.add(id); return true;
+      }).sort((a,b)=>String(a.saved_at).localeCompare(String(b.saved_at)));
+    });
+    return out;
   }
-  function findChartContainer(){
-    return document.getElementById('temp-chart') ||
-           document.querySelector('[id*="chart" i]') ||
-           document.querySelector('.chart') ||
-           null;
+  function fmtWU(list){
+    const arr=Array.isArray(list)?list:[];
+    if(!arr.length) return '<span style="color:var(--dim)">— waiting for WU</span>';
+    return arr.map((x,i)=>{
+      const p=i?arr[i-1]:null;
+      const d=p ? +(Number(x.temp_c)-Number(p.temp_c)).toFixed(1) : 0;
+      const arrow=d>0?'▲':d<0?'▼':'•';
+      const col=d>0?'var(--red)':d<0?'var(--grn)':'var(--org)';
+      return `<div style="padding:4px 0;border-top:1px dashed rgba(255,255,255,.06)">
+        ↳ WU <span style="color:var(--dim)">${String(x.saved_at||'').slice(0,5)}</span>
+        <b style="color:${col};margin-left:12px">${Number(x.temp_c).toFixed(1)}°C</b>
+        <span style="color:${col}">${arrow}</span>
+        ${d?`<small style="color:${col};margin-left:8px">${d>0?'+':''}${d}</small>`:''}
+        ${x.humidity!=null?`<small style="color:var(--dim);margin-left:10px">💧${x.humidity}%</small>`:''}
+        ${x.condition?`<small style="color:var(--dim);margin-left:12px">${x.condition}</small>`:''}
+      </div>`;
+    }).join('');
   }
-  function renderHTMLChart(hist){
-    const box=findChartContainer();
-    if(!box || !hist){ console.warn('chart container not found'); return; }
-    const data=chartRows(hist);
-    if(!data.length){
-      box.innerHTML='<div style="color:#6b93b5;font-family:monospace;padding:18px">Waiting for today IST data...</div>';
-      return;
-    }
+  function kph(kt){ const n=Number(kt); return Number.isFinite(n) ? Math.round(n*1.852)+'km/h' : '—'; }
+  function allowedChartSlots(){
+    const n=nowIST();
+    const nowM=n.getHours()*60+n.getMinutes();
+    const ceil=Math.ceil(nowM/30)*30;
+    const max=Math.min(23*60+30, ceil+60);
+    const set=new Set();
+    for(let m=0;m<=max;m+=30) set.add(minSlot(m));
+    return set;
+  }
+  function chartRows(hist, groupedWU){
+    const allowed=allowedChartSlots();
+    const by={};
+    (Array.isArray(hist?.metar_rows)?hist.metar_rows:[])
+      .filter(m=>String(m.valid_ist||'').startsWith(todayIST()))
+      .forEach(m=>{ if(m.slot && allowed.has(m.slot) && m.temp_c!=null) by[m.slot]={slot:m.slot,temp:Number(m.temp_c),type:'METAR'}; });
+    Object.keys(groupedWU||{}).forEach(sl=>{
+      if(!allowed.has(sl) || by[sl]) return;
+      const list=groupedWU[sl]||[];
+      const last=list[list.length-1];
+      if(last && last.temp_c!=null) by[sl]={slot:sl,temp:Number(last.temp_c),type:'WU'};
+    });
+    return Object.values(by).sort((a,b)=>slotMin(a.slot)-slotMin(b.slot));
+  }
+  function findChartBox(){ return document.getElementById('temp-chart') || document.querySelector('[id*="chart" i]') || document.querySelector('.chart'); }
+  function renderHTMLChart(hist, groupedWU){
+    const box=findChartBox(); if(!box) return;
+    const data=chartRows(hist, groupedWU);
+    if(!data.length){ box.innerHTML='<div style="color:#6b93b5;font-family:monospace;padding:18px">Waiting for today IST data...</div>'; return; }
     const maxT=Math.max(...data.map(x=>x.temp),42);
     const minT=Math.min(...data.map(x=>x.temp),30);
-    box.innerHTML = `<div style="display:flex;align-items:end;gap:10px;height:190px;padding:12px 8px 4px;overflow-x:auto;border-radius:12px">
+    box.innerHTML=`<div style="display:flex;align-items:end;gap:10px;height:190px;padding:12px 8px 4px;overflow-x:auto;border-radius:12px">
       ${data.map(d=>{
         const pct=Math.max(12, Math.round(((d.temp-minT)/(maxT-minT+0.1))*120)+35);
         const hot=d.temp>=40;
         return `<div style="min-width:46px;text-align:center;font-family:monospace">
           <div style="color:${hot?'#ffcc33':'#00d4ff'};font-weight:800;font-size:13px;margin-bottom:4px">${Math.round(d.temp)}°</div>
           <div style="height:${pct}px;background:${hot?'rgba(255,174,0,.55)':'rgba(0,212,255,.35)'};border-radius:6px 6px 2px 2px;box-shadow:0 0 12px rgba(0,212,255,.08)"></div>
-          <div style="color:#6b93b5;font-size:10px;margin-top:6px;white-space:nowrap">${lab(d.slot)}</div>
+          <div style="color:#6b93b5;font-size:10px;margin-top:6px;white-space:nowrap">${labelSlot(d.slot)}</div>
           <div style="color:${d.type==='WU'?'#00d4ff':'#00ff88'};font-size:9px">${d.type}</div>
         </div>`;
       }).join('')}
     </div>`;
   }
-  async function loadHTMLChart(){
+  function renderTable(hist, groupedWU){
+    const tbl=document.getElementById('history-tbody') || document.querySelector('tbody');
+    if(!tbl) return;
+    const metars=(Array.isArray(hist?.metar_rows)?hist.metar_rows:[])
+      .filter(m=>String(m.valid_ist||'').startsWith(todayIST()))
+      .sort((a,b)=>String(a.valid_utc||'').localeCompare(String(b.valid_utc||'')));
+    const bySlot={}; metars.forEach(m=>{ if(m.slot) bySlot[m.slot]=m; });
+    let slots=[...new Set([...metars.map(m=>m.slot).filter(Boolean), ...Object.keys(groupedWU||{})])]
+      .sort((a,b)=>slotMin(a)-slotMin(b));
+    if(slots.length){
+      const last=slots[slots.length-1];
+      for(let i=1;i<=2;i++){ const sl=minSlot(slotMin(last)+i*30); if(!slots.includes(sl)) slots.push(sl); }
+    }
+    tbl.innerHTML = slots.map(sl=>{
+      const m=bySlot[sl], temp=m?.temp_c, pending=!m;
+      const wx=m?.wx || ((m?.raw_metar||'').match(/\b(HZ|DU|RA|TS|NSC)\b/)||[])[1] || '—';
+      return `<tr style="${temp>=40?'background:rgba(0,255,150,.08)':pending?'background:rgba(255,255,255,.04)':''}">
+        <td style="padding:7px">${labelSlot(sl)}</td>
+        <td style="padding:7px;color:${pending?'var(--dim)':temp>=40?'var(--red)':temp>=38?'var(--org)':'var(--acc)'}"><b>${pending?'⏳ METAR':Number(temp).toFixed(0)+'°C'}</b></td>
+        <td style="padding:7px;color:var(--org)">${fmtWU(groupedWU[sl])}</td>
+        <td style="padding:7px">${m?.dewpoint_c!=null?m.dewpoint_c+'°C':'—'}</td>
+        <td style="padding:7px">${m?kph(m.wind_kt)+' '+(m.wind_dir||'')+(m.wind_dir?'°':''):'—'}</td>
+        <td style="padding:7px">${m?.visibility||'—'}${m?.visibility?'km':''}</td>
+        <td style="padding:7px">${m?wx:'—'}</td>
+        <td style="padding:7px">${m?(m.nosig?'✅ YES':m.becmg?'BECMG':m.tempo?'TEMPO':'NO'):'—'}</td>
+        <td style="padding:7px;color:var(--acc)">—</td>
+        <td style="padding:7px">—</td>
+      </tr>`;
+    }).join('') || `<tr><td colspan="10" style="padding:15px;color:var(--dim)">No rows yet.</td></tr>`;
+    const title=[...document.querySelectorAll('.ch')].find(x=>/METAR readings|METAR ROWS/i.test(x.textContent||''));
+    if(title) title.textContent='TODAY — METAR ROWS + WU WINDOW';
+  }
+  async function loadFinalUI(){
     try{
       const r=await fetch('/api/history?date='+todayIST()+'&t='+Date.now(),{cache:'no-store'});
-      renderHTMLChart(await r.json());
-    }catch(e){console.warn('HTML chart fix failed',e.message);}
+      const hist=await r.json();
+      const groupedWU=groupWUByWindow(hist.wu_obs_rows||{});
+      renderTable(hist, groupedWU);
+      renderHTMLChart(hist, groupedWU);
+      const sync=document.getElementById('supa-sync-status');
+      if(sync && hist?.meta) sync.textContent=`Today rows: WU ${hist.meta.wu_count||0} · METAR ${hist.meta.metar_count||0} · Forecast ${hist.meta.forecast_count||0}`;
+      document.body.classList.add('real-table-ready');
+    }catch(e){ console.warn('final UI load failed', e.message); }
   }
-  window.addEventListener('load',()=>setTimeout(loadHTMLChart,400));
-  setInterval(loadHTMLChart,30000);
+  window.loadFinalUI = loadFinalUI;
+  window.loadRealOnlyFix = loadFinalUI;
+  window.addEventListener('load',()=>setTimeout(loadFinalUI,600));
+  setInterval(loadFinalUI,30000);
+})();
+</script>
+
+
+<script id="final-signal-peak-fix">
+(function(){
+  function istNow(){
+    return new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Kolkata'}));
+  }
+  function clamp(n,min=0,max=100){ return Math.max(min, Math.min(max, Math.round(Number(n)||0))); }
+  function num(v){ const n=Number(v); return Number.isFinite(n)?n:null; }
+  function allWU(rows){
+    const out=[];
+    Object.values(rows||{}).forEach(list=>{
+      (Array.isArray(list)?list:[]).forEach(x=>{
+        if(x && x.temp_c!=null && x.saved_at) out.push(x);
+      });
+    });
+    return out.sort((a,b)=>String(a.saved_at).localeCompare(String(b.saved_at)));
+  }
+  function latestWU(rows){
+    const a=allWU(rows);
+    return a.length?a[a.length-1]:null;
+  }
+  function maxWU(rows){
+    const a=allWU(rows).map(x=>num(x.temp_c)).filter(Number.isFinite);
+    return a.length?Math.max(...a):null;
+  }
+  function momentumWU(rows){
+    const a=allWU(rows);
+    if(a.length<2) return 0;
+    const last=num(a[a.length-1].temp_c);
+    for(let i=a.length-2;i>=0;i--){
+      const p=num(a[i].temp_c);
+      if(Number.isFinite(p) && p!==last) return +(last-p).toFixed(1);
+    }
+    return 0;
+  }
+  function safeRoundBin(v){
+    const n=num(v);
+    return Number.isFinite(n) ? Math.round(n) : null;
+  }
+  function finalPeakEngine(sig, metars, wuData){
+    sig = sig || {};
+    const now=istNow();
+    const hour=now.getHours()+now.getMinutes()/60;
+    const inSignalWindow = hour>=9 && hour<=18;
+
+    const latestMetar = Array.isArray(metars)&&metars.length ? metars[metars.length-1] : null;
+    const metarTemp = num(latestMetar?.temp ?? latestMetar?.temp_c);
+    const wRows = wuData?.obs_log || {};
+    const lw = wuData?.history_meta?.latest_wu || latestWU(wRows);
+    const wuTemp = num(wuData?.obs?.temp_c ?? lw?.temp_c);
+    const wuMax = maxWU(wRows);
+    const fcToday = num(wuData?.fc?.today_c);
+    const humidity = num(wuData?.obs?.humidity ?? lw?.humidity);
+    const mom = momentumWU(wRows);
+    const raw = String(latestMetar?.raw || latestMetar?.raw_metar || '');
+    const nosig = !!latestMetar?.nosig || /NOSIG/i.test(raw);
+    const dust = /(^|\s)(DU|HZ|BLDU|DS)(\s|$)/i.test(raw) || /dust|haze/i.test(wuData?.obs?.wx_phrase || lw?.condition || '');
+
+    const currentMax = Math.max(...[metarTemp, wuTemp, wuMax].filter(Number.isFinite));
+    const observedPeak = Number.isFinite(currentMax) ? currentMax : null;
+
+    // Peak estimate must never be undefined.
+    let predictedPeak = num(sig.expectedPeak ?? sig.predictedPeak ?? sig.medianPeak);
+    if(!Number.isFinite(predictedPeak)){
+      const base = Math.max(...[observedPeak, fcToday].filter(Number.isFinite));
+      if(Number.isFinite(base)){
+        let add = 0;
+        if(hour < 12) add = 1.2;
+        else if(hour < 14) add = 0.6;
+        else if(hour < 15.5) add = 0.3;
+        else add = 0;
+        if(mom > 0.4) add += 0.3;
+        if(humidity!=null && humidity<=25) add += 0.2;
+        predictedPeak = +(base + add).toFixed(1);
+      }
+    }
+    if(!Number.isFinite(predictedPeak) && Number.isFinite(fcToday)) predictedPeak = fcToday;
+    if(!Number.isFinite(predictedPeak) && Number.isFinite(observedPeak)) predictedPeak = observedPeak;
+    if(!Number.isFinite(predictedPeak)) predictedPeak = 40;
+
+    const targetBin = safeRoundBin(predictedPeak) || safeRoundBin(observedPeak) || 40;
+    const obsBin = safeRoundBin(observedPeak);
+
+    let score=0;
+    const reasons=[];
+
+    if(!inSignalWindow){
+      score -= 25; reasons.push('-25 Outside 9AM–6PM signal window');
+    } else {
+      reasons.push('+0 Inside 9AM–6PM signal window');
+    }
+
+    if(hour>=13 && hour<16){ score+=5; reasons.push('+5 After 1 PM (still risky)'); }
+    if(hour>=16 && hour<=18){ score+=8; reasons.push('+8 Late-day confirmation window'); }
+
+    if(Number.isFinite(observedPeak)){
+      if(observedPeak>=43){ score+=45; reasons.push('+45 Observed/WU peak ≥43°C'); }
+      else if(observedPeak>=42){ score+=38; reasons.push('+38 Observed/WU peak ≥42°C'); }
+      else if(observedPeak>=41){ score+=28; reasons.push('+28 Observed/WU peak ≥41°C'); }
+      else if(observedPeak>=40){ score+=18; reasons.push('+18 Observed/WU peak ≥40°C'); }
+      else if(observedPeak>=39){ score+=10; reasons.push('+10 Observed/WU peak ≥39°C'); }
+    }
+
+    if(Number.isFinite(fcToday)){
+      if(fcToday>=43){ score+=12; reasons.push('+12 WU forecast ≥43°C'); }
+      else if(fcToday>=42){ score+=8; reasons.push('+8 WU forecast supports 42°C+'); }
+      else if(fcToday>=41.5){ score+=5; reasons.push('+5 WU forecast near 42°C'); }
+      else if(fcToday<40.5){ score-=8; reasons.push('-8 Forecast below 40.5°C'); }
+    }
+
+    if(mom>=0.8){ score+=10; reasons.push('+10 WU rising fast'); }
+    else if(mom>=0.4){ score+=6; reasons.push('+6 WU rising'); }
+    else if(mom<=-0.8){ score-=10; reasons.push('-10 WU falling fast'); }
+    else if(mom<=-0.4){ score-=5; reasons.push('-5 WU falling'); }
+
+    if(humidity!=null){
+      if(humidity<=25){ score+=7; reasons.push('+7 Very dry humidity'); }
+      else if(humidity<=35){ score+=3; reasons.push('+3 Low humidity'); }
+      else if(humidity>=50){ score-=8; reasons.push('-8 Humidity high'); }
+    }
+    if(nosig){ score+=4; reasons.push('+4 NOSIG stable'); }
+    if(dust){ score-=3; reasons.push('-3 Dust/Haze cooling/capping risk'); }
+
+    // If peak already likely happened and temps stopped/range falling, preserve confidence but stop entry.
+    const peakLikelyDone = hour>=13.5 && Number.isFinite(observedPeak) && mom<=0 && Number.isFinite(predictedPeak) && observedPeak >= predictedPeak-0.4;
+    if(peakLikelyDone){ score+=8; reasons.push('+8 Peak likely already printed / confidence preserved'); }
+
+    // Late penalties only if still under important bins.
+    if(hour>=14.5 && Number.isFinite(observedPeak) && observedPeak<41){ score-=15; reasons.push('-15 After 2:30 PM but below 41°C'); }
+    if(hour>=15.5 && Number.isFinite(observedPeak) && observedPeak<42){ score-=12; reasons.push('-12 After 3:30 PM but below 42°C'); }
+
+    score=clamp(score);
+
+    let action='WATCH';
+    let subtitle='';
+    if(!inSignalWindow){
+      action='CLOSED WINDOW';
+      subtitle=`Signals best only 9AM–6PM IST. Observed peak ${observedPeak?.toFixed?.(1) ?? '?'}°C.`;
+    } else if(peakLikelyDone){
+      action=`PEAK LIKELY DONE (${score}/100)`;
+      subtitle=`Observed peak ${observedPeak.toFixed(1)}°C → ${obsBin}°C bin. No fresh entry; use confidence for settlement/hedge.`;
+    } else if(score>=70){
+      action=`STRONG BUY (${score}/100)`;
+      subtitle=`Predicted peak ${predictedPeak.toFixed(1)}°C. Buy YES on ${targetBin}°C bin.`;
+    } else if(score>=50){
+      action=`MEDIUM BUY (${score}/100) — 40% Entry`;
+      subtitle=`Predicted peak ${predictedPeak.toFixed(1)}°C. Buy 40% YES on ${targetBin}°C bin. Wait for stronger signal.`;
+    } else if(score>=30){
+      action=`WATCH (${score}/100)`;
+      subtitle=`Predicted peak ${predictedPeak.toFixed(1)}°C. Possible ${targetBin}°C bin; need more confirmation.`;
+    } else {
+      action=`NO TRADE (${score}/100)`;
+      subtitle=`Predicted peak ${predictedPeak.toFixed(1)}°C. Signal too weak for entry.`;
+    }
+
+    sig.strengthScore=score;
+    sig.score=score;
+    sig.expectedPeak=predictedPeak;
+    sig.predictedPeak=predictedPeak;
+    sig.medianPeak=predictedPeak;
+    sig.minPeak=Number.isFinite(sig.minPeak)?sig.minPeak:Math.max(observedPeak||predictedPeak, predictedPeak-0.8);
+    sig.maxPeak=Number.isFinite(sig.maxPeak)?sig.maxPeak:predictedPeak+2.5;
+    sig.bin=targetBin;
+    sig.targetBin=targetBin;
+    sig.observedPeak=observedPeak;
+    sig.observedBin=obsBin;
+    sig.peakLikelyDone=peakLikelyDone;
+    sig.reasons=reasons;
+    sig.scoreReasons=reasons;
+    sig.scoreBreakdown=reasons;
+    sig.verdict=action;
+    sig.action=action;
+    sig.subtitle=subtitle;
+    sig.signalWindow=inSignalWindow;
+    return sig;
+  }
+
+  const oldCompute = window.computeSignal || (typeof computeSignal !== 'undefined' ? computeSignal : null);
+  if(oldCompute && !window.__finalPeakEnginePatched){
+    window.__finalPeakEnginePatched=true;
+    window.computeSignal=function(metars, wuData){
+      const sig=oldCompute(metars, wuData);
+      return finalPeakEngine(sig, metars, wuData);
+    };
+    try{ computeSignal=window.computeSignal; }catch(e){}
+  }
+
+  const oldRenderSignal = window.renderSignal || (typeof renderSignal !== 'undefined' ? renderSignal : null);
+  if(oldRenderSignal && !window.__finalRenderSignalPatched){
+    window.__finalRenderSignalPatched=true;
+    window.renderSignal=function(sig){
+      const box=document.getElementById('main-signal') || document.querySelector('.hero,.signal,.main-signal');
+      if(box && sig?.action){
+        const color = sig.peakLikelyDone ? 'var(--grn)' : sig.score>=70 ? 'var(--grn)' : sig.score>=50 ? 'var(--ylw)' : sig.score>=30 ? 'var(--ylw)' : 'var(--red)';
+        box.style.borderColor=color;
+        box.innerHTML = `<div style="text-align:center;padding:28px 18px">
+          <div style="font-size:42px;margin-bottom:12px">${sig.peakLikelyDone?'✅':sig.score>=50?'🟡':'👀'}</div>
+          <h1 style="font-size:34px;margin:0 0 14px;color:var(--txt)">${sig.action}</h1>
+          <div style="color:var(--dim);font-size:18px;line-height:1.5">${sig.subtitle || ''}</div>
+          <div style="margin-top:18px;font-family:monospace;font-size:16px;color:var(--txt)">Score: ${sig.score}/100</div>
+        </div>`;
+        return;
+      }
+      return oldRenderSignal(sig);
+    };
+    try{ renderSignal=window.renderSignal; }catch(e){}
+  }
+
+  const oldStrength = window.renderStrengthAndPrediction || (typeof renderStrengthAndPrediction !== 'undefined' ? renderStrengthAndPrediction : null);
+  if(oldStrength && !window.__finalStrengthPatched){
+    window.__finalStrengthPatched=true;
+    window.renderStrengthAndPrediction=function(sig){
+      sig.strengthScore=sig.strengthScore ?? sig.score ?? 0;
+      sig.scoreBreakdown=sig.scoreBreakdown || sig.scoreReasons || sig.reasons || [];
+      sig.expectedPeak=sig.expectedPeak ?? sig.predictedPeak ?? sig.medianPeak ?? sig.observedPeak ?? 40;
+      sig.predictedPeak=sig.predictedPeak ?? sig.expectedPeak;
+      sig.medianPeak=sig.medianPeak ?? sig.expectedPeak;
+      sig.minPeak=sig.minPeak ?? Math.max(sig.expectedPeak-0.8, sig.observedPeak || sig.expectedPeak);
+      sig.maxPeak=sig.maxPeak ?? sig.expectedPeak+2.5;
+      sig.bin=sig.bin ?? Math.round(sig.expectedPeak);
+      return oldStrength(sig);
+    };
+    try{ renderStrengthAndPrediction=window.renderStrengthAndPrediction; }catch(e){}
+  }
+})();
+</script>
+
+
+<script id="final-mobile-ui-polish-js">
+(function(){
+  function wrapTables(){
+    document.querySelectorAll('table').forEach(t=>{
+      if(t.parentElement && t.parentElement.classList.contains('table-scroll-wrap')) return;
+      const w=document.createElement('div');
+      w.className='table-scroll-wrap';
+      w.style.overflowX='auto';
+      w.style.webkitOverflowScrolling='touch';
+      w.style.borderRadius='14px';
+      t.parentNode.insertBefore(w,t);
+      w.appendChild(t);
+    });
+  }
+  function compactCards(){
+    document.querySelectorAll('.card,.panel,.box,section').forEach(el=>{
+      el.style.marginBottom = el.style.marginBottom || '14px';
+    });
+  }
+  window.addEventListener('load',()=>{setTimeout(wrapTables,300);setTimeout(compactCards,300);});
+  setInterval(wrapTables,3000);
 })();
 </script>
 
