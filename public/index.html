@@ -1432,5 +1432,117 @@ window.fetchAll = fetchAll;
 })();
 </script>
 
+
+<script>
+(function(){
+  function todayISTKeyFix(){
+    return new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});
+  }
+  function slotFloorFromTimeFix(t){
+    const m=String(t||'').match(/(\d{1,2}):(\d{2})/);
+    if(!m) return null;
+    const h=String(Number(m[1])).padStart(2,'0');
+    const mm=Number(m[2]) < 30 ? '00' : '30';
+    return `${h}:${mm}`;
+  }
+  function labelFromSlotFix(slot){
+    const [hh,mm]=slot.split(':').map(Number);
+    const d=new Date(2000,0,1,hh,mm,0);
+    return d.toLocaleTimeString('en-IN',{hour:'numeric',minute:'2-digit',hour12:true}).replace(' ','');
+  }
+  function fmtWUCellFix(list){
+    const arr=(Array.isArray(list)?list:[])
+      .filter(x=>x && x.temp_c!=null && x.saved_at)
+      .sort((a,b)=>String(a.saved_at).localeCompare(String(b.saved_at)));
+    if(!arr.length) return '<span style="color:var(--dim)">—</span>';
+    const seen=new Set(), clean=[];
+    arr.forEach(x=>{
+      const id=String(x.saved_at)+'|'+x.temp_c;
+      if(!seen.has(id)){seen.add(id); clean.push(x);}
+    });
+    return clean.map((x,i)=>{
+      const prev=i?clean[i-1]:null;
+      const delta=prev ? +(Number(x.temp_c)-Number(prev.temp_c)).toFixed(1) : 0;
+      const arrow=delta>0?'▲':delta<0?'▼':'•';
+      const col=delta>0?'var(--red)':delta<0?'var(--grn)':'var(--org)';
+      return `<div style="padding:3px 0;border-top:1px dashed rgba(255,255,255,.06)">
+        ↳ WU <span style="color:var(--dim)">${String(x.saved_at).slice(0,5)}</span>
+        <b style="color:${col};margin-left:12px">${Number(x.temp_c).toFixed(1)}°C</b>
+        <span style="color:${col}">${arrow}</span>
+        ${delta?`<small style="color:${col};margin-left:6px">${delta>0?'+':''}${delta}</small>`:''}
+        ${x.humidity!=null?`<small style="color:var(--dim);margin-left:10px">💧${x.humidity}%</small>`:''}
+        ${x.condition?`<small style="color:var(--dim);margin-left:10px">${x.condition}</small>`:''}
+      </div>`;
+    }).join('');
+  }
+  function kphFromKtFix(v){
+    if(v==null || v==='') return '—';
+    const n=Number(v);
+    return Number.isFinite(n) ? Math.round(n*1.852)+'km/h' : '—';
+  }
+  function renderRealMetarOnlyTableFix(hist){
+    const tbl=document.getElementById('history-tbody') || document.querySelector('tbody');
+    if(!tbl || !hist) return false;
+
+    const wuRows=hist.wu_obs_rows || {};
+    const metars=(Array.isArray(hist.metar_rows)?hist.metar_rows:[])
+      .filter(m=>String(m.valid_ist||'').startsWith(todayISTKeyFix()))
+      .sort((a,b)=>String(a.valid_utc||'').localeCompare(String(b.valid_utc||'')));
+
+    const rows=[];
+    metars.forEach((m,idx)=>{
+      const slot=m.slot || slotFloorFromTimeFix((m.valid_ist||'').split(' ')[1]||'');
+      if(!slot) return;
+      const temp=m.temp_c;
+      const prev=idx?metars[idx-1]:null;
+      const rise=(prev && temp!=null && prev.temp_c!=null) ? Number(temp)-Number(prev.temp_c) : null;
+      const wx=m.wx || ((m.raw_metar||'').match(/\b(HZ|DU|RA|TS|NSC)\b/)||[])[1] || '—';
+      rows.push(`<tr style="${temp>=40?'background:rgba(0,255,150,.08)':''}">
+        <td style="padding:7px">${labelFromSlotFix(slot)}</td>
+        <td style="padding:7px;color:${temp>=40?'var(--red)':temp>=38?'var(--org)':'var(--acc)'}"><b>${temp!=null?Number(temp).toFixed(0)+'°C':'—'}</b></td>
+        <td style="padding:7px;color:var(--org)">${fmtWUCellFix(wuRows[slot])}</td>
+        <td style="padding:7px">${m.dewpoint_c!=null?m.dewpoint_c+'°C':'—'}</td>
+        <td style="padding:7px">${kphFromKtFix(m.wind_kt)} ${m.wind_dir||''}${m.wind_dir?'°':''}</td>
+        <td style="padding:7px">${m.visibility||'—'}km</td>
+        <td style="padding:7px">${wx}</td>
+        <td style="padding:7px">${m.nosig?'✅ YES':m.becmg?'BECMG':m.tempo?'TEMPO':'NO'}</td>
+        <td style="padding:7px;color:var(--acc)">—</td>
+        <td style="padding:7px;color:${rise>0?'var(--red)':rise<0?'var(--grn)':'var(--txt)'}">${rise==null?'—':(rise>0?'+':'')+rise}</td>
+      </tr>`);
+    });
+
+    // Add current WU-only slots not yet having METAR, but only up to current time, never future forecast rows.
+    const metarSlots=new Set(metars.map(m=>m.slot));
+    const now=new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Kolkata'}));
+    const nowSlot=slotFloorFromTimeFix(now.toTimeString().slice(0,5));
+    Object.keys(wuRows).sort().forEach(slot=>{
+      if(metarSlots.has(slot)) return;
+      if(slot > nowSlot) return;
+      rows.push(`<tr style="background:rgba(255,255,255,.04)">
+        <td style="padding:7px">${labelFromSlotFix(slot)}</td>
+        <td style="padding:7px;color:var(--dim)">— METAR pending</td>
+        <td style="padding:7px;color:var(--org)">${fmtWUCellFix(wuRows[slot])}</td>
+        <td style="padding:7px">—</td><td style="padding:7px">—</td><td style="padding:7px">—</td><td style="padding:7px">—</td><td style="padding:7px">—</td><td style="padding:7px">—</td><td style="padding:7px">—</td>
+      </tr>`);
+    });
+
+    tbl.innerHTML = rows.length ? rows.join('') : `<tr><td colspan="10" style="padding:15px;color:var(--dim)">No real METAR/WU rows for today yet.</td></tr>`;
+    const title=[...document.querySelectorAll('.ch')].find(x=>/METAR readings/i.test(x.textContent||''));
+    if(title) title.textContent="TODAY'S REAL METAR READINGS ONLY — forecast rows hidden";
+    return true;
+  }
+
+  async function loadRealOnlyFix(){
+    try{
+      const r=await fetch('/api/history?date='+todayISTKeyFix()+'&t='+Date.now(),{cache:'no-store'});
+      const hist=await r.json();
+      renderRealMetarOnlyTableFix(hist);
+    }catch(e){console.warn('real-only table fix failed', e.message);}
+  }
+  window.addEventListener('load',()=>setTimeout(loadRealOnlyFix,1500));
+  setInterval(loadRealOnlyFix,30000);
+})();
+</script>
+
 </body>
 </html>

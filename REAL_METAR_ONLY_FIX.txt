@@ -1,0 +1,8 @@
+Fix:
+- Main table now shows only real METAR rows from D1 history.
+- Forecast/generated hourly rows are hidden from main METAR table.
+- WU obs is grouped by floor 30-min slot only.
+- WU-only slots show as METAR pending only if current/past time.
+- Future fake rows are not shown.
+node --check: 0
+
