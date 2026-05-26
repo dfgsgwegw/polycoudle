@@ -1,0 +1,6 @@
+Fixed inconsistent display:
+- Replaced old renderHistory calls with real-only D1 history renderer.
+- Real table renders immediately on load and every 30 sec.
+- Prevents old forecast/future table from racing with real table.
+- node --check: 0
+

@@ -78,6 +78,9 @@ h1 em{color:var(--acc);font-style:normal}
 /* Pulse animation for live */
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 .live-dot{display:inline-block;width:8px;height:8px;background:var(--grn);border-radius:50%;animation:pulse 1.5s infinite;margin-right:5px}
+
+body:not(.real-table-ready) tbody { opacity: 0.15; }
+body.real-table-ready tbody { opacity: 1; transition: opacity .15s ease; }
 </style>
 </head>
 <body>
@@ -1379,7 +1382,7 @@ async function fetchAll(){
     renderChart(metarReadings, wuData);
     renderMetar(metarReadings);
     renderAnalog(sig);
-    renderHistory(metarReadings, wuData);
+    if(window.loadRealOnlyFix) await window.loadRealOnlyFix();
 
     const now=new Date();
     document.getElementById('last-update').textContent='Updated '+now.toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit',second:'2-digit'})+' IST';
@@ -1529,18 +1532,19 @@ window.fetchAll = fetchAll;
     tbl.innerHTML = rows.length ? rows.join('') : `<tr><td colspan="10" style="padding:15px;color:var(--dim)">No real METAR/WU rows for today yet.</td></tr>`;
     const title=[...document.querySelectorAll('.ch')].find(x=>/METAR readings/i.test(x.textContent||''));
     if(title) title.textContent="TODAY'S REAL METAR READINGS ONLY — forecast rows hidden";
+    document.body.classList.add('real-table-ready');
     return true;
   }
 
-  async function loadRealOnlyFix(){
+  window.loadRealOnlyFix = async function loadRealOnlyFix(){
     try{
       const r=await fetch('/api/history?date='+todayISTKeyFix()+'&t='+Date.now(),{cache:'no-store'});
       const hist=await r.json();
       renderRealMetarOnlyTableFix(hist);
     }catch(e){console.warn('real-only table fix failed', e.message);}
   }
-  window.addEventListener('load',()=>setTimeout(loadRealOnlyFix,1500));
-  setInterval(loadRealOnlyFix,30000);
+  window.addEventListener('load',()=>window.loadRealOnlyFix && window.loadRealOnlyFix());
+  setInterval(()=>window.loadRealOnlyFix && window.loadRealOnlyFix(),30000);
 })();
 </script>
 
