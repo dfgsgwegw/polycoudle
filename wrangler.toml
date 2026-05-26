@@ -12,4 +12,4 @@ crons = ["* * * * *"]
 [[d1_databases]]
 binding = "DB"
 database_name = "vilk_weather"
-database_id = "78298daa-2851-4646-9659-e47fac440a74"
+database_id = "PUT_YOUR_D1_DATABASE_ID_HERE"

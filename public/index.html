@@ -1288,7 +1288,7 @@ function renderHistory(metars, wuData){
 
 // ── Main fetch ─────────────────────────────────────────────────────────────────
 // ── Parse Cloudflare D1 metar_rows into the same format as fetchMETAR() ────────────
-function parseCloudflare D1 Metar(rows){
+function parseCloudflareD1Metar(rows){
   if(!Array.isArray(rows)) return [];
   const out = [];
   rows.forEach(m => {
@@ -1320,7 +1320,7 @@ function parseCloudflare D1 Metar(rows){
   return out;
 }
 
-// ── Merge live METAR + Cloudflare D1 METAR (dedup by timeStr) ───────────────────────
+// ── Merge live METAR + CloudflareD1METAR(dedup by timeStr) ───────────────────────
 function mergeMetars(live, dbMetars){
   const map = new Map();
   // DB first (older), then live overrides
@@ -1346,7 +1346,7 @@ async function fetchAll(){
     // Now also get Cloudflare D1 METAR history for full-day coverage (works in incognito)
     let allMetars = metars;
     if(wuData?._supaMetars?.length > 0){
-      allMetars = mergeMetars(metars, parseCloudflare D1 Metar(wuData._supaMetars));
+      allMetars = mergeMetars(metars, parseCloudflareD1Metar(wuData._supaMetars));
     }
 
     metarReadings = allMetars;
