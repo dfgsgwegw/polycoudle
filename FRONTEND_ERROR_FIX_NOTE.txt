@@ -1,0 +1,9 @@
+Fixed frontend errors:
+- removed invalid function name spacing
+- ensured window.fetchAll exists for Refresh button
+- Node syntax check return code: 0
+- Node stderr:
+
+
+If browser still shows old error, Cloudflare is serving cached old deployment.
+Redeploy this ZIP / commit all files, then hard refresh Ctrl+Shift+R.
