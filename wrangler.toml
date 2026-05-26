@@ -1,0 +1,15 @@
+name = "vilk-weather-d1"
+main = "src/worker.js"
+compatibility_date = "2025-05-01"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+[triggers]
+crons = ["* * * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "vilk_weather"
+database_id = "PUT_YOUR_D1_DATABASE_ID_HERE"

@@ -1,0 +1,13 @@
+{
+  "name": "vilk-weather-d1",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "db:create": "wrangler d1 create vilk_weather",
+    "db:init": "wrangler d1 execute vilk_weather --file=./schema.sql --remote"
+  },
+  "devDependencies": {
+    "wrangler": "latest"
+  }
+}

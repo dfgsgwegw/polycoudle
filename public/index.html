@@ -1,0 +1,1415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VILK Live Signal</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Outfit:wght@400;600;700;800&display=swap');
+:root{--bg:#070c11;--bg2:#0d1520;--bg3:#131e2b;--bd:#1c2e40;--acc:#00d4ff;--grn:#00e676;--org:#ff7043;--ylw:#ffd740;--red:#ff4444;--txt:#e8f0f8;--dim:#5a7a90;--card:#0b1622}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--txt);font-family:'Outfit',sans-serif;font-size:15px;min-height:100vh}
+.wrap{max-width:1100px;margin:0 auto;padding:24px 18px}
+.top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:20px}
+h1{font-size:28px;font-weight:800;line-height:1.2}
+h1 em{color:var(--acc);font-style:normal}
+.sub{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--dim);margin-top:5px}
+.refresh-btn{background:var(--acc);color:#000;border:none;border-radius:8px;padding:10px 20px;font-family:'Outfit',sans-serif;font-size:14px;font-weight:700;cursor:pointer}
+.refresh-btn:disabled{background:#1a3a4a;color:var(--dim);cursor:not-allowed}
+#last-update{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--dim);margin-top:5px;text-align:right}
+
+/* SIGNAL BOX */
+.signal-box{border-radius:16px;padding:24px 28px;margin-bottom:20px;border:2px solid;text-align:center;position:relative;overflow:hidden}
+.signal-box.wait{border-color:var(--ylw);background:rgba(255,215,64,.07)}
+.signal-box.buy{border-color:var(--grn);background:rgba(0,230,118,.09)}
+.signal-box.hold{border-color:var(--acc);background:rgba(0,212,255,.07)}
+.signal-box.danger{border-color:var(--red);background:rgba(255,68,68,.09)}
+.signal-box.early{border-color:var(--dim);background:rgba(90,122,144,.06)}
+.signal-emoji{font-size:48px;margin-bottom:8px;display:block}
+.signal-label{font-size:32px;font-weight:800;margin-bottom:6px;letter-spacing:-0.5px}
+.signal-reason{font-size:15px;color:var(--dim);max-width:600px;margin:0 auto;line-height:1.6}
+.signal-conf{font-family:'IBM Plex Mono',monospace;font-size:13px;margin-top:12px;opacity:.8}
+
+/* GRID */
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:16px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px}
+@media(max-width:700px){.g3{grid-template-columns:1fr 1fr}.g2{grid-template-columns:1fr}}
+
+/* CARDS */
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:18px}
+.ch{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:12px}
+.num-big{font-size:38px;font-weight:800;line-height:1}
+.num-label{font-size:12px;color:var(--dim);margin-top:4px}
+
+/* TIMELINE CHART */
+.timeline-wrap{overflow-x:auto;padding-bottom:4px}
+.timeline{display:flex;align-items:flex-end;gap:6px;height:160px;padding:0 4px}
+.t-bar-wrap{display:flex;flex-direction:column;align-items:center;gap:4px;min-width:52px}
+.t-bar{border-radius:6px 6px 0 0;width:44px;transition:height .3s}
+.t-bar-label{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--dim);text-align:center}
+.t-bar-temp{font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;text-align:center}
+.t-bar-time{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--dim);text-align:center}
+
+/* METAR DISPLAY */
+.metar-raw{font-family:'IBM Plex Mono',monospace;font-size:12px;background:var(--bg2);border:1px solid var(--bd);border-radius:8px;padding:12px;word-break:break-all;line-height:1.7;margin-top:10px;color:var(--dim)}
+.metar-raw .hl{color:var(--ylw);font-weight:700}
+.metar-raw .nosig-hl{color:var(--grn);font-weight:700}
+.metar-raw .danger-hl{color:var(--red);font-weight:700}
+
+/* SIGNAL ITEMS */
+.sig-item{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--bd)}
+.sig-item:last-child{border:none}
+.sig-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.sig-text{flex:1;font-size:14px}
+.sig-val{font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:700}
+
+/* ANALOG */
+.analog-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--bd);font-size:13px}
+.analog-row:last-child{border:none}
+
+/* Pill */
+.pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:700;font-family:'IBM Plex Mono',monospace}
+.pg{background:rgba(0,230,118,.15);color:var(--grn)}
+.pr{background:rgba(255,68,68,.15);color:var(--red)}
+.po{background:rgba(255,112,67,.15);color:var(--org)}
+.py{background:rgba(255,215,64,.15);color:var(--ylw)}
+.pb{background:rgba(0,212,255,.15);color:var(--acc)}
+
+/* Pulse animation for live */
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.live-dot{display:inline-block;width:8px;height:8px;background:var(--grn);border-radius:50%;animation:pulse 1.5s infinite;margin-right:5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="top">
+  <div>
+    <h1>VILK <em>Live Signal</em></h1>
+    <div class="sub"><span class="live-dot"></span>Auto-refresh every 30 sec · Lucknow Airport (VILK) · 1,327 days database</div>
+  </div>
+  <div style="text-align:right">
+    <button class="refresh-btn" id="rbtn" onclick="fetchAll()">↻ Refresh Now</button>
+    <div id="last-update">Never updated</div>
+  </div>
+</div>
+
+<div id="today-banner" class="card" style="margin-bottom:16px;border-color:rgba(0,212,255,.35)">
+  <div class="ch">DAY 1 — TODAY ONLY</div>
+  <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:center">
+    <div><span style="color:var(--dim);font-family:'IBM Plex Mono',monospace;font-size:11px">Current IST day</span><br><b id="today-date-ist" style="font-size:28px;color:var(--acc)">—</b></div>
+    <div><span style="color:var(--dim);font-family:'IBM Plex Mono',monospace;font-size:11px">Display reset</span><br><b style="font-size:16px;color:var(--ylw)">Every day after 12:01 AM IST</b></div>
+    <div><span style="color:var(--dim);font-family:'IBM Plex Mono',monospace;font-size:11px">Cloudflare D1 archive</span><br><b id="supa-sync-status" style="font-size:16px;color:var(--grn)">Loading today rows...</b></div>
+  </div>
+</div>
+
+<!-- MAIN SIGNAL -->
+<div id="signal-box" class="signal-box early">
+  <span class="signal-emoji">⏳</span>
+  <div class="signal-label">Loading...</div>
+  <div class="signal-reason">Fetching live METAR and forecast data</div>
+</div>
+
+<!-- WU LAST FETCH STATUS -->
+<div class="card" id="wu-last-card" style="margin-bottom:16px;border-color:rgba(0,212,255,.35)">
+  <div class="ch">WU Last Fetched / Saved</div>
+  <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:center">
+    <div><span style="color:var(--dim);font-family:'IBM Plex Mono',monospace;font-size:11px">Latest value</span><br><b id="wu-last-value" style="font-size:26px;color:var(--org)">—</b></div>
+    <div><span style="color:var(--dim);font-family:'IBM Plex Mono',monospace;font-size:11px">WU obs time</span><br><b id="wu-last-obstime" style="font-size:18px;color:var(--acc)">—</b></div>
+    <div><span style="color:var(--dim);font-family:'IBM Plex Mono',monospace;font-size:11px">Fetch time</span><br><b id="wu-last-fetched" style="font-size:18px;color:var(--txt)">—</b></div>
+    <div><span style="color:var(--dim);font-family:'IBM Plex Mono',monospace;font-size:11px">Save status</span><br><b id="wu-last-status" style="font-size:18px;color:var(--ylw)">Waiting</b></div>
+  </div>
+</div>
+
+<!-- STATS GRID -->
+<div class="g3">
+  <div class="card">
+    <div class="ch">Current METAR Temp</div>
+    <div class="num-big" id="cur-temp" style="color:var(--org)">—</div>
+    <div class="num-label" id="cur-time">Waiting for data</div>
+  </div>
+  <div class="card">
+    <div class="ch">Expected Peak</div>
+    <div class="num-big" id="exp-peak" style="color:var(--grn)">—</div>
+    <div class="num-label" id="exp-conf">Based on current reading</div>
+  </div>
+  <div class="card">
+    <div class="ch">WU Forecast Today</div>
+    <div class="num-big" id="wu-fc" style="color:var(--acc)">—</div>
+    <div class="num-label">WU api.weather.com (Polymarket source)</div>
+  </div>
+</div>
+
+<div class="g2">
+  <!-- WU OBS ROW -->
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:16px" id="wu-obs-row">
+  <div class="card">
+    <div class="ch">WU Obs — Current Temp</div>
+    <div class="num-big" id="wu-obs-val" style="color:var(--org)">—</div>
+    <div class="num-label" id="wu-obs-wx">Live from api.weather.com</div>
+  </div>
+  <div class="card">
+    <div class="ch">Humidity (dewpoint signal)</div>
+    <div class="num-big" id="wu-hum-val" style="color:var(--acc)">—</div>
+    <div class="num-label">Low &lt;35% = dry = peak higher</div>
+  </div>
+  <div class="card">
+    <div class="ch">Wind</div>
+    <div class="num-big" id="wu-wind-val" style="font-size:22px;color:var(--dim)">—</div>
+    <div class="num-label">Direction · Speed</div>
+  </div>
+</div>
+
+<!-- TEMPERATURE CHART -->
+  <div class="card">
+    <div class="ch">Today's temperature chart</div>
+    <div class="timeline-wrap">
+      <div class="timeline" id="temp-chart">
+        <div style="color:var(--dim);font-size:13px;padding:60px 10px">Loading readings...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SIGNAL BREAKDOWN -->
+  <div class="card">
+    <div class="ch">Signal breakdown</div>
+    <div id="sig-breakdown">
+      <div class="sig-item"><div class="sig-dot" style="background:var(--dim)"></div><span class="sig-text">Waiting for data...</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="g2">
+  <!-- LIVE METAR -->
+  <div class="card">
+    <div class="ch">Latest METAR</div>
+    <div id="metar-info" style="font-size:14px;color:var(--dim);margin-bottom:8px">Fetching...</div>
+    <div id="metar-raw" class="metar-raw">—</div>
+  </div>
+
+  <!-- ANALOG MATCH -->
+  <div class="card">
+    <div class="ch">Historical analog matches</div>
+    <div id="analog-info" style="font-size:13px;color:var(--dim);margin-bottom:10px">Finding similar past days...</div>
+    <div id="analog-rows"></div>
+  </div>
+</div>
+
+<!-- HISTORY TABLE -->
+<div class="card">
+  <div class="ch">Today's METAR readings (last 6 hours)</div>
+  <div style="overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:13px;font-family:'IBM Plex Mono',monospace">
+      <thead>
+        <tr id="hist-head">
+          <th style="text-align:left;padding:8px;border-bottom:1px solid var(--bd);color:var(--dim)">Time IST</th>
+          <th style="padding:8px;border-bottom:1px solid var(--bd);color:var(--dim)">Temp</th>
+          <th style="padding:8px;border-bottom:1px solid var(--bd);color:var(--dim)">WU Obs</th>
+          <th style="padding:8px;border-bottom:1px solid var(--bd);color:var(--dim)">Dewpt</th>
+          <th style="padding:8px;border-bottom:1px solid var(--bd);color:var(--dim)">Wind</th>
+          <th style="padding:8px;border-bottom:1px solid var(--bd);color:var(--dim)">Vis</th>
+          <th style="padding:8px;border-bottom:1px solid var(--bd);color:var(--dim)">WX</th>
+          <th style="padding:8px;border-bottom:1px solid var(--bd);color:var(--dim)">NOSIG</th>
+          <th style="padding:8px;border-bottom:1px solid var(--bd);color:var(--dim)">Delta ▲</th>
+          <th style="padding:8px;border-bottom:1px solid var(--bd);color:var(--dim)">Rise</th>
+        </tr>
+      </thead>
+      <tbody id="hist-body">
+        <tr><td colspan="10" style="padding:16px;text-align:center;color:var(--dim)">Loading...</td></tr>
+      </tbody>
+    
+      <tbody id="live-pending-wu"><tr><td colspan="10" style="padding:8px 12px;font-size:11px;color:var(--dim)">⏳ Loading live WU...</td></tr></tbody>
+</table>
+  </div>
+</div>
+
+</div>
+
+<script>
+// ── Embedded historical database ─────────────────────────────────────────────
+const DB = {
+  delta: {
+    '11:30':{avg:2.81,std:1.31,w1:63},'12:30':{avg:1.76,std:1.05,w1:73},
+    '13:30':{avg:0.93,std:0.97,w1:82},'14:30':{avg:0.32,std:1.24,w1:97},
+    '15:30':{avg:0.43,std:2.13,w1:95},
+    '09:00':{avg:5.85,std:1.98,w1:42},'10:00':{avg:3.92,std:1.95,w1:44},
+    '11:00':{avg:2.52,std:1.96,w1:44},'12:00':{avg:1.67,std:1.92,w1:44},
+    '13:00':{avg:1.11,std:1.95,w1:43},'14:00':{avg:0.91,std:2.01,w1:44},
+    '15:00':{avg:1.08,std:2.06,w1:44},'16:00':{avg:1.60,std:2.10,w1:44}
+  },
+  months:{3:{n:39,avg:38.9,late:23.1},4:{n:396,avg:40.0,late:15.2},
+          5:{n:478,avg:40.8,late:27.6},6:{n:371,avg:41.0,late:24.0},7:{n:43,avg:39.3,late:23.3}},
+  buckets:{"4_38":{n:95,avg:38.19,late:7.4},"4_39":{n:84,avg:39.17,late:13.1},"4_40":{n:65,avg:40.12,late:13.8},"4_41":{n:60,avg:41.17,late:13.3},"4_42":{n:46,avg:42.07,late:6.5},"4_43":{n:14,avg:43.06,late:21.4},"4_44":{n:7,avg:44.0,late:28.6},"5_38":{n:75,avg:38.16,late:25.3},"5_39":{n:84,avg:39.15,late:21.4},"5_40":{n:76,avg:40.14,late:27.6},"5_41":{n:60,avg:41.14,late:15.0},"5_42":{n:62,avg:42.12,late:22.6},"5_43":{n:34,avg:43.11,late:8.8},"5_44":{n:21,avg:44.04,late:28.6},"5_45":{n:13,avg:45.0,late:38.5},"5_46":{n:8,avg:46.0,late:25.0},"6_38":{n:57,avg:38.14,late:21.1},"6_39":{n:54,avg:39.14,late:16.7},"6_40":{n:50,avg:40.13,late:18.0},"6_41":{n:54,avg:41.09,late:16.7},"6_42":{n:47,avg:42.05,late:23.4},"6_43":{n:41,avg:43.12,late:26.8},"6_44":{n:22,avg:44.13,late:9.1},"6_45":{n:11,avg:45.07,late:27.3},"3_38":{n:17,avg:38.15,late:17.6},"3_39":{n:13,avg:39.17,late:7.7},"7_38":{n:16,avg:38.09,late:25.0},"7_39":{n:12,avg:39.12,late:0.0},"7_40":{n:5,avg:40.08,late:20.0},"7_41":{n:8,avg:41.08,late:25.0}},
+  rise:{'14:30→15:30':{early:-0.23,late:0.77,diff:1.0},'13:30→14:30':{early:0.51,late:0.45,diff:-0.06},'11:30→12:30':{early:1.17,late:1.37,diff:0.20},'12:30→13:30':{early:0.77,late:1.0,diff:0.23}}
+};
+
+// ── State ────────────────────────────────────────────────────────────────────
+let metarReadings = []; // parsed METAR obs sorted by time
+let openMeteoData = {}; // hourly forecast
+let oaForecastMax = null;
+let refreshTimer = null;
+
+// ── Utilities ─────────────────────────────────────────────────────────────────
+function nowIST(){
+  return new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Kolkata'}));
+}
+function todayISTKey(){
+  return new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});
+}
+function isTodayIST(d){
+  return d && d.toLocaleDateString('en-CA') === todayISTKey();
+}
+function toIST(utcStr){
+  return new Date(new Date(utcStr).toLocaleString('en-US',{timeZone:'Asia/Kolkata'}));
+}
+function fmtTime(d){
+  return d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0');
+}
+function fmtTimeLabel(d){
+  let h=d.getHours(),m=d.getMinutes();
+  let ap=h>=12?'PM':'AM';
+  let h12=h%12||12;
+  return h12+':'+(m||'00')+ap;
+}
+function polyBinNumber(v){
+  if(v == null || isNaN(Number(v))) return null;
+  // WU rounding: standard math rounding
+  // 42.4 -> 42  (user confirmed)
+  // 42.5 -> 43  (user confirmed)
+  // 42.7 -> 43  (user confirmed)
+  return Math.round(Number(v));
+}
+// WU rounding for display (same as polyBinNumber but clear name)
+function wuRound(v){ return polyBinNumber(v); }
+
+// === SMART PREDICTION ENGINE (30yr VILK data, 2000-2026) ===
+// MASTER lookup: remaining rise, peak done prob, weather fx, stability
+const MASTER = {"remRise":{"9":{"37.5":{"n":58,"p50":5.5,"p75":6.5,"p90":7.7,"p95":9.5},"35.5":{"n":68,"p50":5.8,"p75":6.8,"p90":7.7,"p95":8.3},"36.0":{"n":79,"p50":6.0,"p75":7.1,"p90":8.0,"p95":9.1},"36.5":{"n":75,"p50":5.7,"p75":7.4,"p90":8.4,"p95":9.5},"37.0":{"n":55,"p50":5.3,"p75":6.3,"p90":7.3,"p95":8.2},"35.0":{"n":89,"p50":5.5,"p75":6.5,"p90":7.8,"p95":8.1},"34.0":{"n":85,"p50":5.7,"p75":6.7,"p90":8.0,"p95":8.8},"34.5":{"n":88,"p50":5.2,"p75":6.4,"p90":7.7,"p95":8.5},"38.5":{"n":21,"p50":4.7,"p75":5.6,"p90":6.7,"p95":6.8},"38.0":{"n":40,"p50":4.8,"p75":5.8,"p90":6.8,"p95":7.1},"39.0":{"n":21,"p50":5.0,"p75":5.7,"p90":6.5,"p95":6.8}},"10":{"40.0":{"n":43,"p50":3.3,"p75":4.0,"p90":4.8,"p95":5.0},"36.0":{"n":86,"p50":4.1,"p75":5.2,"p90":6.2,"p95":6.9},"34.0":{"n":47,"p50":3.3,"p75":4.2,"p90":5.0,"p95":6.1},"35.0":{"n":83,"p50":3.8,"p75":4.6,"p90":5.1,"p95":5.3},"34.5":{"n":48,"p50":3.4,"p75":4.5,"p90":5.5,"p95":6.4},"37.0":{"n":65,"p50":3.9,"p75":4.9,"p90":5.5,"p95":6.0},"37.5":{"n":71,"p50":4.1,"p75":5.3,"p90":5.7,"p95":6.6},"38.0":{"n":70,"p50":3.5,"p75":4.9,"p90":5.9,"p95":6.5},"38.5":{"n":77,"p50":3.7,"p75":4.9,"p90":6.3,"p95":7.7},"39.0":{"n":54,"p50":3.8,"p75":4.5,"p90":5.2,"p95":5.9},"35.5":{"n":62,"p50":3.8,"p75":4.6,"p90":5.7,"p95":6.5},"39.5":{"n":51,"p50":3.5,"p75":5.4,"p90":6.5,"p95":7.4},"36.5":{"n":73,"p50":3.5,"p75":4.3,"p90":5.7,"p95":6.3},"40.5":{"n":20,"p50":3.0,"p75":3.9,"p90":5.6,"p95":5.7},"41.0":{"n":15,"p50":3.1,"p75":3.8,"p90":4.6,"p95":5.9}},"11":{"41.0":{"n":54,"p50":1.9,"p75":3.2,"p90":4.6,"p95":4.9},"39.0":{"n":92,"p50":2.4,"p75":3.4,"p90":4.2,"p95":5.2},"35.5":{"n":40,"p50":2.4,"p75":3.4,"p90":4.3,"p95":5.4},"35.0":{"n":58,"p50":2.1,"p75":3.0,"p90":3.9,"p95":4.8},"36.0":{"n":52,"p50":2.3,"p75":3.7,"p90":4.7,"p95":4.9},"34.0":{"n":27,"p50":2.6,"p75":3.2,"p90":4.8,"p95":5.0},"37.5":{"n":54,"p50":2.0,"p75":3.3,"p90":4.5,"p95":5.4},"38.5":{"n":56,"p50":2.4,"p75":3.5,"p90":3.7,"p95":4.7},"39.5":{"n":57,"p50":2.2,"p75":3.2,"p90":3.7,"p95":4.5},"40.0":{"n":74,"p50":2.3,"p75":3.1,"p90":4.8,"p95":5.8},"34.5":{"n":37,"p50":2.1,"p75":3.3,"p90":3.7,"p95":4.9},"36.5":{"n":73,"p50":2.3,"p75":3.0,"p90":3.7,"p95":4.3},"37.0":{"n":77,"p50":2.4,"p75":3.0,"p90":4.9,"p95":5.8},"38.0":{"n":79,"p50":2.4,"p75":3.2,"p90":4.1,"p95":5.0},"41.5":{"n":35,"p50":2.1,"p75":2.7,"p90":3.6,"p95":4.6},"42.5":{"n":13,"p50":1.9,"p75":2.3,"p90":2.9,"p95":4.6},"40.5":{"n":59,"p50":2.5,"p75":3.4,"p90":4.7,"p95":5.7},"42.0":{"n":17,"p50":1.4,"p75":2.0,"p90":3.1,"p95":4.1},"43.0":{"n":5,"p50":2.0,"p75":2.1,"p90":4.0,"p95":4.0}},"12":{"42.0":{"n":53,"p50":1.3,"p75":2.0,"p90":3.8,"p95":4.9},"40.0":{"n":72,"p50":1.5,"p75":2.1,"p90":3.2,"p95":4.8},"36.5":{"n":56,"p50":1.5,"p75":2.6,"p90":3.5,"p95":3.7},"36.0":{"n":50,"p50":1.6,"p75":2.8,"p90":4.1,"p95":4.2},"37.0":{"n":66,"p50":1.4,"p75":1.9,"p90":3.0,"p95":3.2},"38.5":{"n":67,"p50":1.6,"p75":2.5,"p90":3.6,"p95":4.6},"41.0":{"n":63,"p50":1.3,"p75":2.0,"p90":3.3,"p95":4.1},"39.0":{"n":68,"p50":1.4,"p75":2.2,"p90":3.7,"p95":3.8},"40.5":{"n":65,"p50":1.6,"p75":2.5,"p90":3.3,"p95":3.6},"41.5":{"n":51,"p50":1.4,"p75":2.3,"p90":3.7,"p95":4.6},"38.0":{"n":66,"p50":1.6,"p75":2.0,"p90":3.2,"p95":4.0},"35.5":{"n":37,"p50":1.3,"p75":1.9,"p90":2.6,"p95":3.6},"35.0":{"n":37,"p50":1.3,"p75":2.1,"p90":3.2,"p95":3.9},"34.5":{"n":19,"p50":2.4,"p75":3.3,"p90":3.7,"p95":4.3},"37.5":{"n":58,"p50":1.4,"p75":2.5,"p90":3.5,"p95":4.5},"39.5":{"n":65,"p50":1.3,"p75":2.2,"p90":3.4,"p95":3.9},"42.5":{"n":39,"p50":1.1,"p75":1.9,"p90":3.6,"p95":4.7},"43.5":{"n":11,"p50":1.0,"p75":1.3,"p90":1.3,"p95":1.5},"34.0":{"n":22,"p50":1.1,"p75":1.8,"p90":3.0,"p95":3.0},"44.0":{"n":5,"p50":1.3,"p75":1.8,"p90":3.1,"p95":3.1},"43.0":{"n":9,"p50":1.0,"p75":1.2,"p90":4.1,"p95":4.1}},"13":{"42.0":{"n":65,"p50":0.6,"p75":1.2,"p90":2.9,"p95":3.2},"41.0":{"n":76,"p50":0.9,"p75":1.4,"p90":3.0,"p95":4.1},"37.0":{"n":65,"p50":0.7,"p75":1.8,"p90":2.8,"p95":3.0},"36.5":{"n":43,"p50":0.8,"p75":1.7,"p90":2.6,"p95":3.5},"38.5":{"n":65,"p50":0.7,"p75":1.6,"p90":2.7,"p95":3.5},"40.0":{"n":70,"p50":0.7,"p75":1.2,"p90":2.8,"p95":2.9},"41.5":{"n":49,"p50":0.5,"p75":1.3,"p90":2.6,"p95":3.3},"42.5":{"n":47,"p50":0.5,"p75":0.9,"p90":2.4,"p95":2.6},"34.5":{"n":19,"p50":0.7,"p75":1.5,"p90":3.5,"p95":5.6},"37.5":{"n":36,"p50":0.5,"p75":1.5,"p90":2.6,"p95":2.6},"40.5":{"n":66,"p50":0.6,"p75":1.5,"p90":2.7,"p95":3.6},"35.0":{"n":29,"p50":0.8,"p75":1.8,"p90":3.1,"p95":3.8},"36.0":{"n":35,"p50":0.7,"p75":1.9,"p90":3.0,"p95":4.0},"38.0":{"n":70,"p50":0.8,"p75":1.6,"p90":2.2,"p95":3.1},"39.0":{"n":74,"p50":0.8,"p75":1.9,"p90":3.2,"p95":4.0},"39.5":{"n":58,"p50":0.5,"p75":1.2,"p90":2.4,"p95":3.4},"43.0":{"n":40,"p50":0.7,"p75":1.8,"p90":3.8,"p95":4.2},"43.5":{"n":24,"p50":0.6,"p75":1.3,"p90":2.7,"p95":3.5},"44.0":{"n":9,"p50":0.5,"p75":0.7,"p90":1.8,"p95":1.8},"35.5":{"n":37,"p50":0.8,"p75":1.5,"p90":3.7,"p95":5.5},"34.0":{"n":13,"p50":0.8,"p75":1.6,"p90":3.2,"p95":4.2},"44.5":{"n":5,"p50":0.7,"p75":1.1,"p90":2.3,"p95":2.3}},"14":{"42.0":{"n":58,"p50":0.3,"p75":1.2,"p90":2.9,"p95":4.2},"41.5":{"n":54,"p50":0.3,"p75":0.7,"p90":1.6,"p95":2.7},"37.5":{"n":57,"p50":0.1,"p75":0.9,"p90":2.3,"p95":2.7},"36.5":{"n":34,"p50":0.5,"p75":1.6,"p90":3.5,"p95":3.7},"37.0":{"n":51,"p50":0.5,"p75":1.2,"p90":2.2,"p95":2.6},"39.0":{"n":76,"p50":0.3,"p75":1.6,"p90":3.1,"p95":3.9},"40.5":{"n":65,"p50":0.3,"p75":1.3,"p90":2.4,"p95":2.7},"40.0":{"n":62,"p50":0.2,"p75":0.8,"p90":2.2,"p95":2.8},"43.0":{"n":49,"p50":0.2,"p75":0.8,"p90":3.0,"p95":3.9},"38.0":{"n":51,"p50":0.2,"p75":1.0,"p90":2.2,"p95":3.0},"35.0":{"n":25,"p50":0.7,"p75":1.7,"p90":2.8,"p95":3.8},"38.5":{"n":57,"p50":0.5,"p75":1.3,"p90":2.3,"p95":3.3},"35.5":{"n":32,"p50":0.5,"p75":1.4,"p90":3.4,"p95":3.7},"36.0":{"n":39,"p50":0.8,"p75":2.2,"p90":4.2,"p95":5.1},"42.5":{"n":55,"p50":0.2,"p75":0.8,"p90":1.7,"p95":2.6},"41.0":{"n":81,"p50":0.4,"p75":1.2,"p90":2.9,"p95":3.9},"43.5":{"n":23,"p50":0.4,"p75":1.1,"p90":2.3,"p95":2.7},"44.0":{"n":20,"p50":0.4,"p75":0.8,"p90":3.1,"p95":3.2},"34.0":{"n":6,"p50":0.3,"p75":0.5,"p90":3.8,"p95":3.8},"39.5":{"n":70,"p50":0.3,"p75":0.8,"p90":2.3,"p95":3.5},"34.5":{"n":15,"p50":0.2,"p75":0.4,"p90":0.9,"p95":1.4},"44.5":{"n":8,"p50":0.2,"p75":0.6,"p90":2.3,"p95":2.3}},"15":{"41.5":{"n":58,"p50":0.3,"p75":0.9,"p90":2.6,"p95":3.6},"38.0":{"n":50,"p50":0,"p75":1.0,"p90":2.8,"p95":3.8},"36.5":{"n":34,"p50":0.5,"p75":1.6,"p90":2.6,"p95":4.5},"37.0":{"n":52,"p50":0.5,"p75":1.9,"p90":2.9,"p95":3.8},"36.0":{"n":52,"p50":0.4,"p75":1.8,"p90":2.8,"p95":5.0},"37.5":{"n":56,"p50":0.5,"p75":1.9,"p90":3.4,"p95":3.6},"40.0":{"n":72,"p50":0,"p75":0.9,"p90":1.9,"p95":3.0},"43.0":{"n":46,"p50":0.2,"p75":0.9,"p90":2.8,"p95":3.8},"35.0":{"n":24,"p50":0.2,"p75":0.9,"p90":1.8,"p95":3.8},"39.5":{"n":60,"p50":0.4,"p75":2.0,"p90":3.5,"p95":3.5},"41.0":{"n":80,"p50":0.3,"p75":1.1,"p90":2.9,"p95":3.8},"40.5":{"n":62,"p50":0.4,"p75":1.5,"p90":2.4,"p95":2.6},"38.5":{"n":57,"p50":0.5,"p75":0.9,"p90":2.4,"p95":3.4},"35.5":{"n":27,"p50":1.3,"p75":2.7,"p90":4.4,"p95":4.7},"42.0":{"n":57,"p50":0.2,"p75":0.9,"p90":2.2,"p95":2.9},"42.5":{"n":49,"p50":0.3,"p75":1.2,"p90":3.3,"p95":3.6},"39.0":{"n":77,"p50":0.2,"p75":1.1,"p90":2.2,"p95":3.0},"43.5":{"n":19,"p50":0.6,"p75":1.3,"p90":1.7,"p95":3.3},"44.5":{"n":9,"p50":0,"p75":0.7,"p90":2.6,"p95":2.6},"44.0":{"n":18,"p50":0.2,"p75":0.5,"p90":2.9,"p95":3.1},"34.0":{"n":15,"p50":0.3,"p75":1.2,"p90":4.1,"p95":4.8},"34.5":{"n":14,"p50":1.2,"p75":2.5,"p90":3.6,"p95":4.7}},"16":{"41.0":{"n":74,"p50":0.8,"p75":1.6,"p90":2.9,"p95":4.0},"37.5":{"n":55,"p50":0.5,"p75":1.7,"p90":2.7,"p95":4.5},"35.5":{"n":36,"p50":0.6,"p75":2.3,"p90":3.6,"p95":4.7},"36.5":{"n":41,"p50":0.6,"p75":2.4,"p90":3.7,"p95":4.6},"37.0":{"n":55,"p50":1.0,"p75":2.1,"p90":3.2,"p95":3.8},"39.5":{"n":75,"p50":0.4,"p75":1.7,"p90":3.4,"p95":3.7},"42.5":{"n":43,"p50":0.7,"p75":1.1,"p90":1.5,"p95":2.7},"41.5":{"n":55,"p50":0.5,"p75":1.4,"p90":2.5,"p95":3.5},"35.0":{"n":34,"p50":1.1,"p75":2.8,"p90":3.9,"p95":4.9},"40.0":{"n":73,"p50":0.5,"p75":1.2,"p90":3.1,"p95":4.2},"36.0":{"n":51,"p50":0.9,"p75":2.2,"p90":3.9,"p95":4.2},"38.0":{"n":58,"p50":0.8,"p75":1.7,"p90":3.2,"p95":5.0},"43.0":{"n":32,"p50":1.1,"p75":1.8,"p90":3.1,"p95":4.1},"38.5":{"n":67,"p50":0.4,"p75":1.4,"p90":3.5,"p95":4.4},"34.5":{"n":19,"p50":0.5,"p75":1.5,"p90":3.7,"p95":4.5},"39.0":{"n":60,"p50":1.0,"p75":2.4,"p90":3.2,"p95":4.1},"40.5":{"n":64,"p50":0.7,"p75":1.7,"p90":2.7,"p95":3.6},"43.5":{"n":16,"p50":0.5,"p75":1.0,"p90":3.4,"p95":3.5},"34.0":{"n":17,"p50":0.9,"p75":3.0,"p90":4.2,"p95":6.2},"42.0":{"n":42,"p50":1.0,"p75":1.7,"p90":3.0,"p95":4.1},"44.0":{"n":8,"p50":0.8,"p75":3.1,"p90":3.2,"p95":3.2}},"17":{"39.5":{"n":72,"p50":1.4,"p75":2.6,"p90":3.5,"p95":4.3},"36.5":{"n":55,"p50":1.3,"p75":2.4,"p90":4.0,"p95":4.6},"35.0":{"n":46,"p50":1.8,"p75":3.0,"p90":4.1,"p95":4.2},"36.0":{"n":51,"p50":1.9,"p75":2.9,"p90":4.0,"p95":4.1},"34.0":{"n":33,"p50":2.2,"p75":4.0,"p90":5.1,"p95":5.8},"35.5":{"n":46,"p50":2.4,"p75":3.6,"p90":4.7,"p95":5.3},"37.0":{"n":62,"p50":1.8,"p75":3.1,"p90":5.0,"p95":5.0},"38.5":{"n":73,"p50":1.6,"p75":2.9,"p90":4.5,"p95":5.5},"40.0":{"n":69,"p50":1.8,"p75":2.8,"p90":4.1,"p95":5.2},"41.0":{"n":42,"p50":1.9,"p75":2.8,"p90":4.2,"p95":4.2},"34.5":{"n":42,"p50":2.3,"p75":4.3,"p90":5.5,"p95":5.7},"40.5":{"n":48,"p50":1.7,"p75":2.5,"p90":3.4,"p95":5.5},"39.0":{"n":81,"p50":1.8,"p75":2.8,"p90":4.1,"p95":4.9},"37.5":{"n":58,"p50":1.7,"p75":3.5,"p90":4.7,"p95":5.6},"42.0":{"n":21,"p50":2.0,"p75":2.9,"p90":4.2,"p95":4.8},"41.5":{"n":38,"p50":1.8,"p75":2.4,"p90":3.3,"p95":3.7},"38.0":{"n":68,"p50":1.8,"p75":3.2,"p90":4.1,"p95":4.9},"43.0":{"n":7,"p50":0.8,"p75":4.1,"p90":4.2,"p95":4.2},"43.5":{"n":7,"p50":0.9,"p75":1.8,"p90":2.1,"p95":2.1},"42.5":{"n":17,"p50":1.5,"p75":2.6,"p90":4.4,"p95":5.7}},"18":{"37.0":{"n":91,"p50":3.8,"p75":5.4,"p90":6.1,"p95":7.1},"36.5":{"n":77,"p50":3.7,"p75":5.4,"p90":6.7,"p95":7.7},"35.0":{"n":65,"p50":4.0,"p75":5.8,"p90":7.1,"p95":8.0},"34.0":{"n":55,"p50":4.0,"p75":5.2,"p90":5.9,"p95":6.9},"34.5":{"n":66,"p50":3.6,"p75":5.1,"p90":6.3,"p95":7.5},"36.0":{"n":76,"p50":3.8,"p75":5.1,"p90":6.0,"p95":7.1},"38.5":{"n":58,"p50":3.3,"p75":4.7,"p90":5.5,"p95":6.3},"39.0":{"n":46,"p50":3.2,"p75":4.4,"p90":5.9,"p95":6.8},"39.5":{"n":32,"p50":3.6,"p75":4.5,"p90":5.5,"p95":5.6},"38.0":{"n":77,"p50":3.2,"p75":4.2,"p90":5.1,"p95":6.5},"37.5":{"n":59,"p50":3.5,"p75":4.5,"p90":5.6,"p95":6.6},"35.5":{"n":64,"p50":3.5,"p75":4.5,"p90":6.4,"p95":6.5},"40.5":{"n":13,"p50":3.3,"p75":4.4,"p90":6.7,"p95":7.6},"41.0":{"n":11,"p50":3.7,"p75":4.0,"p90":5.8,"p95":6.1},"40.0":{"n":26,"p50":3.6,"p75":4.9,"p90":6.2,"p95":7.0}}},"peakDoneProb":{"11":{"0.3":{"n":46,"pct":2.0},"0.5":{"n":31,"pct":3.0},"1.0":{"n":15,"pct":0.0}},"12":{"0.3":{"n":21,"pct":24.0},"0.5":{"n":18,"pct":22.0},"1.0":{"n":8,"pct":12.0}},"13":{"0.3":{"n":50,"pct":32.0},"0.5":{"n":29,"pct":31.0},"1.0":{"n":21,"pct":29.0}},"14":{"0.3":{"n":188,"pct":76.0},"0.5":{"n":99,"pct":76.0},"1.0":{"n":43,"pct":74.0}},"15":{"0.3":{"n":619,"pct":89.0},"0.5":{"n":298,"pct":91.0},"1.0":{"n":69,"pct":91.0}},"16":{"0.3":{"n":955,"pct":94.0},"0.5":{"n":836,"pct":94.0},"1.0":{"n":442,"pct":95.0}},"17":{"0.3":{"n":1014,"pct":100.0},"0.5":{"n":1005,"pct":100.0},"1.0":{"n":863,"pct":100.0}},"18":{"0.3":{"n":1020,"pct":100.0},"0.5":{"n":1017,"pct":100.0},"1.0":{"n":928,"pct":100.0}}},"weatherFx":{"clear_avg":39.5,"any_rain_avg":35.0,"afternoon_rain_avg":34.5,"rain_suppression":4.5,"afternoon_rain_suppression":5.0},"latePeakByMonth":{"3":4.0,"4":7.0,"5":11.0,"6":12.0,"7":12.0},"stabilityProb":{"11":{"n":14,"pct":0.0},"12":{"n":33,"pct":30.0},"13":{"n":276,"pct":27.0},"14":{"n":788,"pct":77.0},"15":{"n":977,"pct":89.0},"16":{"n":1005,"pct":94.0},"17":{"n":1018,"pct":100.0}}};
+const HIST = {}; // legacy alias, kept for compatibility
+
+// Get max remaining rise from current hour & temp (clear days)
+// Returns {n, p50, p75, p90, p95} or null
+function getRemainingRise(hour, currentTemp){
+  const hkey = String(hour);
+  if(!MASTER.remRise[hkey]) return null;
+  const tkey = (Math.round(currentTemp*2)/2).toFixed(1);
+  return MASTER.remRise[hkey][tkey] || MASTER.remRise[hkey][Math.round(currentTemp*2)/2] || null;
+}
+
+// Probability that peak is already done, given drop magnitude at hour h
+function getPeakDoneProb(hour, dropMagnitude){
+  const hkey = String(hour);
+  if(!MASTER.peakDoneProb[hkey]) return null;
+  // Find nearest drop threshold
+  const thresholds = [1.0, 0.5, 0.3];
+  for(const t of thresholds){
+    if(dropMagnitude >= t && MASTER.peakDoneProb[hkey][String(t)]){
+      return MASTER.peakDoneProb[hkey][String(t)];
+    }
+  }
+  return null;
+}
+
+// Stability rule: if temp not rising for N hours, peak done?
+function getStabilityProb(hour){
+  return MASTER.stabilityProb[String(hour)] || null;
+}
+
+// Late peak probability by month
+function getLatePeakPct(month){
+  return MASTER.latePeakByMonth[String(month)] || 12;
+}
+
+// MAIN PREDICTION: given current state, return max possible peak + bin recommendations
+function predictMaxPeak(currentTemp, effectivePeak, hour, hasRain, hasAfternoonRain, wuDropped, wuStable){
+  const rise = getRemainingRise(hour, currentTemp);
+  if(!rise) return null;
+
+  // Worst case: current + p95 remaining rise
+  let maxPossible_p95 = currentTemp + rise.p95;
+  let maxPossible_p75 = currentTemp + rise.p75;
+  let maxPossible_p50 = currentTemp + rise.p50;
+
+  // Effective peak is the floor (already observed)
+  maxPossible_p50 = Math.max(maxPossible_p50, effectivePeak);
+  maxPossible_p75 = Math.max(maxPossible_p75, effectivePeak);
+  maxPossible_p95 = Math.max(maxPossible_p95, effectivePeak);
+
+  // Adjust for WU obs dropping (peak likely done)
+  if(wuDropped){
+    const stab = getStabilityProb(hour);
+    if(stab && stab.pct >= 75){
+      // Strong signal: peak is done. Tighten the worst case.
+      maxPossible_p95 = Math.max(effectivePeak + 0.3, maxPossible_p95 - 1.5);
+      maxPossible_p75 = Math.max(effectivePeak, maxPossible_p75 - 1.0);
+    }
+  }
+  if(wuStable){
+    // 2+ stable readings → even more confidence
+    maxPossible_p95 = Math.max(effectivePeak + 0.5, maxPossible_p95 - 1.0);
+  }
+
+  // Weather suppression
+  if(hasAfternoonRain || hasRain){
+    maxPossible_p95 -= 2.0;
+    maxPossible_p75 -= 1.5;
+  }
+
+  return {
+    p50: +maxPossible_p50.toFixed(1),
+    p75: +maxPossible_p75.toFixed(1),
+    p95: +maxPossible_p95.toFixed(1),
+    rise_p50: rise.p50, rise_p75: rise.p75, rise_p95: rise.p95,
+    n: rise.n
+  };
+}
+
+// Calculate signal STRENGTH score (0-100)
+function calculateStrength(state){
+  let score = 0;
+  const reasons = [];
+  const {hour, wuDropped, wuStable, dropMag, effectivePeak, wuObsPeak, metarPeak, hasNosig, hasDust, hasRain, hasAfternoonRain, latePeakPct, prediction} = state;
+
+  // 1. WU dropped from peak
+  if(wuDropped){
+    score += 30;
+    reasons.push(`+30 WU obs dropped ${dropMag.toFixed(1)}°C from peak`);
+  }
+
+  // 2. WU stable for 2+ readings
+  if(wuStable){
+    score += 20;
+    reasons.push('+20 WU stable for 2+ readings (no climb back)');
+  }
+
+  // 3. Time of day
+  if(hour >= 16){ score += 25; reasons.push('+25 After 4 PM (peak typically done)'); }
+  else if(hour >= 15){ score += 20; reasons.push('+20 After 3 PM'); }
+  else if(hour >= 14){ score += 12; reasons.push('+12 After 2 PM'); }
+  else if(hour >= 13){ score += 5; reasons.push('+5 After 1 PM (still risky)'); }
+
+  // 4. Drop magnitude
+  if(dropMag >= 1.0){ score += 15; reasons.push('+15 Drop >1°C (significant)'); }
+  else if(dropMag >= 0.5){ score += 8; reasons.push('+8 Drop >0.5°C'); }
+
+  // 5. WU > METAR (frontrun)
+  if(wuObsPeak > metarPeak + 0.5){
+    score += 5;
+    reasons.push('+5 WU peak ahead of METAR (frontrun opportunity)');
+  }
+
+  // 6. Late peak risk (negative)
+  if(latePeakPct > 20 && hour < 15){
+    score -= 10;
+    reasons.push(`-10 Late peak risk ${latePeakPct}% (before 3 PM)`);
+  }
+
+  // 7. Weather modifiers
+  if(hasRain){ score += 20; reasons.push('+20 Rain in METAR (peak suppressed)'); }
+  if(hasAfternoonRain){ score += 15; reasons.push('+15 Afternoon rain → peak done'); }
+  if(hasDust){ score += 3; reasons.push('+3 Dust (slight cooling)'); }
+
+  // 8. Prediction confidence
+  if(prediction){
+    const range = prediction.p95 - prediction.p50;
+    if(range < 1.0){ score += 10; reasons.push('+10 Tight prediction range (high confidence)'); }
+    else if(range > 3.0){ score -= 10; reasons.push('-10 Wide prediction range (low confidence)'); }
+  }
+
+  return {
+    score: Math.max(0, Math.min(100, score)),
+    reasons
+  };
+}
+
+// Generate bin recommendations
+function getBinRecs(prediction, effectivePeak){
+  if(!prediction) return null;
+  const p95Bin = wuRound(prediction.p95);
+  const p75Bin = wuRound(prediction.p75);
+  const p50Bin = wuRound(prediction.p50);
+  const effBin = wuRound(effectivePeak);
+
+  return {
+    mostLikely: p50Bin,
+    yes_bin: Math.max(p50Bin, effBin),    // safest YES bin
+    safe_no_floor: p95Bin + 1,             // safe NO from this bin and higher
+    aggressive_no_floor: p75Bin + 1,       // aggressive NO (75% confidence)
+    p50Bin, p75Bin, p95Bin, effBin
+  };
+}
+
+// Legacy compat
+function getHistProbs(month, hour, currentTemp){
+  const r = getRemainingRise(hour, currentTemp);
+  if(!r) return null;
+  // Build fake bin probabilities for legacy display
+  const median = currentTemp + r.p50;
+  const b = {};
+  b[Math.round(median)] = 0.5;
+  return {n: r.n, m: +median.toFixed(1), b, matchedTemp: Math.round(currentTemp*2)/2, l: 12};
+}
+
+function polyBinLabel(v){
+  const b = polyBinNumber(v);
+  if(b == null) return '—';
+  return b + '°C';
+}
+function polyBinShort(v){
+  const b = polyBinNumber(v);
+  if(b == null) return '—';
+  if(b <= 42) return '≤42';
+  if(b >= 52) return '≥52';
+  return String(b);
+}
+function slotKey(d){
+  let h=d.getHours(),m=d.getMinutes();
+  // Round to nearest ASOS slot (half hours) or ERA5 slot (whole hours)
+  if(m>=15&&m<45) return String(h).padStart(2,'0')+':30'; // half hour
+  return String(h).padStart(2,'0')+':00';
+}
+function getDelta(slot,temp,peak){
+  const d=DB.delta[slot];
+  if(!d) return null;
+  return {predicted: temp+d.avg, avg_delta:d.avg, std:d.std, w1:d.w1};
+}
+function nearestDelta(slot){
+  if(DB.delta[slot]) return DB.delta[slot];
+  const [hh,mm]=slot.split(':').map(Number);
+  const target=hh*60+mm;
+  let best=null, dist=1e9;
+  for(const [k,v] of Object.entries(DB.delta)){
+    const [h,m]=k.split(':').map(Number);
+    const d=Math.abs((h*60+m)-target);
+    if(d<dist){best=v; dist=d;}
+  }
+  return best;
+}
+function rhFromTempDew(tempC, dewC){
+  if(tempC==null || dewC==null) return null;
+  const es = 6.112*Math.exp((17.67*tempC)/(tempC+243.5));
+  const e  = 6.112*Math.exp((17.67*dewC)/(dewC+243.5));
+  return Math.max(0, Math.min(100, Math.round((e/es)*100)));
+}
+function wuObsSlotKeyFromTimeText(timeText){
+  // WU obs time -> NEXT METAR slot (so each METAR row shows WU since previous METAR)
+  // WU obs 13:00-13:29 -> slot 13:30 (METAR at 13:30 shows these readings)
+  // WU obs 13:30-13:59 -> slot 14:00 (METAR at 14:00 shows these readings)
+  const match = String(timeText || '').match(/(\d{1,2}):(\d{2})/);
+  if(!match) return null;
+  let h = Number(match[1]);
+  const m = Number(match[2]);
+  if(h < 0 || h > 23 || m < 0 || m > 59) return null;
+  if(m < 30){
+    return String(h).padStart(2,'0') + ':30';
+  } else {
+    h = (h + 1) % 24;
+    return String(h).padStart(2,'0') + ':00';
+  }
+}
+function wuObsActualTimeText(wuData){
+  const obs = wuData?.obs || {};
+  const raw = obs.obs_time_ist || obs.obs_time_local || obs.obs_time || obs.obsTime ||
+              obs.valid_time || obs.validTime || obs.observation_time || obs.local_time ||
+              obs.time || obs.saved_at || '';
+  if(raw !== null && raw !== undefined && raw !== ''){
+    if(typeof raw === 'number' || /^\d{10,13}$/.test(String(raw))){
+      const n = Number(raw);
+      const ms = n > 9999999999 ? n : n * 1000;
+      return new Date(ms).toLocaleTimeString('en-IN',{
+        timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false
+      });
+    }
+    const s = String(raw);
+    const m = s.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+    if(m) return String(m[1]).padStart(2,'0') + ':' + m[2] + ':' + (m[3] || '00');
+  }
+  return null; // do not create fake new rows every refresh
+}
+function todayKeyIST(){
+  // Use UTC date as "today" key → resets at 0:00 UTC = 5:30 AM IST (user's preferred reset)
+  return new Date().toISOString().slice(0,10); // YYYY-MM-DD UTC
+}
+function wuRowsCacheKey(){
+  return 'vilk_wu_obs_rows_' + todayKeyIST();
+}
+function normalizeWURows(rows){
+  const out = {};
+  Object.entries(rows || {}).forEach(([slot,val])=>{
+    const arr = Array.isArray(val) ? val : (val ? [val] : []);
+    out[slot] = arr.filter(x => x && x.temp_c != null).slice(-240);
+  });
+  return out;
+}
+function loadWUObsRows(){
+  try { return normalizeWURows(JSON.parse(localStorage.getItem(wuRowsCacheKey()) || '{}') || {}); }
+  catch(_e){ return {}; }
+}
+function mergeWURows(a,b){
+  const out = normalizeWURows(a);
+  const add = normalizeWURows(b);
+  Object.entries(add).forEach(([slot,arr])=>{
+    out[slot] = out[slot] || [];
+    arr.forEach(x=>{
+      // Dedup by HH:MM only (strip seconds from obs_time)
+      // WU obs_time can include seconds (09:50:33) — normalize to 09:50
+      const normTime = (s) => String(s||'').replace(/(\d{1,2}:\d{2}).*/, '$1').trim();
+      const id = normTime(x.saved_at);
+      const existIdx = out[slot].findIndex(y => normTime(y.saved_at||'') === id);
+      if(existIdx === -1){
+        out[slot].push({...x, saved_at: id}); // save with normalized HH:MM time
+      }
+      // same HH:MM → skip (WU hasn't updated, just re-fetched same reading)
+    });
+    out[slot].sort((x,y)=>(x.saved_at || '').localeCompare(y.saved_at || ''));
+    out[slot] = out[slot].slice(-240);
+  });
+  return out;
+}
+function saveWUObsForToday(wuData){
+  let map = loadWUObsRows();
+
+  if(wuData?.obs_log) map = mergeWURows(map, wuData.obs_log);
+
+  const temp = wuData?.obs?.temp_c;
+  let status = 'No WU temp';
+  let obsTime = wuObsActualTimeText(wuData);
+
+  if(temp != null && obsTime){
+    const slot = wuObsSlotKeyFromTimeText(obsTime);
+    if(slot){
+      const item = {
+        temp_c:+Number(temp).toFixed(1),
+        humidity:wuData?.obs?.humidity ?? null,
+        wind_kph:wuData?.obs?.wind_kph ?? null,
+        condition:wuData?.obs?.wx_phrase || wuData?.obs?.condition || wuData?.obs?.phrase || '',
+        peak_since_7am_c:wuData?.obs?.peak_since_7am_c ?? null,
+        saved_at:obsTime,
+        fetched_at:new Date().toLocaleTimeString('en-IN',{
+          timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false
+        })
+      };
+
+      const before = (map[slot] || []).length;
+      map = mergeWURows(map,{[slot]:[item]});
+      const after = (map[slot] || []).length;
+      status = after > before ? 'Saved new WU update' : 'Duplicate ignored';
+    }
+  }else if(temp != null && !obsTime){
+    status = 'Temp fetched, no WU obs time — not saved';
+  }
+
+  try { localStorage.setItem(wuRowsCacheKey(), JSON.stringify(map)); } catch(_e){}
+
+  const valueEl=document.getElementById('wu-last-value');
+  const obsEl=document.getElementById('wu-last-obstime');
+  const fetchEl=document.getElementById('wu-last-fetched');
+  const statEl=document.getElementById('wu-last-status');
+  if(valueEl) valueEl.textContent = temp!=null ? (+Number(temp).toFixed(1))+'°C' : '—';
+  if(obsEl) obsEl.textContent = obsTime || '—';
+  if(fetchEl) fetchEl.textContent = new Date().toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
+  if(statEl) {
+    statEl.textContent = status;
+    statEl.style.color = status.includes('Saved') ? 'var(--grn)' : status.includes('Duplicate') ? 'var(--ylw)' : 'var(--red)';
+  }
+
+  return map;
+}
+function formatWUObsCell(list){
+  const raw = (Array.isArray(list) ? list : [])
+    .filter(x => x && x.temp_c != null && x.saved_at)
+    .map(x => ({...x, temp_c:+Number(x.temp_c).toFixed(1)}))
+    .sort((a,b)=>(a.saved_at || '').localeCompare(b.saved_at || ''));
+
+  if(!raw.length) return '—';
+
+  // Show only real WU updates. Dedup exact same WU obs time + temp.
+  const seen = new Set();
+  const clean = [];
+  raw.forEach(x=>{
+    const id = (x.saved_at || '') + '|' + x.temp_c;
+    if(!seen.has(id)){
+      seen.add(id);
+      clean.push(x);
+    }
+  });
+
+  return clean.slice(-30).map((x,i,arr)=>{
+    const prev = i > 0 ? arr[i-1] : null;
+    const arrow = prev ? (x.temp_c > prev.temp_c ? '▲' : x.temp_c < prev.temp_c ? '▼' : '•') : '•';
+    const col = arrow === '▲' ? 'var(--red)' : arrow === '▼' ? 'var(--grn)' : 'var(--org)';
+    const time = String(x.saved_at || '').slice(0,5);
+    const delta = prev ? +(x.temp_c - prev.temp_c).toFixed(1) : 0;
+    const deltaStr = delta !== 0 ? (delta > 0 ? `+${delta}` : `${delta}`) : '';
+    return `<div style="margin:2px 0;line-height:1.18;white-space:nowrap;font-family:'JetBrains Mono',monospace;font-size:11px">
+      <span style="color:${col};font-weight:700">${x.temp_c.toFixed(1)}°C</span>
+      <span style="color:${col};margin-left:3px">${arrow}</span>
+      ${deltaStr ? `<span style="color:${col};font-size:9px;margin-left:2px">${deltaStr}</span>` : ''}
+      <span style="color:var(--dim);margin-left:6px;font-size:10px">${time}</span>
+    </div>`;
+  }).join('');
+}
+function hasWX(raw, codes){
+  return codes.some(c=>raw.toUpperCase().includes(c));
+}
+
+// ── METAR fetch & parse ───────────────────────────────────────────────────────
+async function fetchMETAR(){
+  try{
+    // Use our own Netlify serverless proxy. Browser CORS proxies often return 403.
+    const r = await fetch('/api/metar', { cache:'no-store' });
+    if(!r.ok) throw new Error('METAR function '+r.status);
+    const data = await r.json();
+    if(!Array.isArray(data)) throw new Error('Bad METAR response');
+    return data.map(m=>{
+      const raw=m.rawOb||'';
+      const obsIST=toIST(new Date(m.obsTime*1000).toISOString());
+      return {
+        obsIST, timeStr:fmtTime(obsIST), timeLabel:fmtTimeLabel(obsIST),
+        temp:m.temp, dewp:m.dewp,
+        wind:m.wspd?Math.round(m.wspd*1.852)+'km/h '+(m.wdir||'')+'°':null,
+        vis:m.visib?+(m.visib*1.60934).toFixed(1):null,
+        wx:m.wxString||'',
+        nosig:raw.includes('NOSIG'),
+        becmg:raw.includes('BECMG'),
+        hasRain:hasWX(raw,['RA','DZ','SH','GR']),
+        hasStorm:hasWX(raw,['TS','TSRA']),
+        hasDust:hasWX(raw,['DU','DS','BLDU']),
+        hasHaze:hasWX(raw,['HZ']),
+        raw
+      };
+    }).sort((a,b)=>a.obsIST-b.obsIST);
+  }catch(e){
+    console.error('METAR error:',e);
+    return [];
+  }
+}
+
+
+async function fetchWUHistory(){
+  try{
+    const r = await fetch('/api/history?date='+todayISTKey()+'&ts='+Date.now()+'&ts='+Date.now(), {cache:'no-store'});
+    if(!r.ok) return null;
+    return await r.json();
+  }catch(e){
+    console.warn('history fetch failed', e.message);
+    return null;
+  }
+}
+
+// ── Open-Meteo fetch ──────────────────────────────────────────────────────────
+async function fetchWU(){
+  const cacheKey='vilk_wu_today_cache';
+  const today=new Date().toISOString().slice(0,10);
+  try{
+    const r=await fetch('/api/wu?ts='+Date.now(), {cache:'no-store'});
+    if(!r.ok) throw new Error('WU function '+r.status);
+    const d=await r.json();
+    if(d && (d.obs || d.fc?.today_c)){
+      const hist = await fetchWUHistory();
+      if(hist?.wu_obs_rows) d.obs_log = hist.wu_obs_rows;
+      if(hist?.metar_rows)  d._supaMetars = hist.metar_rows; // pass to fetchAll for merge
+      localStorage.setItem(cacheKey, JSON.stringify({day:today, saved_at:Date.now(), data:d}));
+      return d;
+    }
+    if(d?.error) throw new Error(d.error);
+    throw new Error('WU empty');
+  }catch(e){
+    console.error('WU error:',e.message);
+    try{
+      const c=JSON.parse(localStorage.getItem(cacheKey)||'null');
+      if(c && c.day===today && c.data){
+        const hist = await fetchWUHistory();
+        if(hist?.wu_obs_rows) c.data.obs_log = hist.wu_obs_rows;
+        c.data.cached_used=true;
+        return c.data;
+      }
+    }catch(_){}
+    return null;
+  }
+}
+
+// ── SMART SIGNAL ENGINE v3 (30yr data-driven) ─────────────────────────────────
+// Track WU obs history for trend detection (in-memory, reset on reload)
+const _wuHistory = []; // array of {temp, time}
+function pushWUReading(temp, time){
+  if(temp == null) return;
+  const id = time + '|' + temp.toFixed(1);
+  if(_wuHistory.length > 0 && _wuHistory[_wuHistory.length-1].id === id) return;
+  _wuHistory.push({temp:+temp.toFixed(1), time, id});
+  if(_wuHistory.length > 20) _wuHistory.shift();
+}
+function getWUTrend(){
+  if(_wuHistory.length < 2) return {dropped:false, stable:false, lastN:_wuHistory};
+  const lastN = _wuHistory.slice(-4);
+  const maxInLastN = Math.max(...lastN.map(r => r.temp));
+  const lastTemp = lastN[lastN.length-1].temp;
+  const dropped = lastTemp < maxInLastN - 0.2;
+  // Stable: last 2-3 readings within 0.3°C of each other AND below recent max
+  let stable = false;
+  if(lastN.length >= 2){
+    const last2 = lastN.slice(-2);
+    const range = Math.max(...last2.map(r=>r.temp)) - Math.min(...last2.map(r=>r.temp));
+    stable = range <= 0.3 && dropped;
+  }
+  return {dropped, stable, maxInLastN, lastTemp, dropMag: maxInLastN - lastTemp, lastN};
+}
+
+function computeSignal(metars, wuData){
+  const now = nowIST();
+  const month = now.getMonth()+1;
+  const istMins = now.getHours()*60 + now.getMinutes();
+  const hour = now.getHours();
+
+  // WU + METAR data
+  let forecastMax=null, wuObsTemp=null, wuObsPeak=null, wuObs=null;
+  if(wuData){
+    forecastMax = wuData.fc?.today_c ?? wuData.obs?.peak_since_7am_c ?? null;
+    wuObsTemp   = wuData.obs?.temp_c ?? null;
+    wuObsPeak   = wuData.obs?.peak_since_7am_c ?? null;
+    wuObs       = wuData.obs || null;
+  }
+  
+  // Track WU reading for trend
+  if(wuObsTemp != null){
+    pushWUReading(wuObsTemp, wuObsActualTimeText(wuData) || 'now');
+  }
+
+  const latest = metars[metars.length-1];
+  if(!latest) return {type:'early',emoji:'📡',label:'No METAR',reason:'Cannot fetch METAR data.',conf:'—',sigs:[]};
+
+  const metarPeak = Math.max(...metars.filter(m=>m.temp!=null).map(m=>m.temp));
+  const latestTemp = latest.temp;
+
+  // CRITICAL: effective peak = max(WU obs peak, METAR peak)
+  const effectivePeak = Math.max(wuObsPeak ?? -99, metarPeak ?? -99);
+
+  // WU trend
+  const trend = getWUTrend();
+  const wuDropped = trend.dropped;
+  const wuStable = trend.stable;
+
+  // Weather conditions
+  const hasRain    = latest.hasRain;
+  const hasStorm   = latest.hasStorm;
+  const hasDust    = latest.hasDust;
+  const hasNosig   = latest.nosig;
+  const hasHaze    = latest.hasHaze;
+  const hasAfternoonRain = metars.some(m => m.hasRain && m.timeStr >= '11:00');
+
+  // Frontrun
+  const frontrunGap = (wuObsPeak ?? 0) - metarPeak;
+  const hasFrontrun = frontrunGap >= 0.5 && wuObsPeak != null;
+
+  // ── MAX PEAK PREDICTION using 30yr data ─────────────────────────
+  const currentForPred = Math.max(wuObsTemp ?? latestTemp, latestTemp);
+  const prediction = predictMaxPeak(
+    currentForPred, effectivePeak, hour,
+    hasRain, hasAfternoonRain, wuDropped, wuStable
+  );
+  const binRecs = prediction ? getBinRecs(prediction, effectivePeak) : null;
+  const latePeakPct = getLatePeakPct(month);
+
+  // ── STRENGTH SCORE ──────────────────────────────────────────────
+  const state = {
+    hour, wuDropped, wuStable, dropMag: trend.dropMag || 0,
+    effectivePeak, wuObsPeak, metarPeak,
+    hasNosig, hasDust, hasRain, hasAfternoonRain,
+    latePeakPct, prediction
+  };
+  const strength = calculateStrength(state);
+
+  // ── SIGNAL DECISION ─────────────────────────────────────────────
+  const sigs = [];
+  const expectedPeak = prediction ? prediction.p50 : effectivePeak;
+  const expectedBin = wuRound(expectedPeak);
+
+  if(istMins < 9*60){
+    return {type:'early',emoji:'🌅',label:'Too Early',reason:'Markets not yet active.',conf:'—',sigs:[],expectedPeak,forecastMax,metarPeak,latestTemp,expectedBin,effectivePeak,wuObsPeak,hasFrontrun,frontrunGap,strength,prediction,binRecs};
+  }
+
+  // DANGER signals first
+  if(hasStorm){
+    sigs.push({color:'var(--red)',text:'⚡ THUNDERSTORM — EXIT all NO positions',val:'DANGER'});
+    return {type:'danger',emoji:'⛈️',label:'EXIT — Storm',reason:'METAR shows TSRA/TS. Temperature will crash. Exit all NO positions.',conf:'100% exit',sigs,expectedPeak,forecastMax,metarPeak,latestTemp,expectedBin,effectivePeak,wuObsPeak,hasFrontrun,frontrunGap,strength,prediction,binRecs};
+  }
+
+  // ── BUILD SIGNALS LIST ──────────────────────────────────────────
+  // Frontrun (highest priority signal after danger)
+  if(hasFrontrun){
+    sigs.push({color:'var(--grn)',text:`🚀 FRONTRUN: WU=${wuObsPeak.toFixed(1)}°C vs METAR=${metarPeak}°C (+${frontrunGap.toFixed(1)}°C ahead). Buy before METAR confirms!`,val:`+${frontrunGap.toFixed(1)}°C`});
+  }
+
+  // Prediction
+  if(prediction){
+    sigs.push({color:'var(--ylw)',text:`📊 Max possible (95% confidence): ${prediction.p95.toFixed(1)}°C → safe NO from ${binRecs.safe_no_floor}°C+`,val:`≤${prediction.p95.toFixed(1)}°C`});
+    sigs.push({color:'var(--grn)',text:`📊 Most likely peak (median): ${prediction.p50.toFixed(1)}°C → ${binRecs.mostLikely}°C bin`,val:`${binRecs.mostLikely}°C`});
+    sigs.push({color:'var(--acc)',text:`📊 Based on n=${prediction.n} similar days (May/Jun, hour=${hour}, temp≈${currentForPred.toFixed(1)}°C clear days). Remaining rise: median +${prediction.rise_p50}°C, p95 +${prediction.rise_p95}°C`,val:`n=${prediction.n}`});
+  }
+
+  // WU trend
+  if(wuDropped){
+    sigs.push({color:'var(--grn)',text:`⬇ WU obs dropped ${trend.dropMag.toFixed(1)}°C from peak ${trend.maxInLastN}°C → ${trend.lastTemp}°C${wuStable?' (stable for 2+ readings)':''}`,val:'DROPPED'});
+  } else if(_wuHistory.length >= 2){
+    sigs.push({color:'var(--org)',text:`↑ WU obs still rising/at peak (last: ${trend.lastTemp}°C)`,val:'RISING'});
+  }
+
+  // Month context
+  sigs.push({color:'var(--acc)',text:`Month: ${['','Jan','Feb','Mar','Apr','May','Jun','Jul'][month]} — late peak (after 4PM) probability ${latePeakPct}%`,val:`${latePeakPct}%`});
+
+  // Weather
+  if(hasRain)        sigs.push({color:'var(--ylw)',text:`🌧 Rain in METAR — peak suppressed by ~${MASTER.weatherFx.rain_suppression}°C historically`,val:'RAIN'});
+  if(hasAfternoonRain && !hasRain) sigs.push({color:'var(--ylw)',text:`Afternoon rain detected earlier — peak done`,val:'RAIN'});
+  if(hasDust)        sigs.push({color:'var(--ylw)',text:`DU/Dust in METAR — slight cooling possible`,val:'DUST'});
+  if(hasHaze)        sigs.push({color:'var(--grn)',text:`HZ — normal hot day, no peak suppression`,val:'HAZE'});
+  if(hasNosig)       sigs.push({color:'var(--ylw)',text:`NOSIG in METAR — stable sky, peak might still come`,val:'NOSIG'});
+
+  // WU vs forecast
+  if(forecastMax)    sigs.push({color:'var(--acc)',text:`WU forecast: ${forecastMax.toFixed(1)}°C`,val:`${forecastMax.toFixed(1)}°C`});
+  if(effectivePeak > metarPeak + 0.1) sigs.push({color:'var(--ylw)',text:`Effective peak (WU+METAR): ${effectivePeak.toFixed(1)}°C → bin ${wuRound(effectivePeak)}°C`,val:'EFF'});
+
+  // ── DECISION ────────────────────────────────────────────────────
+  let signal='wait', emoji='⏳', label='Wait', reason='', conf='';
+
+  if(strength.score >= 85){
+    signal='buy'; emoji='🔒'; label=`PEAK LOCKED (${strength.score}/100) — BUY NOW`;
+    reason = `Predicted peak: ${prediction?.p50.toFixed(1) ?? effectivePeak.toFixed(1)}°C (max ${prediction?.p95.toFixed(1) ?? '?'}°C @ 95%). Buy YES on ${binRecs?.mostLikely ?? wuRound(effectivePeak)}°C. Safe NO from ${binRecs?.safe_no_floor ?? wuRound(effectivePeak)+2}°C+`;
+    conf=`Score: ${strength.score}/100 · ${strength.reasons.slice(0,3).join(', ')}`;
+  } else if(strength.score >= 65){
+    signal='buy'; emoji='✅'; label=`STRONG BUY (${strength.score}/100) — 70% Entry`;
+    reason = `Predicted peak: ${prediction?.p50.toFixed(1) ?? '?'}°C. Buy 70% YES on ${binRecs?.mostLikely ?? '?'}°C, save 30% for confirm. Safe NO from ${binRecs?.safe_no_floor ?? '?'}°C+`;
+    conf=`Score: ${strength.score}/100`;
+  } else if(strength.score >= 45){
+    signal='buy'; emoji='🟡'; label=`MEDIUM BUY (${strength.score}/100) — 40% Entry`;
+    reason = `Predicted peak: ${prediction?.p50.toFixed(1) ?? '?'}°C. Buy 40% YES on ${binRecs?.mostLikely ?? '?'}°C. Wait for stronger signal.`;
+    conf=`Score: ${strength.score}/100`;
+  } else if(strength.score >= 25){
+    signal='wait'; emoji='👀'; label=`WATCH (${strength.score}/100)`;
+    reason = `Predicted peak: ${prediction?.p50.toFixed(1) ?? '?'}°C (range ${prediction?.p50.toFixed(1)}-${prediction?.p95.toFixed(1)}°C). Too uncertain. Wait for drop or stability.`;
+    conf=`Score: ${strength.score}/100`;
+  } else {
+    signal='wait'; emoji='🌅'; label='EARLY — Track';
+    reason = `Current ${latestTemp}°C. Predicted peak ${prediction?.p50.toFixed(1) ?? '?'}°C (max ${prediction?.p95.toFixed(1) ?? '?'}°C). Too early for entry.`;
+    conf=`Score: ${strength.score}/100 · ${strength.reasons[0] || 'No strong signal yet'}`;
+  }
+
+  return {
+    type:signal, emoji, label, reason, conf, sigs,
+    expectedPeak, forecastMax, metarPeak, latestTemp, expectedBin,
+    effectivePeak, wuObsPeak, hasFrontrun, frontrunGap,
+    strength, prediction, binRecs, trend
+  };
+}
+
+
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function renderSignal(s){
+  const box=document.getElementById('signal-box');
+  box.className='signal-box '+s.type;
+  box.innerHTML=`<span class="signal-emoji">${s.emoji}</span><div class="signal-label">${s.label}</div><div class="signal-reason">${s.reason}</div><div class="signal-conf">${s.conf}</div>`;
+}
+
+
+// === STRENGTH SCORE & PREDICTION DISPLAY ===
+function renderStrengthAndPrediction(s){
+  // Insert strength score box if not exists
+  let box = document.getElementById('strength-box');
+  if(!box){
+    box = document.createElement('div');
+    box.id = 'strength-box';
+    box.style.cssText = 'margin:14px 0;padding:14px;border:1px solid var(--bord);border-radius:10px;background:#0e1722';
+    const target = document.getElementById('signal-box');
+    if(target && target.parentNode){
+      target.parentNode.insertBefore(box, target.nextSibling);
+    }
+  }
+  if(!s.strength || !s.prediction){
+    box.innerHTML = '<div style="color:var(--dim);padding:8px">No prediction available (need more data)</div>';
+    return;
+  }
+  const sc = s.strength.score;
+  const col = sc >= 85 ? 'var(--grn)' : sc >= 65 ? '#54d6a8' : sc >= 45 ? 'var(--ylw)' : sc >= 25 ? 'var(--org)' : 'var(--dim)';
+  const p = s.prediction;
+  const br = s.binRecs;
+  
+  box.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:14px">
+      <div style="flex:1;min-width:200px">
+        <div style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.6px">Strength Score</div>
+        <div style="font-size:32px;font-weight:700;color:${col};line-height:1.1">${sc}/100</div>
+        <div style="font-size:11px;color:var(--dim);margin-top:4px">
+          ${sc >= 85 ? '🔒 Peak Locked' : sc >= 65 ? '✅ Strong' : sc >= 45 ? '🟡 Medium' : sc >= 25 ? '👀 Watch' : '🌅 Early'}
+        </div>
+      </div>
+      <div style="flex:1;min-width:200px">
+        <div style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.6px">Predicted Peak (median)</div>
+        <div style="font-size:32px;font-weight:700;color:var(--acc);line-height:1.1">${p.p50.toFixed(1)}°C</div>
+        <div style="font-size:11px;color:var(--dim);margin-top:4px">→ ${br ? br.mostLikely : wuRound(p.p50)}°C bin most likely</div>
+      </div>
+      <div style="flex:1;min-width:200px">
+        <div style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.6px">Max Possible (95% conf)</div>
+        <div style="font-size:32px;font-weight:700;color:var(--ylw);line-height:1.1">${p.p95.toFixed(1)}°C</div>
+        <div style="font-size:11px;color:var(--dim);margin-top:4px">→ NO safe from ${br ? br.safe_no_floor : wuRound(p.p95)+1}°C+</div>
+      </div>
+    </div>
+    ${br ? `
+    <div style="margin-top:14px;padding:10px;border-radius:6px;background:#091522;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+      <span style="font-size:11px;color:var(--dim);text-transform:uppercase">Bin recommendations:</span>
+      <span style="padding:4px 10px;border-radius:14px;background:var(--grn);color:#0a0;font-weight:700;font-size:12px">BUY YES: ${br.mostLikely}°C</span>
+      <span style="padding:4px 10px;border-radius:14px;background:var(--ylw);color:#000;font-weight:700;font-size:12px">SAFE NO: ${br.safe_no_floor}°C+</span>
+      <span style="padding:4px 10px;border-radius:14px;background:#2b3a4d;color:var(--acc);font-size:12px">Aggressive NO: ${br.aggressive_no_floor}°C+</span>
+    </div>` : ''}
+    ${s.strength.reasons.length > 0 ? `
+    <div style="margin-top:10px;font-size:11px;color:var(--dim);line-height:1.6">
+      <div style="text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px">Score breakdown:</div>
+      ${s.strength.reasons.slice(0,8).map(r => `<div>• ${r}</div>`).join('')}
+    </div>` : ''}
+  `;
+}
+
+function renderStats(s, metars, wuD){
+  if(s.latestTemp!=null) document.getElementById('cur-temp').textContent=s.latestTemp+'°C';
+  const latest = metars.length ? metars[metars.length-1] : null;
+  if(latest){
+    document.getElementById('cur-time').textContent=`At ${latest.timeLabel} IST · NOSIG:${latest.nosig?'YES':'NO'} · ${latest.wx||'Clear'}`;
+  }
+  const expEl=document.getElementById('exp-peak');
+  if(s.effectivePeak!=null){
+    const ep=s.effectivePeak;
+    expEl.textContent=ep.toFixed(1)+'°C (WU-rounded: '+wuRound(ep)+'°C bin)';
+    expEl.style.color = s.hasFrontrun ? 'var(--grn)' : '';
+  } else if(s.expectedPeak!=null){
+    expEl.textContent=s.expectedPeak.toFixed(1)+'°C ('+polyBinLabel(s.expectedPeak)+')';
+  }
+  else expEl.textContent='Need 1 live temp';
+
+  if(s.forecastMax!=null) document.getElementById('wu-fc').textContent=s.forecastMax.toFixed(1)+'°C';
+
+  const obsEl=document.getElementById('wu-obs-val');
+  const wxEl=document.getElementById('wu-obs-wx');
+  const humEl=document.getElementById('wu-hum-val');
+  const windEl=document.getElementById('wu-wind-val');
+
+  // Prefer api.weather.com/WU obs. If that endpoint is blocked/missing, fill useful live
+  // backup values from METAR so cards do not stay blank.
+  if(wuD?.obs?.temp_c!=null){
+    if(obsEl) obsEl.textContent=wuD.obs.temp_c+'°C';
+    if(wxEl) wxEl.textContent=(wuD.obs.wx_phrase || 'Live from api.weather.com') + (wuD.cached_used ? ' · cached fallback' : '');
+    if(humEl) humEl.textContent=wuD.obs.humidity!=null ? wuD.obs.humidity+'%' : '—';
+    if(windEl) windEl.textContent=(wuD.obs.wind_dir || '')+' '+(wuD.obs.wind_kph!=null ? wuD.obs.wind_kph+'km/h' : '—');
+  } else if(latest){
+    if(obsEl) obsEl.textContent=latest.temp!=null ? latest.temp+'°C' : '—';
+    if(wxEl) wxEl.textContent='Backup from METAR (WU obs unavailable)';
+    const rh=rhFromTempDew(latest.temp, latest.dewp);
+    if(humEl) humEl.textContent = rh!=null ? rh+'%' : '—';
+    if(windEl) windEl.textContent = latest.wind || '—';
+  }
+}
+function renderSigs(sigs){
+  const c=document.getElementById('sig-breakdown');
+  c.innerHTML=sigs.map(s=>`
+    <div class="sig-item">
+      <div class="sig-dot" style="background:${s.color}"></div>
+      <span class="sig-text">${s.text}</span>
+      <span class="sig-val" style="color:${s.color}">${s.val}</span>
+    </div>`).join('');
+}
+
+function renderChart(metars, wuData){
+  const c=document.getElementById('temp-chart');
+  if(!c) return;
+
+  // Filter today's METAR
+  const todayKey = todayKeyIST ? todayKeyIST() : new Date().toISOString().slice(0,10);
+  const validMetars = metars.filter(m=>m.temp!=null);
+  if(!validMetars.length){
+    c.innerHTML='<div style="color:var(--dim);padding:60px 10px;text-align:center">No METAR data yet</div>';
+    return;
+  }
+
+  // WU obs readings (all slots merged)
+  const wuRows = typeof saveWUObsForToday === 'function' ? saveWUObsForToday(wuData) : {};
+  const wuPoints = [];
+  Object.values(wuRows).forEach(arr=>{
+    (arr||[]).forEach(x=>{ if(x.temp_c!=null && x.saved_at) wuPoints.push(x); });
+  });
+  wuPoints.sort((a,b)=>(a.saved_at||'').localeCompare(b.saved_at||''));
+
+  const allTemps = validMetars.map(m=>m.temp).concat(wuPoints.map(x=>x.temp_c));
+  const peakT = Math.max(...allTemps);
+  const minT = Math.min(...allTemps);
+  const range = Math.max(peakT - minT, 3); // at least 3°C range
+
+  const H = 160; // chart height px
+  const BAR_MIN = 24; // minimum bar height so small bars are visible
+
+  function tempToH(t){
+    const pct = (t - minT) / range;
+    return Math.round(BAR_MIN + pct * (H - BAR_MIN));
+  }
+  function tempToCol(t, isPeak){
+    if(isPeak) return '#00e676';
+    if(t >= 44) return '#ff1744';
+    if(t >= 42) return '#ff5722';
+    if(t >= 40) return '#ff9800';
+    if(t >= 38) return '#00b0ff';
+    return '#29b6f6';
+  }
+
+  // Build METAR bars
+  let html2 = validMetars.map(m=>{
+    const bH = tempToH(m.temp);
+    const isPeak = m.temp === peakT;
+    const col = tempToCol(m.temp, isPeak);
+    const peakBadge = isPeak ? '<div style="font-size:9px;color:#00e676;font-weight:700;margin-bottom:2px">PEAK</div>' : '';
+    const nosigBadge = m.nosig ? '<div style="font-size:8px;color:#00e676;margin-top:2px">NOSIG</div>' : '';
+    // WU obs in this slot (sub-dots)
+    const slotWU = wuRows[m.timeStr] || [];
+    const wuDots = slotWU.length ? slotWU.map(x=>{
+      const dotH = tempToH(x.temp_c);
+      const dotCol = tempToCol(x.temp_c, x.temp_c===peakT);
+      return `<div style="position:absolute;bottom:${dotH}px;left:50%;transform:translateX(-50%);
+        width:6px;height:6px;border-radius:50%;background:${dotCol};
+        border:1px solid #fff3;z-index:2" title="WU ${x.saved_at}: ${x.temp_c}°C"></div>`;
+    }).join('') : '';
+
+    return `<div class="t-bar-wrap" style="position:relative;flex:1;min-width:44px;max-width:80px;
+      display:flex;flex-direction:column;align-items:center;justify-content:flex-end;
+      padding-bottom:36px">
+      ${peakBadge}
+      <div style="font-size:13px;font-weight:700;color:${col};margin-bottom:4px">${m.temp}°</div>
+      <div style="width:75%;min-height:${bH}px;background:${col}${isPeak?'':'55'};
+        border-radius:4px 4px 0 0;position:relative;transition:height .3s">
+        ${wuDots}
+      </div>
+      <div style="position:absolute;bottom:18px;font-size:10px;color:var(--dim);white-space:nowrap">${m.timeLabel}</div>
+      ${nosigBadge ? `<div style="position:absolute;bottom:4px;font-size:8px;color:#00e676">NOSIG</div>` : ''}
+    </div>`;
+  }).join('');
+
+  // Add 2 advance slots (pending)
+  const lastSlot = validMetars[validMetars.length-1].timeStr;
+  function addM(s,m){ const [h,mm]=s.split(':').map(Number); let t=h*60+mm+m; t=((t%1440)+1440)%1440; return String(Math.floor(t/60)).padStart(2,'0')+':'+String(t%60).padStart(2,'0'); }
+  function slotLbl(s){ const [h,m]=s.split(':').map(Number); return `${h%12||12}:${String(m).padStart(2,'0')}${h<12?'AM':'PM'}`; }
+
+  [addM(lastSlot,30), addM(lastSlot,60)].forEach(slot=>{
+    const slotWU2 = wuRows[slot]||[];
+    const pending = !slotWU2.length;
+    const latestWU = slotWU2[slotWU2.length-1];
+    const displayT = latestWU ? latestWU.temp_c : null;
+    const bH2 = displayT ? tempToH(displayT) : BAR_MIN;
+    const col2 = displayT ? tempToCol(displayT, displayT===peakT) : 'rgba(255,160,0,0.2)';
+    html2 += `<div class="t-bar-wrap" style="position:relative;flex:1;min-width:44px;max-width:80px;
+      display:flex;flex-direction:column;align-items:center;justify-content:flex-end;
+      padding-bottom:36px;opacity:${pending?'0.5':'0.85'};border-left:1px dashed rgba(255,160,0,0.3)">
+      <div style="font-size:13px;font-weight:700;color:${col2};margin-bottom:4px">
+        ${displayT ? displayT.toFixed(1)+'°' : '⏳'}
+      </div>
+      <div style="width:75%;min-height:${bH2}px;background:${col2};
+        border-radius:4px 4px 0 0;border:${pending?'1px dashed rgba(255,160,0,0.4)':'none'}">
+      </div>
+      <div style="position:absolute;bottom:18px;font-size:10px;color:var(--org);white-space:nowrap">
+        ${slotLbl(slot)} ${pending?'⏳':''}
+      </div>
+    </div>`;
+  });
+
+  c.style.cssText = 'display:flex;align-items:flex-end;gap:2px;padding:16px 8px 0;overflow-x:auto;min-height:'+(H+60)+'px';
+  c.innerHTML = html2;
+}
+
+function highlightMetar(raw){
+  return raw
+    .replace(/NOSIG/g,'<span class="nosig-hl">NOSIG</span>')
+    .replace(/BECMG|TEMPO/g,'<span class="hl">$&</span>')
+    .replace(/\b(TS|TSRA|RA|DZ|DS|DS)\b/g,'<span class="danger-hl">$&</span>')
+    .replace(/\b(HZ|DU|BLDU|FG)\b/g,'<span class="hl">$&</span>');
+}
+
+function renderMetar(metars){
+  metars=metars.filter(m=>m.obsIST && m.obsIST.toLocaleDateString('en-CA')===todayISTKey());
+  if(!metars.length) return;
+  const latest=metars[metars.length-1];
+  document.getElementById('metar-info').innerHTML=`<b>${latest.timeLabel} IST</b> · Temp: <b style="color:var(--org)">${latest.temp}°C</b> · Dewpt: ${latest.dewp}°C · Wind: ${latest.wind||'Calm'} · Vis: ${latest.vis||'?'}km`;
+  document.getElementById('metar-raw').innerHTML=highlightMetar(latest.raw||'No raw METAR available');
+}
+
+function renderAnalog(s){
+  const now=nowIST();
+  const month=now.getMonth()+1;
+  const peakBin=s.expectedBin||polyBinNumber(s.metarPeak||40);
+  const c=document.getElementById('analog-rows');
+  const info=document.getElementById('analog-info');
+
+  // Find matching buckets (same month, nearby bins)
+  const matches=[];
+  for(let b=peakBin-1;b<=peakBin+1;b++){
+    const key=`${month}_${b}`;
+    const bk=DB.buckets[key];
+    if(bk) matches.push({bin:b,bk});
+  }
+
+  if(!matches.length){info.textContent='No analog data for current conditions.';c.innerHTML='';return;}
+
+  info.textContent=`Found ${matches.reduce((a,m)=>a+m.bk.n,0)} similar past days (same month, ±1°C of expected peak)`;
+  c.innerHTML=matches.map(({bin,bk})=>`
+    <div class="analog-row">
+      <span>${bin}°C bin (${bk.n} past days)</span>
+      <span>Avg actual: ${bk.avg}°C</span>
+      <span style="color:${bk.late<20?'var(--grn)':'var(--ylw)'}">Late peak: ${bk.late}%</span>
+      <span class="pill ${bin===peakBin?'pg':bin>peakBin?'py':'pb'}">${bin===peakBin?'★ Most likely':'Adjacent'}</span>
+    </div>`).join('');
+}
+
+function renderHistory(metars, wuData){
+  const wuRows = saveWUObsForToday(wuData);
+  const month = nowIST().getMonth()+1;  // fix: month was undefined here
+  const peakT=Math.max(...metars.filter(m=>m.temp).map(m=>m.temp));
+  let prevTemp=null;
+  const rows=metars.filter(m=>m.temp).map(m=>{
+    const d=DB.delta[m.timeStr];
+    const hRow=getHistProbs(month, parseInt(m.timeStr?.split(':')[0]||'0'), m.temp||0);
+    const exp=d?+(m.temp+d.avg).toFixed(1):null;
+    const rise=prevTemp!=null?+(m.temp-prevTemp).toFixed(1):null;
+    const riseStr=rise!=null?(rise>=0?`<span style="color:var(--red)">+${rise}</span>`:`<span style="color:var(--grn)">${rise}</span>`):'—';
+    const isPeak=m.temp===peakT;
+    prevTemp=m.temp;
+
+    // WU obs rows for this METAR slot (separate rows instead of column)
+    const slotWU = wuRows[m.timeStr] || [];
+    const wuExtraRows = slotWU.map((x,i,arr)=>{
+      const prev = i>0?arr[i-1]:null;
+      const arrow = prev?(x.temp_c>prev.temp_c?'▲':x.temp_c<prev.temp_c?'▼':'•'):'•';
+      const col = arrow==='▲'?'var(--red)':arrow==='▼'?'#00e676':'var(--org)';
+      const delta = prev?+(x.temp_c-prev.temp_c).toFixed(1):0;
+      const dStr = delta!==0?(delta>0?`+${delta}`:`${delta}`):'';
+      return `<tr style="background:rgba(255,160,0,0.04);border-top:1px dashed rgba(255,255,255,0.04)">
+        <td style="text-align:left;padding:3px 8px;font-size:11px;color:var(--dim)">
+          &nbsp;&nbsp;&nbsp;↳ WU ${x.saved_at||''}
+        </td>
+        <td colspan="2" style="padding:3px 8px">
+          <span style="color:${col};font-weight:700;font-family:monospace;font-size:12px">${x.temp_c.toFixed(1)}°C ${arrow}</span>
+          ${dStr?`<span style="color:${col};font-size:10px;margin-left:4px">${dStr}</span>`:''}
+          ${x.humidity!=null?`<span style="font-size:10px;color:var(--dim);margin-left:8px">💧${x.humidity}%</span>`:''}
+          ${x.condition?`<span style="font-size:10px;color:var(--dim);margin-left:6px">${x.condition}</span>`:''}
+        </td>
+        <td colspan="7" style="padding:3px"></td>
+      </tr>`;
+    }).join('');
+
+    return `<tr style="${isPeak?'background:rgba(0,230,118,.08)':''}">
+      <td style="text-align:left;padding:7px 8px">${m.timeLabel}${isPeak?' <span class="pill pg">PEAK</span>':''}</td>
+      <td style="padding:7px;color:${m.temp>=42?'var(--red)':m.temp>=40?'var(--org)':'var(--acc)'}"><b>${m.temp}°C</b></td>
+      <td style="padding:7px;color:var(--dim);font-size:11px">${slotWU.length?slotWU.length+' WU readings ↓':'—'}</td>
+      <td style="padding:7px">${m.dewp}°C</td>
+      <td style="padding:7px">${m.wind||'—'}</td>
+      <td style="padding:7px">${m.vis||'—'}km</td>
+      <td style="padding:7px">${m.wx||'—'}</td>
+      <td style="padding:7px;color:${m.nosig?'var(--grn)':'var(--ylw)'}">${m.nosig?'✅ YES':'NO'}</td>
+      <td style="padding:7px;color:var(--acc)">${exp?'+'+exp+'°C':'—'}</td>
+      <td style="padding:7px">${riseStr}</td>
+    </tr>${wuExtraRows}`;
+  }).join('');
+  document.getElementById('hist-body').innerHTML=rows||'<tr><td colspan="10" style="padding:16px;text-align:center;color:var(--dim)">No readings yet</td></tr>';
+
+
+  // ── 2 ADVANCE PRE-BUILT ROWS ─────────────────────────────────────────────
+  // Row hamesha bana rehta hai. WU data fill hota hai jab aata hai.
+  // METAR data fill hota hai jab woh aata hai. Koi shifting nahi.
+  function addMins(slotStr, mins){
+    const [h,m]=(slotStr||'00:00').split(':').map(Number);
+    let tot=h*60+m+mins;
+    tot=((tot%1440)+1440)%1440;
+    return String(Math.floor(tot/60)).padStart(2,'0')+':'+String(tot%60).padStart(2,'0');
+  }
+  function slotLabel12(s){
+    const [h,m]=(s||'00:00').split(':').map(Number);
+    return `${h%12||12}:${String(m).padStart(2,'0')}${h<12?'AM':'PM'}`;
+  }
+  function renderWUInline(slotWU){
+    if(!slotWU||!slotWU.length) return '<span style="color:var(--dim);font-size:11px">— waiting for WU</span>';
+    return slotWU.map((x,i,arr)=>{
+      const prev=i>0?arr[i-1]:null;
+      const arrow=prev?(x.temp_c>prev.temp_c?'▲':x.temp_c<prev.temp_c?'▼':'•'):'•';
+      const col=arrow==='▲'?'var(--red)':arrow==='▼'?'#00e676':'var(--org)';
+      const d=prev?+(x.temp_c-prev.temp_c).toFixed(1):null;
+      const ds=d&&d!==0?(d>0?`+${d}`:`${d}`):'';
+      return `<div style="line-height:1.5;white-space:nowrap">
+        <span style="color:var(--dim);font-size:10px;font-family:monospace">${x.saved_at||''}</span>
+        <b style="color:${col};margin-left:5px;font-family:monospace">${x.temp_c.toFixed(1)}°C ${arrow}</b>
+        ${ds?`<span style="color:${col};font-size:10px"> ${ds}</span>`:''}
+        ${x.humidity!=null?`<span style="color:var(--dim);font-size:10px;margin-left:5px">💧${x.humidity}%</span>`:''}
+      </div>`;
+    }).join('');
+  }
+
+  const lastSlot=metars.length?metars[metars.length-1].timeStr:'00:00';
+  const adv1=addMins(lastSlot,30), adv2=addMins(lastSlot,60);
+  const metarMap={}; metars.forEach(m=>{metarMap[m.timeStr]=m;});
+  const peakTAll=Math.max(...metars.filter(x=>x.temp).map(x=>x.temp));
+
+  let advHTML='';
+  [adv1, adv2].forEach((slot,si)=>{
+    const m=metarMap[slot];
+    const slotWU=wuRows[slot]||[];
+    const hasMETAR=!!m;
+    const isPeak=hasMETAR&&m.temp===peakTAll;
+    const bg=hasMETAR?(isPeak?'rgba(0,230,118,.08)':''):'rgba(255,160,0,0.05)';
+    const borderTop=si===0?'border-top:2px dashed rgba(255,160,0,0.5)':'border-top:1px solid rgba(255,255,255,0.07)';
+
+    advHTML+=`<tr style="background:${bg};${borderTop}">
+      <td style="text-align:left;padding:7px 8px;font-family:monospace;white-space:nowrap">
+        ${slotLabel12(slot)}
+        ${!hasMETAR?'<span style="font-size:9px;color:var(--org);vertical-align:middle;margin-left:3px">⏳</span>':''}
+        ${isPeak?' <span class="pill pg">PEAK</span>':''}
+      </td>
+      <td style="padding:7px">
+        ${hasMETAR
+          ? `<b style="color:${m.temp>=42?'var(--red)':m.temp>=40?'var(--org)':'var(--acc)'}">${m.temp}°C</b>`
+          : '<span style="color:var(--dim);font-size:11px">⏳ METAR</span>'}
+      </td>
+      <td style="padding:5px 7px">${renderWUInline(slotWU)}</td>
+      <td style="padding:7px">${hasMETAR?m.dewp+'°C':'—'}</td>
+      <td style="padding:7px">${hasMETAR?(m.wind||'—'):'—'}</td>
+      <td style="padding:7px">${hasMETAR?(m.vis||'—')+'km':'—'}</td>
+      <td style="padding:7px">${hasMETAR?(m.wx||'—'):'—'}</td>
+      <td style="padding:7px">${hasMETAR
+        ?`<span style="color:${m.nosig?'var(--grn)':'var(--ylw)'}">${m.nosig?'✅ YES':'NO'}</span>`
+        :'—'}</td>
+      <td style="padding:7px">—</td>
+      <td style="padding:7px">—</td>
+    </tr>`;
+  });
+
+  const advDiv=document.getElementById('live-pending-wu');
+  if(advDiv) advDiv.innerHTML=advHTML;
+}
+
+// ── Main fetch ─────────────────────────────────────────────────────────────────
+// ── Parse Cloudflare D1 metar_rows into the same format as fetchMETAR() ────────────
+function parseCloudflare D1Metar(rows){
+  if(!Array.isArray(rows)) return [];
+  const out = [];
+  rows.forEach(m => {
+    try{
+      const obsIST = m.valid_ist ? toIST(new Date(m.valid_ist.replace(' ','T')+'Z')) :
+                     m.valid_utc ? toIST(new Date(m.valid_utc+'Z')) : null;
+      if(!obsIST) return;
+      const raw = m.raw_metar || '';
+      out.push({
+        obsIST,
+        timeStr:   fmtTime(obsIST),
+        timeLabel: fmtTimeLabel(obsIST),
+        temp:      m.temp_c   != null ? +Number(m.temp_c).toFixed(1)   : null,
+        dewp:      m.dewpoint_c != null ? +Number(m.dewpoint_c).toFixed(1) : null,
+        wind:      m.wind_kt   ? Math.round(m.wind_kt*1.852)+'km/h '+(m.wind_dir||'')+'°' : null,
+        vis:       null,
+        wx:        m.wx || '',
+        nosig:     m.nosig || raw.includes('NOSIG'),
+        becmg:     m.becmg || raw.includes('BECMG'),
+        hasRain:   hasWX(raw, ['RA','DZ','SH','GR']),
+        hasStorm:  hasWX(raw, ['TS','TSRA']),
+        hasDust:   hasWX(raw, ['DU','DS','BLDU']),
+        hasHaze:   hasWX(raw, ['HZ']),
+        raw,
+        fromDB: true
+      });
+    }catch(_){}
+  });
+  return out;
+}
+
+// ── Merge live METAR + Cloudflare D1 METAR (dedup by timeStr) ───────────────────────
+function mergeMetars(live, dbMetars){
+  const map = new Map();
+  // DB first (older), then live overrides
+  dbMetars.forEach(m => { if(m.temp != null) map.set(m.timeStr, m); });
+  live.forEach(m =>    { if(m.temp != null) map.set(m.timeStr, m); }); // live wins
+  return [...map.values()].sort((a,b) => a.obsIST - b.obsIST);
+}
+
+async function pingCollect(){
+  // Trigger server-side collect (saves WU+METAR to Cloudflare D1 even if scheduler has cold start)
+  try{ await fetch('/api/collect',{method:'GET',cache:'no-store'}); }catch(_){}
+}
+
+async function fetchAll(){
+  const btn=document.getElementById('rbtn');
+  btn.disabled=true; btn.textContent='Fetching...';
+
+  try{
+    // Fetch live WU + METAR in parallel
+    const [metars, wuData]=await Promise.all([fetchMETAR(), fetchWU()]);
+
+    // wuData already has obs_log from Cloudflare D1 (via fetchWUHistory inside fetchWU)
+    // Now also get Cloudflare D1 METAR history for full-day coverage (works in incognito)
+    let allMetars = metars;
+    if(wuData?._supaMetars?.length > 0){
+      allMetars = mergeMetars(metars, parseCloudflare D1Metar(wuData._supaMetars));
+    }
+
+    metarReadings = allMetars;
+    if(wuData) openMeteoData=wuData;
+
+    const sig=computeSignal(metarReadings, wuData);
+    renderSignal(sig);
+    renderStrengthAndPrediction(sig);
+    renderStats(sig, metarReadings, wuData);
+    renderSigs(sig.sigs);
+    renderChart(metarReadings, wuData);
+    renderMetar(metarReadings);
+    renderAnalog(sig);
+    renderHistory(metarReadings, wuData);
+
+    const now=new Date();
+    document.getElementById('last-update').textContent='Updated '+now.toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit',second:'2-digit'})+' IST';
+  }catch(e){
+    console.error(e);
+    document.getElementById('signal-box').className='signal-box danger';
+    document.getElementById('signal-box').innerHTML=`<span class="signal-emoji">❌</span><div class="signal-label">Error fetching data</div><div class="signal-reason">${e.message}</div>`;
+  }
+
+  btn.disabled=false; btn.textContent='↻ Refresh Now';
+}
+
+// Auto-refresh
+function updateDateDisplay(){
+  const el = document.getElementById('today-date-ist');
+  if(!el) return;
+  const ist = nowIST();
+  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const mons = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  el.textContent = days[ist.getDay()]+' '+ist.getDate()+' '+mons[ist.getMonth()]+' '+ist.getFullYear();
+}
+
+function startAuto(){
+  updateDateDisplay();
+  setInterval(updateDateDisplay, 60000);
+  fetchAll();
+  if(refreshTimer) clearInterval(refreshTimer);
+  refreshTimer=setInterval(fetchAll, 30*1000); // UI refresh every 30s
+  setInterval(pingCollect, 2*60*1000); // also ping collect every 2 min (belt+suspenders) // every 20 sec — captures WU updates fast (Netlify safe ~8hr/day)
+  // Background collector (Netlify) runs every 1-2 min independently for 24/7 storage
+}
+
+startAuto();
+</script>
+
+<script>
+(function(){
+  // browser collect every 30 sec: calls server /api/collect, D1 dedupes rows
+  async function browserCollect(){
+    try{
+      const r = await fetch('/api/collect?source=browser&t=' + Date.now(), {cache:'no-store'});
+      const j = await r.json();
+      console.log('browser collect', j);
+    }catch(e){ console.warn('browser collect failed', e.message); }
+  }
+  setTimeout(browserCollect, 3000);
+  setInterval(browserCollect, 30000);
+})();
+</script>
+
+</body>
+</html>
