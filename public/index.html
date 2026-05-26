@@ -389,7 +389,7 @@ function calculateStrength(state){
   if(hour >= 16){ score += 25; reasons.push('+25 After 4 PM (peak typically done)'); }
   else if(hour >= 15){ score += 20; reasons.push('+20 After 3 PM'); }
   else if(hour >= 14){ score += 12; reasons.push('+12 After 2 PM'); }
-  else if(hour >= 13){ score += 5; reasons.push('+5 After 1 PM (still risky)'); }
+  else if(hour >= 13){ score += 5; score += 5; reasons.push('+5 After 1 PM (still risky)'); }
 
   // 4. Drop magnitude
   if(dropMag >= 1.0){ score += 15; reasons.push('+15 Drop >1°C (significant)'); }
@@ -1514,6 +1514,224 @@ window.fetchAll = fetchAll;
   window.loadRealOnlyFix=renderWindow;
   window.addEventListener('load',()=>setTimeout(renderWindow,200));
   setInterval(renderWindow,30000);
+})();
+</script>
+
+
+<script>
+(function(){
+  function istNowScore(){
+    return new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Kolkata'}));
+  }
+  function clampScore(n,min=0,max=100){ return Math.max(min, Math.min(max, Math.round(Number(n)||0))); }
+  function latestWUFromRows(rows){
+    let all=[];
+    Object.values(rows||{}).forEach(list=>{
+      (Array.isArray(list)?list:[]).forEach(x=>all.push(x));
+    });
+    all=all.filter(x=>x && x.temp_c!=null && x.saved_at).sort((a,b)=>String(a.saved_at).localeCompare(String(b.saved_at)));
+    return all.length?all[all.length-1]:null;
+  }
+  function recentWUMomentum(rows){
+    let all=[];
+    Object.values(rows||{}).forEach(list=>(Array.isArray(list)?list:[]).forEach(x=>all.push(x)));
+    all=all.filter(x=>x && x.temp_c!=null && x.saved_at).sort((a,b)=>String(a.saved_at).localeCompare(String(b.saved_at)));
+    if(all.length<2) return 0;
+    const last=Number(all[all.length-1].temp_c);
+    // compare with previous distinct temp if available
+    for(let i=all.length-2;i>=0;i--){
+      const prev=Number(all[i].temp_c);
+      if(Number.isFinite(prev) && prev!==last) return +(last-prev).toFixed(1);
+    }
+    return 0;
+  }
+  function safeNumScore(v){
+    const n=Number(v);
+    return Number.isFinite(n)?n:null;
+  }
+  function robustScoreSignal(sig, metars, wuData){
+    sig = sig || {};
+    const now = istNowScore();
+    const hour = now.getHours() + now.getMinutes()/60;
+
+    const latestMetar = Array.isArray(metars) && metars.length ? metars[metars.length-1] : null;
+    const latestWU = wuData?.history_meta?.latest_wu || latestWUFromRows(wuData?.obs_log || {});
+    const wuTemp = safeNumScore(wuData?.obs?.temp_c ?? latestWU?.temp_c);
+    const metarTemp = safeNumScore(latestMetar?.temp ?? latestMetar?.temp_c);
+    const fcToday = safeNumScore(wuData?.fc?.today_c);
+    const humidity = safeNumScore(wuData?.obs?.humidity ?? latestWU?.humidity);
+    const momentum = recentWUMomentum(wuData?.obs_log || {});
+    const hasNosig = !!latestMetar?.nosig || /NOSIG/i.test(latestMetar?.raw || latestMetar?.raw_metar || '');
+    const raw = String(latestMetar?.raw || latestMetar?.raw_metar || '');
+    const hasDust = /(^|\s)(DU|HZ|BLDU|DS)(\s|$)/i.test(raw) || /dust|haze/i.test(wuData?.obs?.wx_phrase || latestWU?.condition || '');
+    const maxTemp = Math.max(...[wuTemp, metarTemp, fcToday].filter(Number.isFinite));
+
+    let score = 0;
+    const reasons = [];
+
+    // Time score: this was broken before. At 13:43 it must add.
+    if(hour >= 13 && hour < 16){
+      score += 5;
+      score += 5; reasons.push('+5 After 1 PM (still risky)');
+    } else if(hour >= 16){
+      score += 10;
+      reasons.push('+10 After 4 PM (late peak risk lower)');
+    } else {
+      reasons.push('+0 Before 1 PM');
+    }
+
+    // Current live temp strength
+    if(Number.isFinite(maxTemp)){
+      if(maxTemp >= 42.5){ score += 45; reasons.push('+45 Live temp already ≥42.5°C'); }
+      else if(maxTemp >= 42.0){ score += 38; reasons.push('+38 Live temp already ≥42°C'); }
+      else if(maxTemp >= 41.0){ score += 28; reasons.push('+28 Live temp ≥41°C'); }
+      else if(maxTemp >= 40.0){ score += 18; reasons.push('+18 Live temp ≥40°C'); }
+      else if(maxTemp >= 39.0){ score += 10; reasons.push('+10 Live temp ≥39°C'); }
+    }
+
+    // WU forecast support
+    if(Number.isFinite(fcToday)){
+      if(fcToday >= 43){ score += 12; reasons.push('+12 WU forecast ≥43°C'); }
+      else if(fcToday >= 42){ score += 8; reasons.push('+8 WU forecast near 42°C'); }
+      else if(fcToday >= 41.5){ score += 5; reasons.push('+5 WU forecast supports 42°C area'); }
+      else if(fcToday < 40.5){ score -= 8; reasons.push('-8 WU forecast below 40.5°C'); }
+    }
+
+    // Momentum
+    if(momentum >= 0.8){ score += 10; reasons.push('+10 WU rising fast'); }
+    else if(momentum >= 0.4){ score += 6; reasons.push('+6 WU rising'); }
+    else if(momentum <= -0.8){ score -= 10; reasons.push('-10 WU falling fast'); }
+    else if(momentum <= -0.4){ score -= 5; reasons.push('-5 WU falling'); }
+
+    // Humidity and weather
+    if(Number.isFinite(humidity)){
+      if(humidity <= 25){ score += 7; reasons.push('+7 Very low humidity / dry heating'); }
+      else if(humidity <= 35){ score += 3; reasons.push('+3 Low humidity'); }
+      else if(humidity >= 50){ score -= 8; reasons.push('-8 Humidity high'); }
+    }
+    if(hasNosig){ score += 4; reasons.push('+4 NOSIG stable'); }
+    if(hasDust){ score -= 3; reasons.push('-3 Dust/Haze may cap heating'); }
+
+    // After 2:30 PM, if still below 41, reduce. If already 41+, keep alive.
+    if(hour >= 14.5 && Number.isFinite(maxTemp) && maxTemp < 41){
+      score -= 15;
+      reasons.push('-15 After 2:30 PM but still below 41°C');
+    }
+    if(hour >= 15.5 && Number.isFinite(maxTemp) && maxTemp < 42){
+      score -= 12;
+      reasons.push('-12 After 3:30 PM and below 42°C');
+    }
+
+    score = clampScore(score);
+
+    // Prediction numbers keep original if present, but make bins sane
+    const predicted = Number.isFinite(sig.expectedPeak) ? sig.expectedPeak :
+      Number.isFinite(maxTemp) ? Math.max(maxTemp, fcToday || maxTemp) : null;
+    const median = Number.isFinite(predicted) ? Math.round(predicted) : null;
+
+    sig.strengthScore = score;
+    sig.score = score;
+    sig.reasons = reasons;
+    sig.scoreReasons = reasons;
+    sig.scoreBreakdown = reasons;
+    sig.currentHourIST = hour;
+    sig.latestWUScoreTemp = wuTemp;
+    sig.latestMetarScoreTemp = metarTemp;
+    sig.forecastScoreTemp = fcToday;
+    sig.wuMomentum = momentum;
+    if(Number.isFinite(predicted)){
+      sig.expectedPeak = predicted;
+      sig.predictedPeak = predicted;
+      sig.medianPeak = predicted;
+      sig.bin = median;
+    }
+
+    // Verdict/recommendation
+    if(score >= 70) sig.verdict = 'Strong 42°C+ signal';
+    else if(score >= 50) sig.verdict = 'Medium 42°C+ signal';
+    else if(score >= 30) sig.verdict = 'Weak but live signal exists';
+    else sig.verdict = 'Too early / low confidence';
+
+    return sig;
+  }
+
+  const oldCompute = window.computeSignal || (typeof computeSignal !== 'undefined' ? computeSignal : null);
+  if(oldCompute && !window.__robustScorePatched){
+    window.__robustScorePatched = true;
+    window.computeSignal = function(metars, wuData){
+      const sig = oldCompute(metars, wuData);
+      return robustScoreSignal(sig, metars, wuData);
+    };
+    try { computeSignal = window.computeSignal; } catch(e) {}
+  }
+
+  // Patch display renderers to accept score aliases
+  const oldStrength = window.renderStrengthAndPrediction || (typeof renderStrengthAndPrediction !== 'undefined' ? renderStrengthAndPrediction : null);
+  if(oldStrength && !window.__strengthPatched){
+    window.__strengthPatched = true;
+    window.renderStrengthAndPrediction = function(sig){
+      sig.strengthScore = sig.strengthScore ?? sig.score ?? 0;
+      sig.scoreBreakdown = sig.scoreBreakdown || sig.scoreReasons || sig.reasons || [];
+      return oldStrength(sig);
+    };
+    try { renderStrengthAndPrediction = window.renderStrengthAndPrediction; } catch(e) {}
+  }
+})();
+</script>
+
+
+<script>
+(function(){
+  function todayIST(){return new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});}
+  function nowIST(){return new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Kolkata'}));}
+  function p2(n){return String(n).padStart(2,'0');}
+  function sm(slot){const m=String(slot||'').match(/(\d{1,2}):(\d{2})/);return m?+m[1]*60+ +m[2]:null;}
+  function ms(min){min=((min%1440)+1440)%1440;return p2(Math.floor(min/60))+':'+p2(min%60);}
+  function lab(slot){const x=sm(slot);if(x==null)return slot||'';return new Date(2000,0,1,Math.floor(x/60),x%60).toLocaleTimeString('en-IN',{hour:'numeric',minute:'2-digit',hour12:true}).replace(' ','');}
+  function ceilWU(t){const m=String(t||'').match(/(\d{1,2}):(\d{2})/);if(!m)return null;let h=+m[1],mm=+m[2];if(mm===0)return p2(h)+':00';if(mm<=30)return p2(h)+':30';return p2((h+1)%24)+':00';}
+  function allowedSlots(){
+    const n=nowIST(), nowM=n.getHours()*60+n.getMinutes();
+    const ceil=Math.ceil(nowM/30)*30;
+    const max=Math.min(23*60+30, ceil+60);
+    const set=new Set();
+    for(let m=0;m<=max;m+=30)set.add(ms(m));
+    return set;
+  }
+  function rows(hist){
+    const allowed=allowedSlots(), out=[], by={};
+    (Array.isArray(hist?.metar_rows)?hist.metar_rows:[]).filter(m=>String(m.valid_ist||'').startsWith(todayIST())).forEach(m=>{
+      if(m.slot&&allowed.has(m.slot)&&m.temp_c!=null) by[m.slot]={slot:m.slot,temp:+m.temp_c,type:'METAR'};
+    });
+    Object.values(hist?.wu_obs_rows||{}).forEach(list=>(Array.isArray(list)?list:[]).forEach(x=>{
+      const sl=ceilWU(x.saved_at); if(!sl||!allowed.has(sl)||x.temp_c==null||by[sl])return;
+      by[sl]={slot:sl,temp:+x.temp_c,type:'WU'};
+    }));
+    return Object.values(by).sort((a,b)=>sm(a.slot)-sm(b.slot));
+  }
+  function draw(hist){
+    const c=document.getElementById('temp-chart'); if(!c||!hist)return;
+    const ctx=c.getContext('2d'), dpr=devicePixelRatio||1;
+    c.width=c.clientWidth*dpr; c.height=c.clientHeight*dpr; ctx.setTransform(dpr,0,0,dpr,0,0);
+    const w=c.clientWidth,h=c.clientHeight; ctx.clearRect(0,0,w,h);
+    const data=rows(hist);
+    if(!data.length){ctx.fillStyle='#6b93b5';ctx.font='14px monospace';ctx.fillText('Waiting for today IST data...',20,40);return;}
+    const minT=Math.min(...data.map(x=>x.temp),30)-1, maxT=Math.max(...data.map(x=>x.temp),42)+1;
+    const left=30,bottom=38,top=20,right=15,gap=(w-left-right)/data.length,bw=Math.max(8,gap*.55);
+    data.forEach((d,i)=>{
+      const x=left+i*gap+gap/2-bw/2, y=top+(maxT-d.temp)/(maxT-minT)*(h-top-bottom), bh=h-bottom-y;
+      ctx.fillStyle=d.type==='WU'?'rgba(0,212,255,.65)':(d.temp>=40?'rgba(255,174,0,.55)':'rgba(0,212,255,.35)');
+      ctx.fillRect(x,y,bw,bh);
+      ctx.fillStyle=d.temp>=40?'#ffcc33':'#00d4ff'; ctx.font='bold 12px monospace'; ctx.textAlign='center'; ctx.fillText(Math.round(d.temp)+'°',x+bw/2,y-6);
+      ctx.fillStyle='#6b93b5'; ctx.font='10px monospace'; ctx.fillText(lab(d.slot),x+bw/2,h-18);
+      ctx.fillStyle=d.type==='WU'?'#00d4ff':'#00ff88'; ctx.font='9px monospace'; ctx.fillText(d.type,x+bw/2,h-5);
+    });
+  }
+  async function loadChart(){
+    try{const r=await fetch('/api/history?date='+todayIST()+'&t='+Date.now(),{cache:'no-store'});draw(await r.json());}
+    catch(e){console.warn('chart IST fix failed',e.message);}
+  }
+  window.addEventListener('load',()=>setTimeout(loadChart,300));
+  setInterval(loadChart,30000);
 })();
 </script>
 
