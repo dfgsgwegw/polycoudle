@@ -1485,11 +1485,11 @@ window.fetchAll = fetchAll;
   function kph(kt){const n=Number(kt);return Number.isFinite(n)?Math.round(n*1.852)+'km/h':'—';}
   async function renderWindow(){
     try{
-      const r=await fetch('/api/history?date='+today()+'&t='+Date.now(),{cache:'no-store'});
+      const r=await fetch('/api/history?date='+todayIST()+'&t='+Date.now(),{cache:'no-store'});
       const hist=await r.json();
       const tbl=document.getElementById('history-tbody')||document.querySelector('tbody'); if(!tbl)return;
       const wu=groupWU(hist.wu_obs_rows||{});
-      const metars=(Array.isArray(hist.metar_rows)?hist.metar_rows:[]).filter(m=>String(m.valid_ist||'').startsWith(today())).sort((a,b)=>String(a.valid_utc||'').localeCompare(String(b.valid_utc||'')));
+      const metars=(Array.isArray(hist.metar_rows)?hist.metar_rows:[]).filter(m=>String(m.valid_ist||'').startsWith(todayIST())).sort((a,b)=>String(a.valid_utc||'').localeCompare(String(b.valid_utc||'')));
       const by={}; metars.forEach(m=>{if(m.slot)by[m.slot]=m;});
       let slots=[...new Set([...metars.map(m=>m.slot).filter(Boolean),...Object.keys(wu)])].sort((a,b)=>slotMin(a)-slotMin(b));
       if(slots.length){let last=slots[slots.length-1];for(let i=1;i<=2;i++){let s=minSlot(slotMin(last)+i*30);if(!slots.includes(s))slots.push(s);}}

@@ -1,0 +1,2 @@
+Fixed: window table failed today is not defined
+node --check: 0
