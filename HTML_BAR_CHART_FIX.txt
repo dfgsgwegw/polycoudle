@@ -1,0 +1,7 @@
+Fixed chart:
+- Removed canvas/getContext dependency.
+- Chart now renders as HTML bars inside #temp-chart or any chart container.
+- No more c.getContext error.
+- Still filters current IST day + current window + next 2 half-hour slots.
+node --check: 0
+

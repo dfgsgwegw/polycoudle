@@ -1,0 +1,6 @@
+Fixed full HTML:
+- replaced temp-chart selector everywhere
+- now uses canvas#temp-chart OR #temp-chart canvas
+- checks getContext before drawing
+- node --check: 0
+

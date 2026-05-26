@@ -1020,7 +1020,7 @@ function renderSigs(sigs){
 }
 
 function renderChart(metars, wuData){
-  const c=document.getElementById('temp-chart');
+  const c=document.querySelector('canvas#temp-chart, #temp-chart canvas');
   if(!c) return;
 
   // Filter today's METAR
@@ -1439,245 +1439,7 @@ window.fetchAll = fetchAll;
 
 
 
-<script>
-(function(){
-  function todayIST(){return new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});}
-  function pad(n){return String(n).padStart(2,'0');}
-  function slotMin(slot){const m=String(slot||'').match(/(\d{1,2}):(\d{2})/);return m?Number(m[1])*60+Number(m[2]):null;}
-  function minSlot(min){min=((min%1440)+1440)%1440;return pad(Math.floor(min/60))+':'+pad(min%60);}
-  function label(slot){const x=slotMin(slot);if(x==null)return slot||'—';return new Date(2000,0,1,Math.floor(x/60),x%60).toLocaleTimeString('en-IN',{hour:'numeric',minute:'2-digit',hour12:true}).replace(' ','');}
-  function ceilSlot(t){
-    const m=String(t||'').match(/(\d{1,2}):(\d{2})/); if(!m)return null;
-    let h=Number(m[1]), mm=Number(m[2]);
-    if(mm===0)return pad(h)+':00';
-    if(mm<=30)return pad(h)+':30';
-    return pad((h+1)%24)+':00';
-  }
-  function groupWU(wuRows){
-    const g={};
-    Object.values(wuRows||{}).forEach(list=>(Array.isArray(list)?list:[]).forEach(x=>{
-      const sl=ceilSlot(x.saved_at); if(!sl)return;
-      (g[sl]=g[sl]||[]).push(x);
-    }));
-    Object.keys(g).forEach(sl=>{
-      const seen=new Set();
-      g[sl]=g[sl].filter(x=>{const id=String(x.saved_at)+'|'+x.temp_c;if(seen.has(id))return false;seen.add(id);return true;})
-                  .sort((a,b)=>String(a.saved_at).localeCompare(String(b.saved_at)));
-    });
-    return g;
-  }
-  function fmtWU(list){
-    const arr=Array.isArray(list)?list:[];
-    if(!arr.length)return '<span style="color:var(--dim)">— waiting for WU</span>';
-    return arr.map((x,i)=>{
-      const p=i?arr[i-1]:null, d=p?+(Number(x.temp_c)-Number(p.temp_c)).toFixed(1):0;
-      const ar=d>0?'▲':d<0?'▼':'•', col=d>0?'var(--red)':d<0?'var(--grn)':'var(--org)';
-      return `<div style="padding:4px 0;border-top:1px dashed rgba(255,255,255,.06)">
-        ↳ WU <span style="color:var(--dim)">${String(x.saved_at||'').slice(0,5)}</span>
-        <b style="color:${col};margin-left:12px">${Number(x.temp_c).toFixed(1)}°C</b>
-        <span style="color:${col}">${ar}</span>
-        ${d?`<small style="color:${col};margin-left:8px">${d>0?'+':''}${d}</small>`:''}
-        ${x.humidity!=null?`<small style="color:var(--dim);margin-left:10px">💧${x.humidity}%</small>`:''}
-        ${x.condition?`<small style="color:var(--dim);margin-left:12px">${x.condition}</small>`:''}
-      </div>`;
-    }).join('');
-  }
-  function kph(kt){const n=Number(kt);return Number.isFinite(n)?Math.round(n*1.852)+'km/h':'—';}
-  async function renderWindow(){
-    try{
-      const r=await fetch('/api/history?date='+todayIST()+'&t='+Date.now(),{cache:'no-store'});
-      const hist=await r.json();
-      const tbl=document.getElementById('history-tbody')||document.querySelector('tbody'); if(!tbl)return;
-      const wu=groupWU(hist.wu_obs_rows||{});
-      const metars=(Array.isArray(hist.metar_rows)?hist.metar_rows:[]).filter(m=>String(m.valid_ist||'').startsWith(todayIST())).sort((a,b)=>String(a.valid_utc||'').localeCompare(String(b.valid_utc||'')));
-      const by={}; metars.forEach(m=>{if(m.slot)by[m.slot]=m;});
-      let slots=[...new Set([...metars.map(m=>m.slot).filter(Boolean),...Object.keys(wu)])].sort((a,b)=>slotMin(a)-slotMin(b));
-      if(slots.length){let last=slots[slots.length-1];for(let i=1;i<=2;i++){let s=minSlot(slotMin(last)+i*30);if(!slots.includes(s))slots.push(s);}}
-      tbl.innerHTML=slots.map(sl=>{
-        const m=by[sl], temp=m?.temp_c, pending=!m, wx=m?.wx||((m?.raw_metar||'').match(/\b(HZ|DU|RA|TS|NSC)\b/)||[])[1]||'—';
-        return `<tr style="${temp>=40?'background:rgba(0,255,150,.08)':pending?'background:rgba(255,255,255,.04)':''}">
-          <td style="padding:7px">${label(sl)}</td>
-          <td style="padding:7px;color:${pending?'var(--dim)':temp>=40?'var(--red)':temp>=38?'var(--org)':'var(--acc)'}"><b>${pending?'⏳ METAR':Number(temp).toFixed(0)+'°C'}</b></td>
-          <td style="padding:7px;color:var(--org)">${fmtWU(wu[sl])}</td>
-          <td style="padding:7px">${m?.dewpoint_c!=null?m.dewpoint_c+'°C':'—'}</td>
-          <td style="padding:7px">${m?kph(m.wind_kt)+' '+(m.wind_dir||'')+(m.wind_dir?'°':''):'—'}</td>
-          <td style="padding:7px">${m?.visibility||'—'}${m?.visibility?'km':''}</td>
-          <td style="padding:7px">${m?wx:'—'}</td>
-          <td style="padding:7px">${m?(m.nosig?'✅ YES':m.becmg?'BECMG':m.tempo?'TEMPO':'NO'):'—'}</td>
-          <td style="padding:7px;color:var(--acc)">—</td><td style="padding:7px">—</td>
-        </tr>`;
-      }).join('') || `<tr><td colspan="10" style="padding:15px;color:var(--dim)">No rows yet.</td></tr>`;
-      const title=[...document.querySelectorAll('.ch')].find(x=>/METAR readings/i.test(x.textContent||'')); if(title)title.textContent="TODAY — METAR ROWS + WU WINDOW";
-      document.body.classList.add('real-table-ready');
-    }catch(e){console.warn('window table failed',e.message);}
-  }
-  window.loadRealOnlyFix=renderWindow;
-  window.addEventListener('load',()=>setTimeout(renderWindow,200));
-  setInterval(renderWindow,30000);
-})();
-</script>
 
-
-<script>
-(function(){
-  function istNowScore(){
-    return new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Kolkata'}));
-  }
-  function clampScore(n,min=0,max=100){ return Math.max(min, Math.min(max, Math.round(Number(n)||0))); }
-  function latestWUFromRows(rows){
-    let all=[];
-    Object.values(rows||{}).forEach(list=>{
-      (Array.isArray(list)?list:[]).forEach(x=>all.push(x));
-    });
-    all=all.filter(x=>x && x.temp_c!=null && x.saved_at).sort((a,b)=>String(a.saved_at).localeCompare(String(b.saved_at)));
-    return all.length?all[all.length-1]:null;
-  }
-  function recentWUMomentum(rows){
-    let all=[];
-    Object.values(rows||{}).forEach(list=>(Array.isArray(list)?list:[]).forEach(x=>all.push(x)));
-    all=all.filter(x=>x && x.temp_c!=null && x.saved_at).sort((a,b)=>String(a.saved_at).localeCompare(String(b.saved_at)));
-    if(all.length<2) return 0;
-    const last=Number(all[all.length-1].temp_c);
-    // compare with previous distinct temp if available
-    for(let i=all.length-2;i>=0;i--){
-      const prev=Number(all[i].temp_c);
-      if(Number.isFinite(prev) && prev!==last) return +(last-prev).toFixed(1);
-    }
-    return 0;
-  }
-  function safeNumScore(v){
-    const n=Number(v);
-    return Number.isFinite(n)?n:null;
-  }
-  function robustScoreSignal(sig, metars, wuData){
-    sig = sig || {};
-    const now = istNowScore();
-    const hour = now.getHours() + now.getMinutes()/60;
-
-    const latestMetar = Array.isArray(metars) && metars.length ? metars[metars.length-1] : null;
-    const latestWU = wuData?.history_meta?.latest_wu || latestWUFromRows(wuData?.obs_log || {});
-    const wuTemp = safeNumScore(wuData?.obs?.temp_c ?? latestWU?.temp_c);
-    const metarTemp = safeNumScore(latestMetar?.temp ?? latestMetar?.temp_c);
-    const fcToday = safeNumScore(wuData?.fc?.today_c);
-    const humidity = safeNumScore(wuData?.obs?.humidity ?? latestWU?.humidity);
-    const momentum = recentWUMomentum(wuData?.obs_log || {});
-    const hasNosig = !!latestMetar?.nosig || /NOSIG/i.test(latestMetar?.raw || latestMetar?.raw_metar || '');
-    const raw = String(latestMetar?.raw || latestMetar?.raw_metar || '');
-    const hasDust = /(^|\s)(DU|HZ|BLDU|DS)(\s|$)/i.test(raw) || /dust|haze/i.test(wuData?.obs?.wx_phrase || latestWU?.condition || '');
-    const maxTemp = Math.max(...[wuTemp, metarTemp, fcToday].filter(Number.isFinite));
-
-    let score = 0;
-    const reasons = [];
-
-    // Time score: this was broken before. At 13:43 it must add.
-    if(hour >= 13 && hour < 16){
-      score += 5;
-      score += 5; reasons.push('+5 After 1 PM (still risky)');
-    } else if(hour >= 16){
-      score += 10;
-      reasons.push('+10 After 4 PM (late peak risk lower)');
-    } else {
-      reasons.push('+0 Before 1 PM');
-    }
-
-    // Current live temp strength
-    if(Number.isFinite(maxTemp)){
-      if(maxTemp >= 42.5){ score += 45; reasons.push('+45 Live temp already ≥42.5°C'); }
-      else if(maxTemp >= 42.0){ score += 38; reasons.push('+38 Live temp already ≥42°C'); }
-      else if(maxTemp >= 41.0){ score += 28; reasons.push('+28 Live temp ≥41°C'); }
-      else if(maxTemp >= 40.0){ score += 18; reasons.push('+18 Live temp ≥40°C'); }
-      else if(maxTemp >= 39.0){ score += 10; reasons.push('+10 Live temp ≥39°C'); }
-    }
-
-    // WU forecast support
-    if(Number.isFinite(fcToday)){
-      if(fcToday >= 43){ score += 12; reasons.push('+12 WU forecast ≥43°C'); }
-      else if(fcToday >= 42){ score += 8; reasons.push('+8 WU forecast near 42°C'); }
-      else if(fcToday >= 41.5){ score += 5; reasons.push('+5 WU forecast supports 42°C area'); }
-      else if(fcToday < 40.5){ score -= 8; reasons.push('-8 WU forecast below 40.5°C'); }
-    }
-
-    // Momentum
-    if(momentum >= 0.8){ score += 10; reasons.push('+10 WU rising fast'); }
-    else if(momentum >= 0.4){ score += 6; reasons.push('+6 WU rising'); }
-    else if(momentum <= -0.8){ score -= 10; reasons.push('-10 WU falling fast'); }
-    else if(momentum <= -0.4){ score -= 5; reasons.push('-5 WU falling'); }
-
-    // Humidity and weather
-    if(Number.isFinite(humidity)){
-      if(humidity <= 25){ score += 7; reasons.push('+7 Very low humidity / dry heating'); }
-      else if(humidity <= 35){ score += 3; reasons.push('+3 Low humidity'); }
-      else if(humidity >= 50){ score -= 8; reasons.push('-8 Humidity high'); }
-    }
-    if(hasNosig){ score += 4; reasons.push('+4 NOSIG stable'); }
-    if(hasDust){ score -= 3; reasons.push('-3 Dust/Haze may cap heating'); }
-
-    // After 2:30 PM, if still below 41, reduce. If already 41+, keep alive.
-    if(hour >= 14.5 && Number.isFinite(maxTemp) && maxTemp < 41){
-      score -= 15;
-      reasons.push('-15 After 2:30 PM but still below 41°C');
-    }
-    if(hour >= 15.5 && Number.isFinite(maxTemp) && maxTemp < 42){
-      score -= 12;
-      reasons.push('-12 After 3:30 PM and below 42°C');
-    }
-
-    score = clampScore(score);
-
-    // Prediction numbers keep original if present, but make bins sane
-    const predicted = Number.isFinite(sig.expectedPeak) ? sig.expectedPeak :
-      Number.isFinite(maxTemp) ? Math.max(maxTemp, fcToday || maxTemp) : null;
-    const median = Number.isFinite(predicted) ? Math.round(predicted) : null;
-
-    sig.strengthScore = score;
-    sig.score = score;
-    sig.reasons = reasons;
-    sig.scoreReasons = reasons;
-    sig.scoreBreakdown = reasons;
-    sig.currentHourIST = hour;
-    sig.latestWUScoreTemp = wuTemp;
-    sig.latestMetarScoreTemp = metarTemp;
-    sig.forecastScoreTemp = fcToday;
-    sig.wuMomentum = momentum;
-    if(Number.isFinite(predicted)){
-      sig.expectedPeak = predicted;
-      sig.predictedPeak = predicted;
-      sig.medianPeak = predicted;
-      sig.bin = median;
-    }
-
-    // Verdict/recommendation
-    if(score >= 70) sig.verdict = 'Strong 42°C+ signal';
-    else if(score >= 50) sig.verdict = 'Medium 42°C+ signal';
-    else if(score >= 30) sig.verdict = 'Weak but live signal exists';
-    else sig.verdict = 'Too early / low confidence';
-
-    return sig;
-  }
-
-  const oldCompute = window.computeSignal || (typeof computeSignal !== 'undefined' ? computeSignal : null);
-  if(oldCompute && !window.__robustScorePatched){
-    window.__robustScorePatched = true;
-    window.computeSignal = function(metars, wuData){
-      const sig = oldCompute(metars, wuData);
-      return robustScoreSignal(sig, metars, wuData);
-    };
-    try { computeSignal = window.computeSignal; } catch(e) {}
-  }
-
-  // Patch display renderers to accept score aliases
-  const oldStrength = window.renderStrengthAndPrediction || (typeof renderStrengthAndPrediction !== 'undefined' ? renderStrengthAndPrediction : null);
-  if(oldStrength && !window.__strengthPatched){
-    window.__strengthPatched = true;
-    window.renderStrengthAndPrediction = function(sig){
-      sig.strengthScore = sig.strengthScore ?? sig.score ?? 0;
-      sig.scoreBreakdown = sig.scoreBreakdown || sig.scoreReasons || sig.reasons || [];
-      return oldStrength(sig);
-    };
-    try { renderStrengthAndPrediction = window.renderStrengthAndPrediction; } catch(e) {}
-  }
-})();
-</script>
 
 
 <script>
@@ -1691,14 +1453,11 @@ window.fetchAll = fetchAll;
   function ceilWU(t){const m=String(t||'').match(/(\d{1,2}):(\d{2})/);if(!m)return null;let h=+m[1],mm=+m[2];if(mm===0)return p2(h)+':00';if(mm<=30)return p2(h)+':30';return p2((h+1)%24)+':00';}
   function allowedSlots(){
     const n=nowIST(), nowM=n.getHours()*60+n.getMinutes();
-    const ceil=Math.ceil(nowM/30)*30;
-    const max=Math.min(23*60+30, ceil+60);
-    const set=new Set();
-    for(let m=0;m<=max;m+=30)set.add(ms(m));
-    return set;
+    const ceil=Math.ceil(nowM/30)*30, max=Math.min(23*60+30, ceil+60);
+    const set=new Set(); for(let m=0;m<=max;m+=30)set.add(ms(m)); return set;
   }
-  function rows(hist){
-    const allowed=allowedSlots(), out=[], by={};
+  function chartRows(hist){
+    const allowed=allowedSlots(), by={};
     (Array.isArray(hist?.metar_rows)?hist.metar_rows:[]).filter(m=>String(m.valid_ist||'').startsWith(todayIST())).forEach(m=>{
       if(m.slot&&allowed.has(m.slot)&&m.temp_c!=null) by[m.slot]={slot:m.slot,temp:+m.temp_c,type:'METAR'};
     });
@@ -1708,30 +1467,43 @@ window.fetchAll = fetchAll;
     }));
     return Object.values(by).sort((a,b)=>sm(a.slot)-sm(b.slot));
   }
-  function draw(hist){
-    const c=document.getElementById('temp-chart'); if(!c||!hist)return;
-    const ctx=c.getContext('2d'), dpr=devicePixelRatio||1;
-    c.width=c.clientWidth*dpr; c.height=c.clientHeight*dpr; ctx.setTransform(dpr,0,0,dpr,0,0);
-    const w=c.clientWidth,h=c.clientHeight; ctx.clearRect(0,0,w,h);
-    const data=rows(hist);
-    if(!data.length){ctx.fillStyle='#6b93b5';ctx.font='14px monospace';ctx.fillText('Waiting for today IST data...',20,40);return;}
-    const minT=Math.min(...data.map(x=>x.temp),30)-1, maxT=Math.max(...data.map(x=>x.temp),42)+1;
-    const left=30,bottom=38,top=20,right=15,gap=(w-left-right)/data.length,bw=Math.max(8,gap*.55);
-    data.forEach((d,i)=>{
-      const x=left+i*gap+gap/2-bw/2, y=top+(maxT-d.temp)/(maxT-minT)*(h-top-bottom), bh=h-bottom-y;
-      ctx.fillStyle=d.type==='WU'?'rgba(0,212,255,.65)':(d.temp>=40?'rgba(255,174,0,.55)':'rgba(0,212,255,.35)');
-      ctx.fillRect(x,y,bw,bh);
-      ctx.fillStyle=d.temp>=40?'#ffcc33':'#00d4ff'; ctx.font='bold 12px monospace'; ctx.textAlign='center'; ctx.fillText(Math.round(d.temp)+'°',x+bw/2,y-6);
-      ctx.fillStyle='#6b93b5'; ctx.font='10px monospace'; ctx.fillText(lab(d.slot),x+bw/2,h-18);
-      ctx.fillStyle=d.type==='WU'?'#00d4ff':'#00ff88'; ctx.font='9px monospace'; ctx.fillText(d.type,x+bw/2,h-5);
-    });
+  function findChartContainer(){
+    return document.getElementById('temp-chart') ||
+           document.querySelector('[id*="chart" i]') ||
+           document.querySelector('.chart') ||
+           null;
   }
-  async function loadChart(){
-    try{const r=await fetch('/api/history?date='+todayIST()+'&t='+Date.now(),{cache:'no-store'});draw(await r.json());}
-    catch(e){console.warn('chart IST fix failed',e.message);}
+  function renderHTMLChart(hist){
+    const box=findChartContainer();
+    if(!box || !hist){ console.warn('chart container not found'); return; }
+    const data=chartRows(hist);
+    if(!data.length){
+      box.innerHTML='<div style="color:#6b93b5;font-family:monospace;padding:18px">Waiting for today IST data...</div>';
+      return;
+    }
+    const maxT=Math.max(...data.map(x=>x.temp),42);
+    const minT=Math.min(...data.map(x=>x.temp),30);
+    box.innerHTML = `<div style="display:flex;align-items:end;gap:10px;height:190px;padding:12px 8px 4px;overflow-x:auto;border-radius:12px">
+      ${data.map(d=>{
+        const pct=Math.max(12, Math.round(((d.temp-minT)/(maxT-minT+0.1))*120)+35);
+        const hot=d.temp>=40;
+        return `<div style="min-width:46px;text-align:center;font-family:monospace">
+          <div style="color:${hot?'#ffcc33':'#00d4ff'};font-weight:800;font-size:13px;margin-bottom:4px">${Math.round(d.temp)}°</div>
+          <div style="height:${pct}px;background:${hot?'rgba(255,174,0,.55)':'rgba(0,212,255,.35)'};border-radius:6px 6px 2px 2px;box-shadow:0 0 12px rgba(0,212,255,.08)"></div>
+          <div style="color:#6b93b5;font-size:10px;margin-top:6px;white-space:nowrap">${lab(d.slot)}</div>
+          <div style="color:${d.type==='WU'?'#00d4ff':'#00ff88'};font-size:9px">${d.type}</div>
+        </div>`;
+      }).join('')}
+    </div>`;
   }
-  window.addEventListener('load',()=>setTimeout(loadChart,300));
-  setInterval(loadChart,30000);
+  async function loadHTMLChart(){
+    try{
+      const r=await fetch('/api/history?date='+todayIST()+'&t='+Date.now(),{cache:'no-store'});
+      renderHTMLChart(await r.json());
+    }catch(e){console.warn('HTML chart fix failed',e.message);}
+  }
+  window.addEventListener('load',()=>setTimeout(loadHTMLChart,400));
+  setInterval(loadHTMLChart,30000);
 })();
 </script>
 
