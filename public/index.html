@@ -1288,7 +1288,7 @@ function renderHistory(metars, wuData){
 
 // ── Main fetch ─────────────────────────────────────────────────────────────────
 // ── Parse Cloudflare D1 metar_rows into the same format as fetchMETAR() ────────────
-function parseCloudflare D1 Metar(rows){
+function parseCloudflareD1Metar(rows){
   if(!Array.isArray(rows)) return [];
   const out = [];
   rows.forEach(m => {
