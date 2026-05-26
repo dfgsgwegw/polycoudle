@@ -317,6 +317,64 @@ section:has(table){
   }
 }
 
+
+/* ===== CHART LABEL + ALWAYS VISIBLE SCROLL FIX ===== */
+#temp-chart,[id*="chart" i],.chart{
+  padding-top:28px !important;
+  padding-bottom:18px !important;
+  position:relative !important;
+  scrollbar-width:thin !important;
+  scrollbar-color:#00d4ff rgba(255,255,255,.08) !important;
+}
+#temp-chart::-webkit-scrollbar,[id*="chart" i]::-webkit-scrollbar,.chart::-webkit-scrollbar{
+  height:14px !important;
+}
+#temp-chart::-webkit-scrollbar-track,[id*="chart" i]::-webkit-scrollbar-track,.chart::-webkit-scrollbar-track{
+  background:rgba(255,255,255,.08) !important;
+  border-radius:999px !important;
+}
+#temp-chart::-webkit-scrollbar-thumb,[id*="chart" i]::-webkit-scrollbar-thumb,.chart::-webkit-scrollbar-thumb{
+  background:linear-gradient(90deg,#00d4ff,#00ff88) !important;
+  border-radius:999px !important;
+}
+.chart-scroll-shell{
+  position:relative !important;
+}
+.chart-scroll-top{
+  position:sticky;
+  top:8px;
+  z-index:9;
+  display:flex;
+  gap:8px;
+  justify-content:flex-end;
+  margin-bottom:6px;
+  pointer-events:none;
+}
+.chart-scroll-top button{
+  pointer-events:auto;
+  width:auto !important;
+  min-height:34px !important;
+  padding:7px 11px !important;
+  border-radius:999px !important;
+  font-size:12px !important;
+}
+.chart-scroll-hint{
+  color:#7aa6c7;
+  font-size:11px;
+  font-family:monospace;
+  margin-right:auto;
+  align-self:center;
+}
+@media(max-width:700px){
+  .chart-scroll-top{
+    top:0;
+    justify-content:space-between;
+  }
+  .chart-scroll-top button{
+    min-width:48px;
+  }
+}
+
 </style>
 </head>
 <body>
@@ -1767,7 +1825,7 @@ window.fetchAll = fetchAll;
     if(!data.length){ box.innerHTML='<div style="color:#6b93b5;font-family:monospace;padding:18px">Waiting for today IST data...</div>'; return; }
     const maxT=Math.max(...data.map(x=>x.temp),42);
     const minT=Math.min(...data.map(x=>x.temp),30);
-    box.innerHTML=`<div style="display:flex;align-items:end;gap:10px;height:190px;padding:12px 8px 4px;overflow-x:auto;border-radius:12px">
+    box.innerHTML=`<div style="display:flex;align-items:end;gap:10px;height:230px;padding:34px 8px 8px;overflow-x:auto;border-radius:12px">
       ${data.map(d=>{
         const pct=Math.max(12, Math.round(((d.temp-minT)/(maxT-minT+0.1))*120)+35);
         const hot=d.temp>=40;
@@ -2109,6 +2167,38 @@ window.fetchAll = fetchAll;
   }
   window.addEventListener('load',()=>setTimeout(addScrollFix,300));
   setInterval(addScrollFix,3000);
+})();
+</script>
+
+
+<script id="chart-scroll-controls-js">
+(function(){
+  function setupChartScrollControls(){
+    const charts=[...document.querySelectorAll('#temp-chart,[id*="chart" i],.chart')];
+    charts.forEach(chart=>{
+      if(chart.dataset.scrollControls==='1') return;
+      chart.dataset.scrollControls='1';
+
+      const shell=document.createElement('div');
+      shell.className='chart-scroll-shell';
+      chart.parentNode.insertBefore(shell, chart);
+      shell.appendChild(chart);
+
+      const top=document.createElement('div');
+      top.className='chart-scroll-top';
+      top.innerHTML='<span class="chart-scroll-hint">⇆ Scroll chart</span><button type="button" data-dir="-1">←</button><button type="button" data-dir="1">→</button>';
+      shell.insertBefore(top, chart);
+
+      top.querySelectorAll('button').forEach(btn=>{
+        btn.addEventListener('click',()=>{
+          const dir=Number(btn.dataset.dir||1);
+          chart.scrollBy({left:dir*260, behavior:'smooth'});
+        });
+      });
+    });
+  }
+  window.addEventListener('load',()=>setTimeout(setupChartScrollControls,500));
+  setInterval(setupChartScrollControls,3000);
 })();
 </script>
 
