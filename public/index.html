@@ -387,6 +387,23 @@ section:has(table){
 .vilk-curve-note{font:12px monospace;color:#7aa6c7;margin-top:6px;line-height:1.45}
 @media(max-width:700px){#temp-chart{min-height:330px}.vilk-curve-shell{min-width:860px}.vilk-curve-title{font-size:12px}}
 
+
+/* ===== PRO PREDICTION CURVE CHART v2 ===== */
+#temp-chart{min-height:520px!important;overflow-x:auto!important;overflow-y:hidden!important;padding:10px!important}
+.pro-curve-shell{min-width:1040px;background:#fbfbfb;color:#333;border:1px solid rgba(0,0,0,.12);border-radius:14px;padding:18px 20px 14px;font-family:Arial,system-ui,sans-serif;box-shadow:0 12px 30px rgba(0,0,0,.18)}
+.pro-curve-head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;margin-bottom:10px;color:#6b6f76;text-transform:uppercase;letter-spacing:.08em;font-weight:800;font-size:14px}
+.pro-curve-head small{display:block;text-transform:none;letter-spacing:0;color:#8b9199;font-weight:500;margin-top:4px}
+.pro-curve-controls{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 10px}
+.pro-curve-controls button{background:#eef3f7!important;color:#2f3b45!important;border:1px solid #d6e0e8!important;border-radius:8px!important;padding:6px 10px!important;font-size:12px!important;font-weight:800!important;box-shadow:none!important;width:auto!important;min-height:auto!important}
+.pro-curve-controls button.active{background:#12324a!important;color:#fff!important;border-color:#12324a!important}
+.pro-curve-summary{font-size:13px;color:#515861;margin:8px 0 10px;display:flex;gap:14px;flex-wrap:wrap}
+.pro-hot{color:#d93636;font-weight:900}.pro-cold{color:#1b72bd;font-weight:900}.pro-ok{color:#555;font-weight:900}
+.pro-legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:#555;margin:10px 0}
+.pro-legend span{display:inline-flex;align-items:center;gap:6px}.pro-line{width:20px;height:0;border-top:3px solid #000;display:inline-block}.pro-dash{border-top-style:dashed}.pro-dot{width:9px;height:9px;border-radius:50%;display:inline-block}.pro-box{width:13px;height:10px;display:inline-block;border:1px solid #e88;background:rgba(255,0,0,.12)}
+.pro-curve-note{font-size:13px;color:#666;line-height:1.5;margin-top:8px}
+.pro-curve-svg text{font-family:Arial,system-ui,sans-serif}
+@media(max-width:700px){#temp-chart{min-height:500px!important}.pro-curve-shell{min-width:980px;padding:14px}.pro-curve-head{font-size:12px}.pro-curve-summary{font-size:12px}}
+
 </style>
 </head>
 <body>
@@ -1278,10 +1295,10 @@ function renderStrengthAndPrediction(s){
 }
 
 function renderStats(s, metars, wuD){
-  if(s.latestTemp!=null) document.getElementById('cur-temp').textContent=s.latestTemp+'°C';
+  if(s.latestTemp!=null) (()=>{const __el=document.getElementById('cur-temp'); if(__el) __el.textContent=s.latestTemp+'°C';})();
   const latest = metars.length ? metars[metars.length-1] : null;
   if(latest){
-    document.getElementById('cur-time').textContent=`At ${latest.timeLabel} IST · NOSIG:${latest.nosig?'YES':'NO'} · ${latest.wx||'Clear'}`;
+    (()=>{const __el=document.getElementById('cur-time'); if(__el) __el.textContent=`At ${latest.timeLabel} IST · NOSIG:${latest.nosig?'YES':'NO'} · ${latest.wx||'Clear'}`;})();
   }
   const expEl=document.getElementById('exp-peak');
   if(s.effectivePeak!=null){
@@ -1293,7 +1310,7 @@ function renderStats(s, metars, wuD){
   }
   else expEl.textContent='Need 1 live temp';
 
-  if(s.forecastMax!=null) document.getElementById('wu-fc').textContent=s.forecastMax.toFixed(1)+'°C';
+  if(s.forecastMax!=null) (()=>{const __el=document.getElementById('wu-fc'); if(__el) __el.textContent=s.forecastMax.toFixed(1)+'°C';})();
 
   const obsEl=document.getElementById('wu-obs-val');
   const wxEl=document.getElementById('wu-obs-wx');
@@ -1691,7 +1708,7 @@ async function fetchAll(){
     if(window.loadRealOnlyFix) await window.loadRealOnlyFix();
 
     const now=new Date();
-    document.getElementById('last-update').textContent='Updated '+now.toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit',second:'2-digit'})+' IST';
+    (()=>{const __el=document.getElementById('last-update'); if(__el) __el.textContent='Updated '+now.toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit',second:'2-digit'})+' IST';})();
   }catch(e){
     console.error(e);
     document.getElementById('signal-box').className='signal-box danger';
@@ -2253,44 +2270,165 @@ window.fetchAll = fetchAll;
 </script>
 
 
+
 <script id="vilk-prediction-curve-chart">
 (function(){
+  const state={xMode:'signal', yMode:'tight', unit:'C'};
   function todayIST(){return new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});} 
   function nowIST(){return new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Kolkata'}));}
-  function minFromTime(t){const m=String(t||'').match(/(\d{1,2}):(\d{2})/);return m?Number(m[1])*60+Number(m[2]):null;}
   function safeN(v){const n=Number(v);return Number.isFinite(n)?n:null;}
-  function flattenWU(rows){const out=[];Object.values(rows||{}).forEach(list=>(Array.isArray(list)?list:[]).forEach(x=>{const m=minFromTime(x.saved_at);const t=safeN(x.temp_c);if(m!=null&&t!=null)out.push({m,t,type:'WU',label:x.saved_at});}));return out.sort((a,b)=>a.m-b.m);}
-  function flattenMETAR(rows){return (Array.isArray(rows)?rows:[]).map(x=>({m:minFromTime(x.slot),t:safeN(x.temp_c),type:'METAR',label:x.slot})).filter(x=>x.m!=null&&x.t!=null).sort((a,b)=>a.m-b.m);}
-  function snapRows(rows){return (Array.isArray(rows)?rows:[]).filter(r=>Number(r.horizon_days)===0).map(r=>({m:minFromTime(r.fetch_time_ist||r.forecast_time_ist),t:safeN(r.high_c),tf:safeN(r.high_f),issue:r.forecast_issue_time_ist||''})).filter(x=>x.m!=null&&x.t!=null).sort((a,b)=>a.m-b.m);}
-  function poly(points,x,y){return points.map(p=>`${x(p.m).toFixed(1)},${y(p.t).toFixed(1)}`).join(' ')}
+  function cToF(c){const n=Number(c);return Number.isFinite(n)?+(n*9/5+32).toFixed(1):null;}
+  function fToC(f){const n=Number(f);return Number.isFinite(n)?+((n-32)*5/9).toFixed(1):null;}
+  function val(c,f){return state.unit==='F'?(safeN(f)??cToF(c)):(safeN(c)??fToC(f));}
+  function unit(){return '°'+state.unit;}
+  function minFromTime(t){const m=String(t||'').match(/(\d{1,2}):(\d{2})/);return m?Number(m[1])*60+Number(m[2]):null;}
+  function minFromIso(t){const m=String(t||'').match(/T(\d{1,2}):(\d{2})/);return m?Number(m[1])*60+Number(m[2]):minFromTime(t);}
+  function labelTime(min){min=Math.round(min);let h=Math.floor(min/60),m=min%60;const ap=h>=12?'p':'a';let hh=h%12;if(hh===0)hh=12;return m?`${hh}:${String(m).padStart(2,'0')}${ap}`:`${hh}${ap}`;}
+  function flattenWU(rows){const out=[];Object.values(rows||{}).forEach(list=>(Array.isArray(list)?list:[]).forEach(x=>{const m=minFromTime(x.saved_at);const t=val(x.temp_c,x.temp_f);if(m!=null&&t!=null)out.push({m,t,c:safeN(x.temp_c),f:safeN(x.temp_f),type:'WU',label:x.saved_at,hum:x.humidity,wx:x.condition});}));return out.sort((a,b)=>a.m-b.m);}
+  function flattenMETAR(rows){return (Array.isArray(rows)?rows:[]).map(x=>{const c=safeN(x.temp_c);return {m:minFromTime(x.slot),t:val(c,cToF(c)),c,f:cToF(c),type:'METAR',label:x.slot,raw:x.raw_metar}}).filter(x=>x.m!=null&&x.t!=null).sort((a,b)=>a.m-b.m);}
+  function parseHourly(row){try{return JSON.parse(row.hourly_json||'[]')||[]}catch(e){return []}}
+  function forecastCurves(rows){
+    const fs=(Array.isArray(rows)?rows:[]).filter(r=>Number(r.horizon_days)===0).sort((a,b)=>String(a.fetch_time_ist||'').localeCompare(String(b.fetch_time_ist||''))||String(a.id||'').localeCompare(String(b.id||'')));
+    const curves=fs.map((r,idx)=>{const pts=parseHourly(r).map(h=>({m:minFromIso(h.time),t:val(h.temp_c,h.temp_f),c:safeN(h.temp_c),f:safeN(h.temp_f),label:h.time,phrase:h.phrase})).filter(p=>p.m!=null&&p.t!=null).sort((a,b)=>a.m-b.m);return {...r,pts,idx};}).filter(c=>c.pts.length);
+    return {all:curves, first:curves[0]||null, latest:curves[curves.length-1]||null, prev:curves.length>1?curves[curves.length-2]:null};
+  }
+  function interp(points,m){if(!points||!points.length)return null;let p=points[0];for(let i=1;i<points.length;i++){const q=points[i];if(m<=q.m){const r=(m-p.m)/(q.m-p.m||1);return p.t+(q.t-p.t)*Math.max(0,Math.min(1,r));}p=q;}return points[points.length-1].t;}
+  function makePath(points,x,y){return points.map((p,i)=>`${i?'L':'M'} ${x(p.m).toFixed(1)} ${y(p.t).toFixed(1)}`).join(' ')}
+  function renderCardsF(hist){
+    const latest=hist?.meta?.latest_wu; if(latest){
+      const c=safeN(latest.temp_c), f=safeN(latest.temp_f)??cToF(c); const el=document.getElementById('wu-obs-val'); if(el&&c!=null)el.textContent=`${c.toFixed(1)}°C (${Math.round(f)}°F)`;
+      const hum=document.getElementById('wu-hum-val'); if(hum&&latest.humidity!=null)hum.textContent=`${latest.humidity}%`;
+    }
+    const lm=hist?.meta?.latest_metar; if(lm){const c=safeN(lm.temp_c), f=cToF(c); const card=document.getElementById('metar-temp'); if(card&&c!=null)card.textContent=`${Math.round(c)}°C (${Math.round(f)}°F)`;}
+  }
   function renderCurve(hist){
-    const box=document.getElementById('temp-chart'); if(!box||!hist)return;
-    const wu=flattenWU(hist.wu_obs_rows), met=flattenMETAR(hist.metar_rows), snaps=snapRows(hist.forecast_snapshot_rows);
-    const allTemps=[...wu.map(x=>x.t),...met.map(x=>x.t),...snaps.map(x=>x.t)].filter(Number.isFinite);
-    if(!allTemps.length){box.innerHTML='<div class="vilk-curve-shell"><div class="vilk-curve-title">Waiting for WU/METAR curve data...</div></div>';return;}
-    const x0=70,y0=22,w=790,h=245, minM=9*60, maxM=18*60;
-    const minT=Math.floor(Math.min(...allTemps,30))-1, maxT=Math.ceil(Math.max(...allTemps,42))+1;
+    const box=document.getElementById('temp-chart'); if(!box||!hist)return; renderCardsF(hist);
+    const wu=flattenWU(hist.wu_obs_rows), met=flattenMETAR(hist.metar_rows), fc=forecastCurves(hist.forecast_snapshot_rows);
+    const now=nowIST(), nowM=now.getHours()*60+now.getMinutes();
+    const allPoints=[...wu,...met,...(fc.latest?.pts||[]),...(fc.prev?.pts||[])];
+    if(!allPoints.length){box.innerHTML='<div class="pro-curve-shell">Waiting for curve data...</div>';return;}
+    let minM=9*60,maxM=18*60;
+    if(state.xMode==='day'){minM=0;maxM=24*60;}
+    if(state.xMode==='auto'){
+      const ms=allPoints.map(p=>p.m).filter(Number.isFinite); minM=Math.max(0,Math.min(...ms,nowM)-60); maxM=Math.min(24*60,Math.max(...ms,nowM)+120);
+      minM=Math.floor(minM/60)*60; maxM=Math.ceil(maxM/60)*60;
+    }
+    const inRange=p=>p.m>=minM&&p.m<=maxM;
+    const temps=allPoints.filter(inRange).map(p=>p.t).filter(Number.isFinite);
+    let minT,maxT;
+    if(state.yMode==='full'){minT=state.unit==='F'?68:20;maxT=state.unit==='F'?113:45;}
+    else { const lo=Math.min(...temps), hi=Math.max(...temps); const pad=state.yMode==='tight'?1.1:2.5; minT=Math.floor(lo-pad); maxT=Math.ceil(hi+pad); if(maxT-minT<5){maxT+=2;minT-=2;} }
+    const W=980,H=430,x0=72,y0=58,w=850,h=285;
     const x=m=>x0+(Math.max(minM,Math.min(maxM,m))-minM)/(maxM-minM)*w;
     const y=t=>y0+(maxT-t)/(maxT-minT)*h;
-    const now=nowIST(), nowM=now.getHours()*60+now.getMinutes();
-    const cur=wu.length?wu[wu.length-1]:null, latestMet=met.length?met[met.length-1]:null, latestFc=snaps.length?snaps[snaps.length-1]:null;
-    const vals=[cur?.t, latestMet?.t, latestFc?.t].filter(Number.isFinite);
-    const expectedPeak=vals.length?Math.max(...vals):NaN;
-    const status=cur?`Current WU ${cur.t.toFixed(1)}°C at ${cur.label} · Latest METAR ${latestMet?latestMet.t.toFixed(0)+'°C at '+latestMet.label:'—'} · WU forecast high ${latestFc?latestFc.t.toFixed(1)+'°C':''}`:'Waiting';
+    const latestWU=wu[wu.length-1], latestMet=met[met.length-1], latestFc=fc.latest;
+    const fcNow=latestFc?interp(latestFc.pts, latestWU?.m??nowM):null;
+    const obsNow=latestWU?.t??latestMet?.t??null;
+    const diff=(obsNow!=null&&fcNow!=null)?obsNow-fcNow:null;
+    const peak=Math.max(...[...wu.map(p=>p.t),...met.map(p=>p.t),...(latestFc?.pts||[]).map(p=>p.t)].filter(Number.isFinite));
+    const status=diff==null?'waiting for forecast compare':`${labelTime(latestWU?.m??nowM)} · Obs ${obsNow.toFixed(1)}${unit()} vs forecast ${fcNow.toFixed(1)}${unit()} → ${diff>=0?'+':''}${diff.toFixed(1)}${unit()} ${diff>0.4?'running HOT':diff<-0.4?'running COLD':'near forecast'}`;
     const grid=[];
-    for(let hh=9;hh<=18;hh++){const xx=x(hh*60);grid.push(`<line x1="${xx}" y1="${y0}" x2="${xx}" y2="${y0+h}" stroke="rgba(255,255,255,.07)"/><text x="${xx}" y="${y0+h+18}" fill="#7aa6c7" font-size="11" text-anchor="middle">${hh<=12?hh:hh-12}${hh<12?'a':'p'}</text>`)}
-    for(let tt=minT;tt<=maxT;tt++){const yy=y(tt);grid.push(`<line x1="${x0}" y1="${yy}" x2="${x0+w}" y2="${yy}" stroke="rgba(255,255,255,.06)"/><text x="${x0-10}" y="${yy+4}" fill="#7aa6c7" font-size="11" text-anchor="end">${tt}°</text>`)}
-    const nowLine=(nowM>=minM&&nowM<=maxM)?`<line x1="${x(nowM)}" y1="${y0}" x2="${x(nowM)}" y2="${y0+h}" stroke="#ffd43b" stroke-width="2" stroke-dasharray="5 5"/><text x="${x(nowM)+5}" y="${y0+13}" fill="#ffd43b" font-size="11">now</text>`:'';
-    const wuLine=wu.length>1?`<polyline points="${poly(wu,x,y)}" fill="none" stroke="#ff4d4d" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>`:'';
-    const fcLine=snaps.length>1?`<polyline points="${poly(snaps,x,y)}" fill="none" stroke="#ffb000" stroke-width="2.5" stroke-dasharray="6 4"/>`:'';
-    const metDots=met.map(p=>`<circle cx="${x(p.m)}" cy="${y(p.t)}" r="5" fill="#00f084" stroke="#042" stroke-width="1"><title>METAR ${p.label}: ${p.t}°C</title></circle>`).join('');
-    const wuDots=wu.map(p=>`<circle cx="${x(p.m)}" cy="${y(p.t)}" r="2.8" fill="#ff4d4d"><title>WU ${p.label}: ${p.t}°C</title></circle>`).join('');
-    const fcDots=snaps.map(p=>`<rect x="${x(p.m)-4}" y="${y(p.t)-4}" width="8" height="8" fill="#ffb000" transform="rotate(45 ${x(p.m)} ${y(p.t)})"><title>Forecast high ${p.t}°C / ${p.tf??''}°F issue ${p.issue}</title></rect>`).join('');
-    box.innerHTML=`<div class="vilk-curve-shell"><div class="vilk-curve-title"><div><b>Prediction Curve — WU vs METAR vs WU Forecast</b><small>${status}</small></div><div style="text-align:right"><b>Peak guide: ${Number.isFinite(expectedPeak)?expectedPeak.toFixed(1)+'°C':'—'}</b><small>9AM–6PM IST</small></div></div><div class="vilk-legend"><span><i class="vilk-dot" style="background:#ff4d4d"></i>Today WU obs</span><span><i class="vilk-dot" style="background:#00f084"></i>Official METAR</span><span><i class="vilk-dot" style="background:#ffb000"></i>WU forecast snapshots</span><span><i class="vilk-dot" style="background:#ffd43b"></i>Current time</span></div><svg viewBox="0 0 920 310" style="width:920px;max-width:none;height:310px;display:block">${grid.join('')}<rect x="${x0}" y="${y0}" width="${w}" height="${h}" fill="transparent" stroke="rgba(255,255,255,.15)"/>${nowLine}${fcLine}${wuLine}${metDots}${wuDots}${fcDots}</svg><div class="vilk-curve-note">Red above orange forecast = day running hotter; green METAR dots confirm official bins; orange diamonds show how WU forecast changed through the day.</div></div>`;
+    const hourStep=(maxM-minM)>12*60?3:1;
+    for(let hh=Math.ceil(minM/60);hh<=Math.floor(maxM/60);hh+=hourStep){const xx=x(hh*60);grid.push(`<line x1="${xx}" y1="${y0}" x2="${xx}" y2="${y0+h}" stroke="rgba(0,0,0,.08)"/><text x="${xx}" y="${y0+h+25}" fill="#7a818a" font-size="13" text-anchor="middle">${String(hh).padStart(2,'0')}h</text>`)}
+    for(let tt=minT;tt<=maxT;tt++){const yy=y(tt);grid.push(`<line x1="${x0}" y1="${yy}" x2="${x0+w}" y2="${yy}" stroke="rgba(0,0,0,.06)"/><text x="${x0-12}" y="${yy+4}" fill="#69717a" font-size="13" text-anchor="end">${tt}${unit()}</text>`)}
+    const peakBand=`<rect x="${x(14*60)}" y="${y0}" width="${Math.max(0,x(16*60)-x(14*60))}" height="${h}" fill="rgba(255,220,80,.20)"/><text x="${x(15*60)}" y="${y0-10}" fill="#9b5c00" font-size="14" text-anchor="middle" font-weight="800">peak 14–16h</text>`;
+    const bracketTop=y(peak+.5), bracketBottom=y(Math.max(minT,peak-1.0));
+    const bracket=`<rect x="${x0}" y="${Math.min(bracketTop,bracketBottom)}" width="${w}" height="${Math.abs(bracketBottom-bracketTop)}" fill="rgba(255,0,0,.08)" stroke="rgba(210,50,50,.28)"/><text x="${x0+10}" y="${Math.min(bracketTop,bracketBottom)+22}" fill="#b43b3b" font-size="14" font-weight="800">peak guide ${peak.toFixed(1)}${unit()}</text>`;
+    const nowLine=(nowM>=minM&&nowM<=maxM)?`<line x1="${x(nowM)}" y1="${y0-15}" x2="${x(nowM)}" y2="${y0+h}" stroke="#333" stroke-width="1.5" stroke-dasharray="5 6"/><text x="${x(nowM)+5}" y="${y0-20}" fill="#333" font-size="14">now</text>`:'';
+    const latestLine=latestFc?.pts?.filter(inRange).length>1?`<path d="${makePath(latestFc.pts.filter(inRange),x,y)}" fill="none" stroke="#111" stroke-width="4"/>`:'';
+    const upperLine=latestFc?.pts?.filter(inRange).length>1?`<path d="${makePath(latestFc.pts.filter(inRange).map(p=>({...p,t:p.t+0.7})),x,y)}" fill="none" stroke="#111" stroke-width="3" stroke-dasharray="2 5"/>`:'';
+    const lowerLine=latestFc?.pts?.filter(inRange).length>1?`<path d="${makePath(latestFc.pts.filter(inRange).map(p=>({...p,t:p.t-0.7})),x,y)}" fill="none" stroke="#8ec5f4" stroke-width="2"/>`:'';
+    const oldLine=fc.prev?.pts?.filter(inRange).length>1?`<path d="${makePath(fc.prev.pts.filter(inRange),x,y)}" fill="none" stroke="#8ec5f4" stroke-width="2.5" stroke-dasharray="6 4"/>`:'';
+    const wuLine=wu.filter(inRange).length>1?`<path d="${makePath(wu.filter(inRange),x,y)}" fill="none" stroke="#e33434" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round"/>`:'';
+    const wuDots=wu.filter(inRange).map(p=>`<circle cx="${x(p.m)}" cy="${y(p.t)}" r="3.2" fill="#e33434"><title>WU ${p.label}: ${p.c?.toFixed?.(1)}°C / ${p.f?Math.round(p.f):''}°F ${p.wx||''}</title></circle>`).join('');
+    const metDots=met.filter(inRange).map(p=>`<circle cx="${x(p.m)}" cy="${y(p.t)}" r="6.2" fill="#09e47b" stroke="#fff" stroke-width="1.2"><title>METAR ${p.label}: ${p.c}°C / ${Math.round(p.f)}°F</title></circle>`).join('');
+    const fcDots=(latestFc?.pts||[]).filter(inRange).map(p=>`<circle cx="${x(p.m)}" cy="${y(p.t)}" r="2.5" fill="#111" opacity=".8"><title>Forecast ${p.label}: ${p.c?.toFixed?.(1)}°C / ${p.f?Math.round(p.f):''}°F</title></circle>`).join('');
+    const cls=diff==null?'pro-ok':diff>0.4?'pro-hot':diff<-0.4?'pro-cold':'pro-ok';
+    box.innerHTML=`<div class="pro-curve-shell"><div class="pro-curve-head"><div>📈 Temp Curve — Forecast vs Observed <small>${hist.today_ist || todayIST()} · VILK local station time</small></div><div style="text-align:right">Peak guide ${peak.toFixed(1)}${unit()}<small>${state.xMode==='signal'?'9AM–6PM signal window':state.xMode==='day'?'full day':'auto window'}</small></div></div><div class="pro-curve-controls"><button data-x="signal" class="${state.xMode==='signal'?'active':''}">9–18h</button><button data-x="auto" class="${state.xMode==='auto'?'active':''}">Auto</button><button data-x="day" class="${state.xMode==='day'?'active':''}">24h</button><button data-y="tight" class="${state.yMode==='tight'?'active':''}">Tight zoom</button><button data-y="wide" class="${state.yMode==='wide'?'active':''}">Wide</button><button data-y="full" class="${state.yMode==='full'?'active':''}">Full temp</button><button data-unit="C" class="${state.unit==='C'?'active':''}">°C</button><button data-unit="F" class="${state.unit==='F'?'active':''}">°F</button></div><div class="pro-legend"><span><i class="pro-line" style="border-color:#111"></i>latest WU forecast curve</span><span><i class="pro-line pro-dash" style="border-color:#111"></i>bias band +0.7</span><span><i class="pro-line" style="border-color:#8ec5f4"></i>old/pinned forecast</span><span><i class="pro-line" style="border-color:#e33434"></i>WU observed</span><span><i class="pro-dot" style="background:#09e47b"></i>METAR official</span><span><i class="pro-box"></i>peak bracket</span></div><svg class="pro-curve-svg" viewBox="0 0 ${W} ${H}" style="width:${W}px;height:${H}px;display:block;background:#fff;border-radius:8px">${grid.join('')} ${bracket}${peakBand}<rect x="${x0}" y="${y0}" width="${w}" height="${h}" fill="transparent" stroke="rgba(0,0,0,.18)"/>${lowerLine}${oldLine}${latestLine}${upperLine}${wuLine}${metDots}${wuDots}${fcDots}${nowLine}</svg><div class="pro-curve-summary"><span class="${cls}">${status}</span><span>Current WU: ${latestWU?`${latestWU.c?.toFixed?.(1)}°C (${latestWU.f?Math.round(latestWU.f):''}°F)`: '—'}</span><span>Latest METAR: ${latestMet?`${latestMet.c}°C (${Math.round(latestMet.f)}°F)`: '—'}</span><span>Forecast snapshots: ${fc.all.length}</span></div><div class="pro-curve-note">Use <b>Tight zoom</b> when the line looks flat. Red above black = running hotter than forecast. Green dots are official METAR bins. Black curve is latest WU hourly forecast; blue/dotted lines show older/bias-corrected range.</div></div>`;
+    box.querySelectorAll('button[data-x]').forEach(b=>b.onclick=()=>{state.xMode=b.dataset.x;renderCurve(hist)});
+    box.querySelectorAll('button[data-y]').forEach(b=>b.onclick=()=>{state.yMode=b.dataset.y;renderCurve(hist)});
+    box.querySelectorAll('button[data-unit]').forEach(b=>b.onclick=()=>{state.unit=b.dataset.unit;renderCurve(hist)});
   }
   async function loadCurve(){try{const day=todayIST();const r=await fetch('/api/history?date='+day+'&t='+Date.now(),{cache:'no-store'});renderCurve(await r.json());}catch(e){console.warn('curve chart failed',e.message)}}
+  window.renderProCurve=renderCurve;
   window.addEventListener('load',()=>setTimeout(loadCurve,900));
   setInterval(loadCurve,30000);
+})();
+</script>
+
+
+
+<script id="null-safe-renderstats-fix">
+(function(){
+  function q(id){ return document.getElementById(id); }
+  function make(id, parent){
+    let el=q(id);
+    if(!el){
+      el=document.createElement('span');
+      el.id=id;
+      el.style.display='none';
+      (parent || document.body).appendChild(el);
+    }
+    return el;
+  }
+
+  // Create hidden fallback nodes for old renderer ids if they are missing.
+  function ensureLegacyStatNodes(){
+    const ids=[
+      'score','scoreVal','strengthScore','predPeak','maxPossible','signalTitle','signalSub',
+      'currentMetarTemp','currentMetarSub','wuLatest','wuObsTime','wuFetchTime','wuSaveStatus',
+      'wuCurrentTemp','humidityVal','windVal','latestMetar','supa-sync-status',
+      'forecastToday','expectedPeak','todayDate','lastUpdated'
+    ];
+    ids.forEach(id=>make(id));
+  }
+
+  // Safe setter helper for any future code.
+  window.setTextSafe = function(id, value){
+    const el = document.getElementById(id);
+    if(el) el.textContent = value == null ? '' : String(value);
+  };
+
+  ensureLegacyStatNodes();
+  window.addEventListener('load',()=>setTimeout(ensureLegacyStatNodes,100));
+  setInterval(ensureLegacyStatNodes,5000);
+
+  // Wrap renderStats so even if one old node is missing, page/chart still continues.
+  const oldRenderStats = window.renderStats || (typeof renderStats !== 'undefined' ? renderStats : null);
+  if(oldRenderStats && !window.__renderStatsNullSafe){
+    window.__renderStatsNullSafe = true;
+    window.renderStats = function(){
+      try{
+        ensureLegacyStatNodes();
+        return oldRenderStats.apply(this, arguments);
+      }catch(e){
+        console.warn('renderStats skipped non-critical missing UI node:', e.message);
+        return null;
+      }
+    };
+    try{ renderStats = window.renderStats; }catch(e){}
+  }
+
+  // Wrap fetchAll so chart/table render still runs even if stats panel fails.
+  const oldFetchAll = window.fetchAll || (typeof fetchAll !== 'undefined' ? fetchAll : null);
+  if(oldFetchAll && !window.__fetchAllNullSafe){
+    window.__fetchAllNullSafe = true;
+    window.fetchAll = async function(){
+      try{
+        ensureLegacyStatNodes();
+        return await oldFetchAll.apply(this, arguments);
+      }catch(e){
+        console.warn('fetchAll non-critical error:', e.message);
+        try{
+          if(typeof loadFinalUI === 'function') await loadFinalUI();
+          if(typeof loadProCurve === 'function') await loadProCurve();
+          if(typeof drawProCurve === 'function') await drawProCurve();
+        }catch(_){}
+        return null;
+      }
+    };
+    try{ fetchAll = window.fetchAll; }catch(e){}
+  }
 })();
 </script>
 
