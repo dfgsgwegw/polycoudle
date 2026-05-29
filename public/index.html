@@ -67,7 +67,7 @@
   <button type="button" id="applyAxisBtn">Apply Axis</button>
   <button type="button" id="autoAxisBtn">Auto Axis</button>
 </div>
-<div class="axisHint">Tip: Time accepts 14, 14.5, 9-18 style. Temp axis uses current selected unit (°C/°F). This changes chart range, not browser zoom.</div>
+<div class="axisHint">Tip: Time accepts 14, 14.5, 9-18 style. Temp axis auto-fits visible data. Manual Temp min/max uses selected unit (°C/°F). This changes chart range, not browser zoom.</div>
 
     
 <div class="forecastExplain" id="forecastExplain">
@@ -277,5 +277,121 @@ document.querySelectorAll('.toolbar button').forEach(b=>b.onclick=()=>{if(b.data
 
 
 
+
+
+<script id="auto-visible-yaxis-fmode-fix">
+(function(){
+  function getNum(v){ const n=Number(v); return Number.isFinite(n)?n:null; }
+  function visibleRangeFromState(){
+    let xMin=0, xMax=24;
+    try{
+      if(window.__axisState && window.__axisState.xMin!=null && window.__axisState.xMax!=null){
+        return {xMin:window.__axisState.xMin, xMax:window.__axisState.xMax};
+      }
+      if(typeof state!=='undefined'){
+        if(state.x==='peak'){xMin=9;xMax=18;}
+        else if(state.x==='last3'){
+          const d=new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Kolkata'}));
+          const h=d.getHours()+d.getMinutes()/60;
+          xMin=Math.max(0,h-3); xMax=Math.min(24,h+0.5);
+        }else{xMin=0;xMax=24;}
+      }
+    }catch(e){}
+    return {xMin,xMax};
+  }
+  function collectVisibleVals(wu,metar,fc,xMin,xMax){
+    const vals=[];
+    function add(arr){
+      (arr||[]).forEach(p=>{
+        const h=getNum(p.hour), y=getNum(p.y);
+        if(h==null||y==null) return;
+        if(h>=xMin && h<=xMax){
+          // remove impossible mixed-unit outliers
+          if(typeof state!=='undefined' && state.unit==='f'){
+            if(y>=40 && y<=130) vals.push(y);
+          }else{
+            if(y>=0 && y<=60) vals.push(y);
+          }
+        }
+      });
+    }
+    add(wu); add(metar); add(fc&&fc.latest); add(fc&&fc.old);
+    if(fc && Array.isArray(fc.runs)) fc.runs.forEach(add);
+    return vals;
+  }
+  function setAutoAxisForVisible(wu,metar,fc){
+    if(!window.__axisState) window.__axisState={xMin:null,xMax:null,yMin:null,yMax:null};
+    const st=window.__axisState;
+    const hasManualY = st.yMin!=null || st.yMax!=null;
+    if(hasManualY) return;
+
+    const {xMin,xMax}=visibleRangeFromState();
+    const vals=collectVisibleVals(wu,metar,fc,xMin,xMax);
+    if(!vals.length) return;
+    let min=Math.min(...vals), max=Math.max(...vals);
+    const isF = (typeof state!=='undefined' && state.unit==='f');
+    const pad = isF ? 4 : 1.2;
+    if(max-min < (isF?6:2)){
+      const mid=(min+max)/2;
+      min=mid-(isF?3:1);
+      max=mid+(isF?3:1);
+    }else{
+      min-=pad; max+=pad;
+    }
+    if(isF){
+      min=Math.floor(min);
+      max=Math.ceil(max);
+      if(max>130) max=130;
+      if(min<40) min=40;
+    }else{
+      min=Math.floor(min*10)/10;
+      max=Math.ceil(max*10)/10;
+      if(max>60) max=60;
+      if(min<0) min=0;
+    }
+    st.yMin=min; st.yMax=max;
+    st.__autoY=true;
+  }
+  function clearAutoY(){
+    if(window.__axisState && window.__axisState.__autoY){
+      window.__axisState.yMin=null;
+      window.__axisState.yMax=null;
+      window.__axisState.__autoY=false;
+    }
+  }
+  function patchRenderChart(){
+    if(window.__autoYFModePatched) return;
+    const old=(typeof renderChart==='function')?renderChart:window.renderChart;
+    if(typeof old!=='function') return;
+    window.__autoYFModePatched=true;
+    const wrapped=function(wu,metar,fc){
+      clearAutoY();
+      setAutoAxisForVisible(wu,metar,fc);
+      const r=old.apply(this,arguments);
+      return r;
+    };
+    window.renderChart=wrapped;
+    try{ renderChart=wrapped; }catch(e){}
+  }
+  function patchUnitButtons(){
+    document.querySelectorAll('[data-u],button').forEach(btn=>{
+      if(btn.dataset.autoYBound) return;
+      if(btn.dataset.u || /°C|°F/.test(btn.textContent||'')){
+        btn.dataset.autoYBound='1';
+        btn.addEventListener('click',()=>{
+          if(window.__axisState){
+            window.__axisState.yMin=null; window.__axisState.yMax=null; window.__axisState.__autoY=false;
+            const a=document.getElementById('yMinManual'), b=document.getElementById('yMaxManual');
+            if(a) a.value=''; if(b) b.value='';
+          }
+          setTimeout(()=>{ try{ if(typeof render==='function') render(); }catch(e){} },60);
+        });
+      }
+    });
+  }
+  window.addEventListener('load',()=>{patchRenderChart();patchUnitButtons();setTimeout(()=>{try{if(typeof render==='function')render();}catch(e){}},500);});
+  setInterval(()=>{patchRenderChart();patchUnitButtons();},1000);
+})();
+</script>
 
 </body></html>
