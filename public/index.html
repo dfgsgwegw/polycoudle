@@ -386,6 +386,21 @@ td{
   #tooltip .ttLine{font-size:17px !important}
 }
 
+
+/* ===== RESTORE ZOOM DRAG PAN CONTROLS + TEMP RANGE LOCK ===== */
+#chart{cursor:grab!important;touch-action:none!important}
+#chart.dragging{cursor:grabbing!important}
+.chartScroll,.chartBox,.canvasBox{touch-action:none!important}
+.mobileZoomBar{
+  display:flex!important;gap:12px!important;row-gap:12px!important;align-items:center!important;flex-wrap:wrap!important;
+  margin:14px 0!important;padding:10px 0!important;font-family:ui-monospace,Consolas,monospace;color:#a9d8ff!important
+}
+.mobileZoomBar button{
+  border:0!important;border-radius:999px!important;padding:11px 16px!important;background:#10304a!important;color:#a9d8ff!important;
+  font-size:16px!important;font-weight:900!important;cursor:pointer!important;min-height:44px!important
+}
+.mobileZoomBar button:hover{background:#00d4ff!important;color:#00131c!important}
+
 </style></head><body>
 <div class="wrap">
   <div class="header"><div><h1>VILK <span class="cyan">Live Signal</span></h1><div class="sub">● UI refresh 30 sec · cron save 1 min · Lucknow Airport (VILK) · D1 archive</div></div><div><button class="btn" id="refreshBtn">↻ Refresh Now</button><div class="updated" id="updated">Updated --</div></div></div>
@@ -567,141 +582,6 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
 
 
 
-<script id="final-2d-zoom-mobile-fix">
-(function(){
-  const $=id=>document.getElementById(id);
-  const N=v=>{const x=Number(v);return Number.isFinite(x)?x:null};
-  function getChartInfo(){
-    const c=$('chart'); if(!c) return null;
-    const rect=c.getBoundingClientRect();
-    return {c,rect,W:c.width||1180,H:c.height||560,L:70,R:28,T:48,B:60};
-  }
-  function getAxis(){
-    if(!window.__axisState) window.__axisState={xMin:null,xMax:null,yMin:null,yMax:null};
-    return window.__axisState;
-  }
-  function readCurrent(){
-    const ax=getAxis();
-    let xMin=N($('xMinManual')?.value)??N(ax.xMin);
-    let xMax=N($('xMaxManual')?.value)??N(ax.xMax);
-    let yMin=N($('yMinManual')?.value)??N(ax.yMin);
-    let yMax=N($('yMaxManual')?.value)??N(ax.yMax);
-    if(!(xMin!=null&&xMax!=null&&xMax>xMin)){
-      if(document.querySelector('[data-x="peak"].active,[data-xrange="peak"].active')){xMin=9;xMax=18}
-      else {xMin=0;xMax=24}
-    }
-    if(!(yMin!=null&&yMax!=null&&yMax>yMin)){
-      const isF=document.querySelector('[data-u="f"].active,[data-unit="f"].active');
-      yMin=isF?14:-10; yMax=isF?158:70;
-    }
-    return {xMin,xMax,yMin,yMax};
-  }
-  function writeAxis(r){
-    const ax=getAxis();
-    r.xMin=Math.max(0,r.xMin); r.xMax=Math.min(24,r.xMax);
-    if(r.xMax-r.xMin<0.25){const mid=(r.xMin+r.xMax)/2;r.xMin=mid-.125;r.xMax=mid+.125}
-    ax.xMin=r.xMin; ax.xMax=r.xMax; ax.yMin=r.yMin; ax.yMax=r.yMax;
-    const map={xMin:'xMinManual',xMax:'xMaxManual',yMin:'yMinManual',yMax:'yMaxManual'};
-    Object.entries(map).forEach(([k,id])=>{const el=$(id); if(el) el.value=Number(r[k]).toFixed(2).replace(/\.?0+$/,'');});
-  }
-  function rerender(){
-    try{
-      if(typeof window.masterRender==='function') window.masterRender();
-      else if(typeof window.renderAll==='function') window.renderAll();
-      else if(typeof window.render==='function') window.render();
-      else if(typeof window.fetchAll==='function') window.fetchAll();
-    }catch(e){console.warn('rerender failed',e)}
-  }
-  function zoomX(r,factor,anchor){
-    const span=(r.xMax-r.xMin)*factor;
-    const cur=r.xMin+anchor*(r.xMax-r.xMin);
-    r.xMin=cur-(cur-r.xMin)*factor;
-    r.xMax=r.xMin+span;
-    if(r.xMin<0){r.xMax-=r.xMin;r.xMin=0}
-    if(r.xMax>24){r.xMin-=r.xMax-24;r.xMax=24}
-  }
-  function zoomY(r,factor,anchor){
-    const span=(r.yMax-r.yMin)*factor;
-    const cur=r.yMax-anchor*(r.yMax-r.yMin);
-    r.yMin=cur-(cur-r.yMin)*factor;
-    r.yMax=r.yMin+span;
-    if(r.yMax<=r.yMin){r.yMax=r.yMin+1}
-  }
-  function applyZoom(kind, dir, anchorX=.5, anchorY=.5){
-    const r=readCurrent();
-    const factor=dir==='in'?0.82:1.22;
-    if(kind==='both'||kind==='x') zoomX(r,factor,anchorX);
-    if(kind==='both'||kind==='y') zoomY(r,factor,anchorY);
-    writeAxis(r); rerender();
-  }
-  function pan(frac){
-    const r=readCurrent(), span=r.xMax-r.xMin, shift=span*frac;
-    r.xMin+=shift; r.xMax+=shift;
-    if(r.xMin<0){r.xMax-=r.xMin;r.xMin=0}
-    if(r.xMax>24){r.xMin-=r.xMax-24;r.xMax=24}
-    writeAxis(r); rerender();
-  }
-  function reset(){
-    ['xMinManual','xMaxManual','yMinManual','yMaxManual'].forEach(id=>{const el=$(id); if(el) el.value='';});
-    window.__axisState={xMin:null,xMax:null,yMin:null,yMax:null};
-    rerender();
-  }
-  function bind(){
-    const c=$('chart'); if(c&&!c.dataset.zoom2dBound){
-      c.dataset.zoom2dBound='1';
-      c.addEventListener('wheel',e=>{
-        const info=getChartInfo(); if(!info) return;
-        const {rect,W,H,L,R,T,B}=info;
-        const px=(e.clientX-rect.left)/rect.width*W;
-        const py=(e.clientY-rect.top)/rect.height*H;
-        if(px<L||px>W-R||py<T||py>H-B) return;
-        e.preventDefault();
-        const ax=(px-L)/(W-L-R);
-        const ay=(py-T)/(H-T-B);
-        const dir=e.deltaY<0?'in':'out';
-        // Shift = only Y, Alt = only X, normal = both X and Y.
-        const kind=e.shiftKey?'y':(e.altKey?'x':'both');
-        applyZoom(kind,dir,ax,ay);
-      },{passive:false});
-
-      // mobile pinch: two finger pinch zoom both axes, no page zoom
-      let lastDist=null;
-      c.addEventListener('touchstart',e=>{
-        if(e.touches.length===2){
-          e.preventDefault();
-          const dx=e.touches[0].clientX-e.touches[1].clientX, dy=e.touches[0].clientY-e.touches[1].clientY;
-          lastDist=Math.hypot(dx,dy);
-        }
-      },{passive:false});
-      c.addEventListener('touchmove',e=>{
-        if(e.touches.length===2 && lastDist){
-          e.preventDefault();
-          const dx=e.touches[0].clientX-e.touches[1].clientX, dy=e.touches[0].clientY-e.touches[1].clientY;
-          const d=Math.hypot(dx,dy);
-          const dir=d>lastDist?'in':'out';
-          lastDist=d;
-          applyZoom('both',dir,.5,.5);
-        }
-      },{passive:false});
-      c.addEventListener('touchend',()=>{lastDist=null},{passive:false});
-    }
-    const btns={
-      zoomInBoth:['both','in'], zoomOutBoth:['both','out'],
-      zoomInY:['y','in'], zoomOutY:['y','out'],
-      zoomInX:['x','in'], zoomOutX:['x','out']
-    };
-    Object.entries(btns).forEach(([id,args])=>{
-      const b=$(id); if(b&&!b.dataset.zoom2dBound){b.dataset.zoom2dBound='1';b.onclick=()=>applyZoom(args[0],args[1]);}
-    });
-    const pl=$('panLeft'), pr=$('panRight'), rz=$('resetZoom2D');
-    if(pl&&!pl.dataset.zoom2dBound){pl.dataset.zoom2dBound='1';pl.onclick=()=>pan(-0.25);}
-    if(pr&&!pr.dataset.zoom2dBound){pr.dataset.zoom2dBound='1';pr.onclick=()=>pan(0.25);}
-    if(rz&&!rz.dataset.zoom2dBound){rz.dataset.zoom2dBound='1';rz.onclick=reset;}
-  }
-  window.addEventListener('load',bind);
-  setInterval(bind,1200);
-})();
-</script>
 
 
 
@@ -713,122 +593,8 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
 
 
 
-<script id="fixed-temp-axis-range-patch">
-(function(){
-  function isF(){
-    try{
-      if(window.state && state.unit) return String(state.unit).toLowerCase().startsWith('f');
-      if(window.masterChart && masterChart.unit) return String(masterChart.unit).toLowerCase().startsWith('f');
-      if(window.S && S.unit) return String(S.unit).toLowerCase().startsWith('f');
-    }catch(e){}
-    return !!document.querySelector('[data-u="f"].active,[data-unit="f"].active');
-  }
-  function limits(){
-    return isF() ? {min:14,max:158} : {min:-10,max:70};
-  }
-  function clampAxis(){
-    if(!window.__axisState) window.__axisState={xMin:null,xMax:null,yMin:null,yMax:null};
-    const lim=limits();
-    const ids=['yMinManual','yMaxManual'];
-    let yMin=Number(document.getElementById('yMinManual')?.value);
-    let yMax=Number(document.getElementById('yMaxManual')?.value);
 
-    if(!Number.isFinite(yMin)) yMin=Number(window.__axisState.yMin);
-    if(!Number.isFinite(yMax)) yMax=Number(window.__axisState.yMax);
 
-    if(Number.isFinite(yMin)) yMin=Math.max(lim.min,Math.min(lim.max,yMin));
-    if(Number.isFinite(yMax)) yMax=Math.max(lim.min,Math.min(lim.max,yMax));
-
-    if(Number.isFinite(yMin) && Number.isFinite(yMax) && yMax<=yMin){
-      yMax=Math.min(lim.max,yMin+(isF()?2:1));
-      if(yMax<=yMin){yMin=lim.min;yMax=lim.max;}
-    }
-
-    if(Number.isFinite(yMin)) window.__axisState.yMin=yMin;
-    if(Number.isFinite(yMax)) window.__axisState.yMax=yMax;
-
-    const a=document.getElementById('yMinManual'), b=document.getElementById('yMaxManual');
-    if(a && Number.isFinite(yMin)) a.value=String(+yMin.toFixed(2));
-    if(b && Number.isFinite(yMax)) b.value=String(+yMax.toFixed(2));
-  }
-  function forceDefaultRangeOnAuto(){
-    const a=document.getElementById('yMinManual'), b=document.getElementById('yMaxManual');
-    const lim=limits();
-    if(a && b && (!a.value || !b.value)){
-      // keep auto chart free, but hard safety still applied by wrapper
-      if(!window.__axisState) window.__axisState={xMin:null,xMax:null,yMin:null,yMax:null};
-      if(window.__axisState.yMin!=null) window.__axisState.yMin=Math.max(lim.min,window.__axisState.yMin);
-      if(window.__axisState.yMax!=null) window.__axisState.yMax=Math.min(lim.max,window.__axisState.yMax);
-    }
-  }
-  function patchRender(){
-    ['render','renderAll','masterRender','fetchAll','loadAll'].forEach(name=>{
-      try{
-        const fn=window[name];
-        if(typeof fn==='function' && !fn.__tempClampWrapped){
-          const wrapped=function(){
-            clampAxis();
-            const r=fn.apply(this,arguments);
-            Promise.resolve(r).finally(()=>setTimeout(clampAxis,50));
-            return r;
-          };
-          wrapped.__tempClampWrapped=true;
-          window[name]=wrapped;
-        }
-      }catch(e){}
-    });
-  }
-  function patchButtons(){
-    document.querySelectorAll('[data-unit],[data-u],button').forEach(btn=>{
-      if(btn.dataset.tempRangeBound) return;
-      const text=(btn.textContent||'').trim();
-      if(btn.dataset.unit || btn.dataset.u || text==='°C' || text==='°F'){
-        btn.dataset.tempRangeBound='1';
-        btn.addEventListener('click',()=>setTimeout(()=>{
-          // When unit changes, reset manual Y to safe full range in that unit
-          const lim=limits();
-          const a=document.getElementById('yMinManual'), b=document.getElementById('yMaxManual');
-          if(a) a.value=lim.min;
-          if(b) b.value=lim.max;
-          if(!window.__axisState) window.__axisState={xMin:null,xMax:null,yMin:null,yMax:null};
-          window.__axisState.yMin=lim.min;
-          window.__axisState.yMax=lim.max;
-          try{
-            if(typeof window.masterRender==='function') window.masterRender();
-            else if(typeof window.renderAll==='function') window.renderAll();
-            else if(typeof window.render==='function') window.render();
-          }catch(e){}
-        },80));
-      }
-    });
-  }
-  function patchWheelZoomSafety(){
-    const c=document.getElementById('chart');
-    if(!c || c.dataset.tempRangeWheelClamp) return;
-    c.dataset.tempRangeWheelClamp='1';
-    c.addEventListener('wheel',()=>setTimeout(clampAxis,20),{passive:true});
-    c.addEventListener('mousemove',()=>setTimeout(clampAxis,20),{passive:true});
-  }
-  function addHint(){
-    if(document.getElementById('tempRangeHint')) return;
-    const el=document.createElement('div');
-    el.id='tempRangeHint';
-    el.style.cssText='font-family:ui-monospace,Consolas,monospace;color:#ffd433;font-size:12px;margin:6px 0;font-weight:900';
-    el.textContent='Temp axis locked: -10°C to 70°C / 14°F to 158°F. Zoom and pan cannot go outside this range.';
-    const chart=document.getElementById('chart');
-    if(chart && chart.parentElement) chart.parentElement.before(el);
-  }
-  function init(){
-    patchRender();
-    patchButtons();
-    patchWheelZoomSafety();
-    forceDefaultRangeOnAuto();
-    addHint();
-  }
-  window.addEventListener('load',init);
-  setInterval(init,1000);
-})();
-</script>
 
 
 <script id="full-label-aware-tooltip-final-fix">
@@ -997,29 +763,167 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
 </script>
 
 
-<script id="clean-big-ui-canvas-resize-patch">
+
+
+
+<script id="restore-zoom-drag-pan-range-final">
 (function(){
-  function resizeCanvas(){
-    const c=document.getElementById('chart');
-    if(!c) return;
-    const rect=c.getBoundingClientRect();
-    const dpr=Math.min(window.devicePixelRatio||1,2);
-    const w=Math.max(900,Math.round(rect.width*dpr));
-    const h=Math.max(520,Math.round(rect.height*dpr));
-    if(Math.abs(c.width-w)>10 || Math.abs(c.height-h)>10){
-      c.width=w;
-      c.height=h;
-      try{
-        if(typeof window.masterRender==='function') window.masterRender();
-        else if(typeof window.renderAll==='function') window.renderAll();
-        else if(typeof window.render==='function') window.render();
-        else if(typeof window.fetchAll==='function') window.fetchAll();
-      }catch(e){}
-    }
+  const $=id=>document.getElementById(id);
+  const N=v=>{const x=Number(v);return Number.isFinite(x)?x:null};
+  function isF(){
+    try{
+      if(window.state&&state.unit)return String(state.unit).toLowerCase().startsWith('f');
+      if(window.masterChart&&masterChart.unit)return String(masterChart.unit).toLowerCase().startsWith('f');
+      if(window.S&&S.unit)return String(S.unit).toLowerCase().startsWith('f');
+    }catch(e){}
+    return !!document.querySelector('[data-u="f"].active,[data-unit="f"].active');
   }
-  window.addEventListener('load',()=>setTimeout(resizeCanvas,400));
-  window.addEventListener('resize',()=>setTimeout(resizeCanvas,150));
-  setTimeout(resizeCanvas,1200);
+  function lim(){return isF()?{min:14,max:158}:{min:-10,max:70}}
+  function info(){
+    const c=$('chart');if(!c)return null;
+    const r=c.getBoundingClientRect();
+    return {c,r,W:c.width||1180,H:c.height||560,L:70,R:28,T:48,B:60};
+  }
+  function ax(){
+    if(!window.__axisState)window.__axisState={xMin:null,xMax:null,yMin:null,yMax:null};
+    return window.__axisState;
+  }
+  function read(){
+    const a=ax();
+    let xMin=N($('xMinManual')?.value)??N(a.xMin);
+    let xMax=N($('xMaxManual')?.value)??N(a.xMax);
+    let yMin=N($('yMinManual')?.value)??N(a.yMin);
+    let yMax=N($('yMaxManual')?.value)??N(a.yMax);
+    if(!(xMin!=null&&xMax!=null&&xMax>xMin)){
+      if(document.querySelector('[data-x="peak"].active,[data-xrange="peak"].active')){xMin=9;xMax=18}else{xMin=0;xMax=24}
+    }
+    const L=lim();
+    if(!(yMin!=null&&yMax!=null&&yMax>yMin)){yMin=L.min;yMax=L.max}
+    yMin=Math.max(L.min,Math.min(L.max,yMin));
+    yMax=Math.max(L.min,Math.min(L.max,yMax));
+    if(yMax<=yMin){yMin=L.min;yMax=L.max}
+    return {xMin,xMax,yMin,yMax};
+  }
+  function write(r){
+    const L=lim();
+    if(r.xMin<0){r.xMax-=r.xMin;r.xMin=0}
+    if(r.xMax>24){r.xMin-=r.xMax-24;r.xMax=24}
+    r.xMin=Math.max(0,r.xMin);r.xMax=Math.min(24,r.xMax);
+    if(r.xMax-r.xMin<0.2){const m=(r.xMin+r.xMax)/2;r.xMin=m-.1;r.xMax=m+.1}
+    r.yMin=Math.max(L.min,Math.min(L.max,r.yMin));
+    r.yMax=Math.max(L.min,Math.min(L.max,r.yMax));
+    if(r.yMax<=r.yMin){r.yMin=L.min;r.yMax=L.max}
+    Object.assign(ax(),r);
+    const map={xMin:'xMinManual',xMax:'xMaxManual',yMin:'yMinManual',yMax:'yMaxManual'};
+    Object.entries(map).forEach(([k,id])=>{const el=$(id);if(el)el.value=Number(r[k]).toFixed(2).replace(/\.?0+$/,'')});
+  }
+  function render(){
+    try{
+      if(typeof window.masterRender==='function')window.masterRender();
+      else if(typeof window.renderAll==='function')window.renderAll();
+      else if(typeof window.render==='function')window.render();
+      else if(typeof window.fetchAll==='function')window.fetchAll();
+    }catch(e){console.warn('render failed',e)}
+  }
+  function zoom(kind,dir,anchorX=.5,anchorY=.5){
+    const r=read();
+    const factor=dir==='in'?0.82:1.22;
+    if(kind==='x'||kind==='both'){
+      const cur=r.xMin+anchorX*(r.xMax-r.xMin);
+      const span=(r.xMax-r.xMin)*factor;
+      r.xMin=cur-(cur-r.xMin)*factor;
+      r.xMax=r.xMin+span;
+    }
+    if(kind==='y'||kind==='both'){
+      const cur=r.yMax-anchorY*(r.yMax-r.yMin);
+      const span=(r.yMax-r.yMin)*factor;
+      r.yMin=cur-(cur-r.yMin)*factor;
+      r.yMax=r.yMin+span;
+    }
+    write(r);render();
+  }
+  function pan(dxFrac,dyFrac=0){
+    const r=read();
+    const xs=(r.xMax-r.xMin)*dxFrac, ys=(r.yMax-r.yMin)*dyFrac;
+    r.xMin+=xs;r.xMax+=xs;
+    r.yMin+=ys;r.yMax+=ys;
+    write(r);render();
+  }
+  function reset(){
+    ['xMinManual','xMaxManual','yMinManual','yMaxManual'].forEach(id=>{const e=$(id);if(e)e.value=''});
+    window.__axisState={xMin:null,xMax:null,yMin:null,yMax:null};
+    render();
+  }
+  let drag=null,last=0;
+  function bind(){
+    const c=$('chart');
+    if(c&&!c.dataset.restoreControlsBound){
+      c.dataset.restoreControlsBound='1';
+      c.addEventListener('wheel',e=>{
+        const inf=info();if(!inf)return;
+        const px=(e.clientX-inf.r.left)/inf.r.width*inf.W;
+        const py=(e.clientY-inf.r.top)/inf.r.height*inf.H;
+        if(px<inf.L||px>inf.W-inf.R||py<inf.T||py>inf.H-inf.B)return;
+        e.preventDefault();
+        const axx=(px-inf.L)/(inf.W-inf.L-inf.R);
+        const ayy=(py-inf.T)/(inf.H-inf.T-inf.B);
+        const dir=e.deltaY<0?'in':'out';
+        const kind=e.shiftKey?'y':(e.altKey?'x':'both');
+        zoom(kind,dir,axx,ayy);
+      },{passive:false});
+      c.addEventListener('mousedown',e=>{
+        const inf=info();if(!inf)return;
+        const px=(e.clientX-inf.r.left)/inf.r.width*inf.W;
+        const py=(e.clientY-inf.r.top)/inf.r.height*inf.H;
+        let mode='both';
+        if(px<inf.L+35)mode='y';
+        else if(py>inf.H-inf.B-25)mode='x';
+        drag={mode,x:e.clientX,y:e.clientY};
+        c.classList.add('dragging');
+        e.preventDefault();
+      });
+      window.addEventListener('mouseup',()=>{drag=null;c.classList.remove('dragging')});
+      window.addEventListener('mousemove',e=>{
+        if(!drag)return;
+        const now=Date.now(); if(now-last<16)return; last=now;
+        const inf=info();if(!inf)return;
+        const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
+        drag.x=e.clientX;drag.y=e.clientY;
+        const r=read();
+        const xShift=-(dx/(inf.W-inf.L-inf.R))*(r.xMax-r.xMin);
+        const yShift=(dy/(inf.H-inf.T-inf.B))*(r.yMax-r.yMin);
+        if(drag.mode==='both'||drag.mode==='x'){r.xMin+=xShift;r.xMax+=xShift}
+        if(drag.mode==='both'||drag.mode==='y'){r.yMin+=yShift;r.yMax+=yShift}
+        write(r);render();
+      });
+      c.addEventListener('dblclick',reset);
+      let lastDist=null;
+      c.addEventListener('touchstart',e=>{
+        if(e.touches.length===2){e.preventDefault();const dx=e.touches[0].clientX-e.touches[1].clientX,dy=e.touches[0].clientY-e.touches[1].clientY;lastDist=Math.hypot(dx,dy)}
+      },{passive:false});
+      c.addEventListener('touchmove',e=>{
+        if(e.touches.length===2&&lastDist){e.preventDefault();const dx=e.touches[0].clientX-e.touches[1].clientX,dy=e.touches[0].clientY-e.touches[1].clientY;const d=Math.hypot(dx,dy);zoom('both',d>lastDist?'in':'out');lastDist=d}
+      },{passive:false});
+      c.addEventListener('touchend',()=>{lastDist=null});
+    }
+    const map={
+      zoomInBoth:()=>zoom('both','in'),zoomOutBoth:()=>zoom('both','out'),
+      zoomInY:()=>zoom('y','in'),zoomOutY:()=>zoom('y','out'),
+      zoomInX:()=>zoom('x','in'),zoomOutX:()=>zoom('x','out'),
+      panLeft:()=>pan(-.25,0),panRight:()=>pan(.25,0),resetZoom2D:reset
+    };
+    Object.entries(map).forEach(([id,fn])=>{const b=$(id);if(b&&!b.dataset.restoreControlsBound){b.dataset.restoreControlsBound='1';b.onclick=fn}});
+    // Unit switch keeps axis in locked range
+    document.querySelectorAll('[data-unit],[data-u],button').forEach(btn=>{
+      const t=(btn.textContent||'').trim();
+      if((btn.dataset.unit||btn.dataset.u||t==='°C'||t==='°F')&&!btn.dataset.rangeUnitBound){
+        btn.dataset.rangeUnitBound='1';
+        btn.addEventListener('click',()=>setTimeout(()=>{const L=lim();const r=read();r.yMin=Math.max(L.min,r.yMin);r.yMax=Math.min(L.max,r.yMax);if(r.yMax<=r.yMin){r.yMin=L.min;r.yMax=L.max}write(r);render();},120));
+      }
+    });
+  }
+  window.addEventListener('load',bind);
+  setInterval(bind,1000);
 })();
 </script>
 
