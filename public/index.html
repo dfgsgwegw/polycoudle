@@ -145,6 +145,27 @@
 #tooltip .ttMetar{color:#20f59a}
 #tooltip .ttFc{color:#dbeafe}
 
+
+/* ===== FULL LABEL-AWARE TOOLTIP FINAL FIX ===== */
+#tooltip{
+  font-size:17px!important;
+  line-height:1.48!important;
+  min-width:370px!important;
+  max-width:600px!important;
+  padding:16px 18px!important;
+  border:2px solid #00d4ff!important;
+  border-radius:16px!important;
+  background:#020b13!important;
+  box-shadow:0 16px 44px rgba(0,0,0,.72)!important;
+  z-index:999999!important;
+}
+#tooltip .ttTitle{font-size:22px!important;font-weight:1000;margin-bottom:8px;color:#00d4ff}
+#tooltip .ttLine{margin:4px 0}
+#tooltip .ttName{font-size:20px;font-weight:1000;margin-bottom:8px}
+#tooltip .ttRed{color:#ef4444}.ttGreen{color:#10b981}.ttBlue{color:#60a5fa}.ttCyan{color:#06b6d4}.ttPurple{color:#a855f7}.ttBlack{color:#fff}.ttGrey{color:#94a3b8}
+#tooltip b{color:#fff;font-weight:1000}
+.tooltipHintLine{font-size:12px;color:#ffd433;font-weight:900;margin-top:4px}
+
 </style></head><body>
 <div class="wrap">
   <div class="header"><div><h1>VILK <span class="cyan">Live Signal</span></h1><div class="sub">● UI refresh 30 sec · cron save 1 min · Lucknow Airport (VILK) · D1 archive</div></div><div><button class="btn" id="refreshBtn">↻ Refresh Now</button><div class="updated" id="updated">Updated --</div></div></div>
@@ -323,224 +344,7 @@ window.addEventListener('mousemove',e=>{if(!__drag||!state.chartGeom)return;cons
 $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)return;const g=state.chartGeom;const rect=$('chart').getBoundingClientRect();if(e.shiftKey){let y0=g.yMin,y1=g.yMax,center=y0+(1-(e.clientY-rect.top-g.T)/(g.ph||1))*(y1-y0);let factor=e.deltaY>0?1.2:0.82;let span=(y1-y0)*factor;const ymin=$('yMinManual'),ymax=$('yMaxManual');if(ymin&&ymax){ymin.value=(center-span/2).toFixed(state.unit==='f'?1:2);ymax.value=(center+span/2).toFixed(state.unit==='f'?1:2)}}else{let x0=g.xMin,x1=g.xMax,cursor=x0+(e.clientX-rect.left-g.L)/(g.pw||1)*(x1-x0);let factor=e.deltaY>0?1.18:0.84;let a=cursor-(cursor-x0)*factor,b=a+(x1-x0)*factor;if(a<0){b-=a;a=0}if(b>24){a-=b-24;b=24}state.custom=[Math.max(0,a),Math.min(24,b)];document.querySelectorAll('[data-x]').forEach(x=>x.classList.remove('active'));}render();},{passive:false});$('refreshBtn').onclick=loadAll;loadAll();setInterval(loadAll,30000);
 </script>
 
-<script id="final-yzoom-tooltip-ampm-fix">
-(function(){
-  const $ = id => document.getElementById(id);
-  const N = v => { const x=Number(v); return Number.isFinite(x)?x:null; };
-  const cToF = c => N(c)==null ? null : N(c)*9/5+32;
-  const fToC = f => N(f)==null ? null : (N(f)-32)*5/9;
-  const fmt = v => { const x=N(v); if(x==null) return '—'; return x.toFixed(3).replace(/\.?0+$/,''); };
-  function fmtAMPM(h){
-    if(N(h)==null) return '—';
-    let hh=Math.floor(h), mm=Math.round((h-hh)*60);
-    if(mm===60){hh++;mm=0;}
-    const ap = hh>=12 ? 'PM' : 'AM';
-    const h12 = hh%12 || 12;
-    return `${h12}:${String(mm).padStart(2,'0')} ${ap}`;
-  }
-  function parseHour(s){
-    s=String(s||'').trim();
-    let m=s.match(/T(\d{1,2}):(\d{2})/) || s.match(/\b(\d{1,2}):(\d{2})(?::\d{2})?\b/);
-    if(!m) return null;
-    let h=+m[1], mi=+m[2], lo=s.toLowerCase();
-    if((lo.includes('pm') || /\bp\b/.test(lo)) && h<12) h+=12;
-    if((lo.includes('am') || /\ba\b/.test(lo)) && h===12) h=0;
-    return h + mi/60;
-  }
-  function getUnit(){
-    try{
-      if(window.state && state.unit) return String(state.unit).toLowerCase().startsWith('f') ? 'f':'c';
-      if(window.masterChart && masterChart.unit) return String(masterChart.unit).toLowerCase().startsWith('f') ? 'f':'c';
-      if(window.S && S.unit) return String(S.unit).toLowerCase().startsWith('f') ? 'f':'c';
-    }catch(e){}
-    return document.querySelector('[data-u="f"].active,[data-unit="f"].active') ? 'f':'c';
-  }
-  function getChartRect(){
-    const c=$('chart');
-    if(!c) return null;
-    const rect=c.getBoundingClientRect();
-    // Based on canvas draw layout used in all current versions
-    return {canvas:c, rect, L:70, R:28, T:48, B:60, W:c.width||1180, H:c.height||560};
-  }
-  function getAxis(){
-    if(!window.__axisState) window.__axisState={xMin:null,xMax:null,yMin:null,yMax:null};
-    return window.__axisState;
-  }
-  function rerender(){
-    try{
-      if(typeof window.masterRender==='function') window.masterRender();
-      else if(typeof window.render==='function') window.render();
-      else if(typeof window.renderAll==='function') window.renderAll();
-    }catch(e){}
-  }
-  function currentRange(){
-    const ax=getAxis();
-    let xMin=N(ax.xMin), xMax=N(ax.xMax), yMin=N(ax.yMin), yMax=N(ax.yMax);
-    // Try read manual inputs
-    xMin = N($('xMinManual')?.value) ?? xMin;
-    xMax = N($('xMaxManual')?.value) ?? xMax;
-    yMin = N($('yMinManual')?.value) ?? yMin;
-    yMax = N($('yMaxManual')?.value) ?? yMax;
-    if(!(xMin!=null && xMax!=null && xMax>xMin)){
-      if(document.querySelector('[data-x="peak"].active')){xMin=9;xMax=18;}
-      else{xMin=0;xMax=24;}
-    }
-    if(!(yMin!=null && yMax!=null && yMax>yMin)){
-      // fallback sane current visible temp range
-      const unit=getUnit();
-      yMin = unit==='f' ? 70 : 20;
-      yMax = unit==='f' ? 105 : 42;
-    }
-    return {xMin,xMax,yMin,yMax};
-  }
-  function setManualAxis(r){
-    const ax=getAxis();
-    ax.xMin=r.xMin; ax.xMax=r.xMax; ax.yMin=r.yMin; ax.yMax=r.yMax;
-    const ids={xMin:'xMinManual',xMax:'xMaxManual',yMin:'yMinManual',yMax:'yMaxManual'};
-    Object.entries(ids).forEach(([k,id])=>{const el=$(id); if(el && r[k]!=null) el.value=Number(r[k]).toFixed(k.startsWith('y')?2:2).replace(/\.?0+$/,'');});
-  }
 
-  // Strong AM/PM patch for canvas axis labels: replace common formatter if present
-  try{ window.fmtTime = fmtAMPM; }catch(e){}
-  try{ window.fmtTime24 = fmtAMPM; }catch(e){}
-
-  function collectPoints(){
-    const pts=[];
-    const data = window.__lastMasterData || window.S?.data || {};
-    const hist = data.hist || window.__goodHist || window.goodHist || {};
-    function addWU(x){
-      const h=parseHour(x.saved_at||x.obs_time||x.fetched_at||x.slot);
-      if(h==null) return;
-      pts.push({h,type:'WU',raw:x,c:N(x.temp_c),f:N(x.temp_f),y:getUnit()==='f'?(N(x.temp_f)??cToF(x.temp_c)):(N(x.temp_c)??fToC(x.temp_f))});
-    }
-    Object.values(hist.wu_obs_rows||{}).forEach(list=>(Array.isArray(list)?list:[]).forEach(addWU));
-    (hist.metar_rows||[]).forEach(x=>{
-      const h=parseHour(x.slot||x.valid_ist||x.fetched_at);
-      if(h==null) return;
-      pts.push({h,type:'METAR',raw:x,c:N(x.temp_c),f:cToF(x.temp_c),y:getUnit()==='f'?cToF(x.temp_c):N(x.temp_c)});
-    });
-    // if no cached hist visible, try from table rows? no-op.
-    return pts.filter(p=>p.y!=null);
-  }
-  function nearestPoint(hour,temp){
-    const pts=collectPoints();
-    if(!pts.length) return null;
-    let best=null, bd=Infinity;
-    for(const p of pts){
-      const d=Math.abs(p.h-hour)*2 + Math.abs((p.y??0)-temp)*0.25;
-      if(d<bd){bd=d;best=p;}
-    }
-    return bd<2.0 ? best : null;
-  }
-  function showTooltip(e){
-    const info=getChartRect(), tip=$('tooltip');
-    if(!info || !tip) return;
-    const {canvas,rect,L,R,T,B,W,H}=info;
-    const rr=currentRange();
-    const px=(e.clientX-rect.left)/rect.width*W;
-    const py=(e.clientY-rect.top)/rect.height*H;
-    const plotW=W-L-R, plotH=H-T-B;
-    if(px<L || px>W-R || py<T || py>H-B){ tip.style.display='none'; return; }
-    const hour=rr.xMin + (px-L)/plotW*(rr.xMax-rr.xMin);
-    const temp=rr.yMax - (py-T)/plotH*(rr.yMax-rr.yMin);
-    const near=nearestPoint(hour,temp);
-    const unit=getUnit().toUpperCase();
-    let html=`<div class="ttTitle">${fmtAMPM(hour)} · ${fmt(temp)}°${unit}</div>`;
-    if(near){
-      if(near.type==='WU'){
-        html += `<div class="ttLine ttRaw"><b>WU observation</b></div>
-        <div class="ttLine">Time: <b>${fmtAMPM(near.h)}</b></div>
-        <div class="ttLine">Raw F: <b>${fmt(near.f)}°F</b></div>
-        <div class="ttLine">Raw C: <b>${fmt(near.c)}°C</b></div>
-        <div class="ttLine">Converted C from F: <b>${fmt(fToC(near.f))}°C</b></div>
-        <div class="ttLine">Converted F from C: <b>${fmt(cToF(near.c))}°F</b></div>
-        ${near.raw?.humidity!=null?`<div class="ttLine">Humidity: <b>${near.raw.humidity}%</b></div>`:''}
-        ${near.raw?.condition?`<div class="ttLine">Condition: <b>${near.raw.condition}</b></div>`:''}`;
-      }else{
-        html += `<div class="ttLine ttMetar"><b>METAR official</b></div>
-        <div class="ttLine">Time: <b>${fmtAMPM(near.h)}</b></div>
-        <div class="ttLine">Raw C: <b>${fmt(near.c)}°C</b></div>
-        <div class="ttLine">Converted F: <b>${fmt(near.f)}°F</b></div>
-        ${near.raw?.raw_metar?`<div class="ttLine">Raw METAR: <b>${String(near.raw.raw_metar).slice(0,90)}</b></div>`:''}`;
-      }
-    }else{
-      html += `<div class="ttLine muted">Move near a dot/line for exact reading.</div>`;
-    }
-    tip.innerHTML=html;
-    tip.style.display='block';
-    let left=e.clientX+18, top=e.clientY+18;
-    if(left+460>window.innerWidth) left=e.clientX-480;
-    if(top+220>window.innerHeight) top=e.clientY-240;
-    tip.style.left=Math.max(8,left)+'px';
-    tip.style.top=Math.max(8,top)+'px';
-  }
-
-  function bindFinalUX(){
-    const c=$('chart');
-    if(!c || c.dataset.finalUxBound) return;
-    c.dataset.finalUxBound='1';
-
-    c.addEventListener('mousemove', showTooltip);
-    c.addEventListener('mouseleave',()=>{const t=$('tooltip'); if(t)t.style.display='none';});
-
-    c.addEventListener('wheel', e=>{
-      const info=getChartRect();
-      if(!info) return;
-      const {rect,L,W,T,H,B}=info;
-      const px=(e.clientX-rect.left)/rect.width*W;
-      const onYAxis = px < L + 26; // left axis/labels area
-      const rr=currentRange();
-      const factor=e.deltaY>0 ? 1.18 : 0.84;
-
-      if(e.shiftKey || onYAxis){
-        e.preventDefault();
-        const py=(e.clientY-rect.top)/rect.height*H;
-        const plotH=H-T-B;
-        let center;
-        if(py>=T && py<=H-B) center = rr.yMax - (py-T)/plotH*(rr.yMax-rr.yMin);
-        else center=(rr.yMin+rr.yMax)/2;
-        const span=(rr.yMax-rr.yMin)*factor;
-        rr.yMin=center-(center-rr.yMin)*factor;
-        rr.yMax=rr.yMin+span;
-        if(rr.yMax<=rr.yMin){rr.yMax=rr.yMin+1;}
-        setManualAxis(rr);
-        rerender();
-      }
-      // else leave existing x zoom behavior alone
-    }, {passive:false});
-  }
-
-  // Patch text format in table rows after render: " 9:22p " -> "9:22 PM"
-  function fixAMPMText(root=document.body){
-    const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);
-    const nodes=[];
-    while(walker.nextNode()) nodes.push(walker.currentNode);
-    for(const node of nodes){
-      let s=node.nodeValue;
-      const ns=s.replace(/\b(\d{1,2}):(\d{2})([ap])\b/gi,(m,h,mi,ap)=>`${Number(h)}:${mi} ${ap.toLowerCase()==='p'?'PM':'AM'}`);
-      if(ns!==s) node.nodeValue=ns;
-    }
-  }
-  const oldSetTimeout=window.setTimeout;
-  function afterRender(){bindFinalUX(); setTimeout(()=>fixAMPMText(),80);}
-  window.addEventListener('load',()=>{bindFinalUX();afterRender();});
-  setInterval(()=>{bindFinalUX();fixAMPMText();},1500);
-
-  // Wrap known render functions so labels/tooltips update after every redraw.
-  setTimeout(()=>{
-    ['render','masterRender','renderAll','fetchAll','loadAll'].forEach(name=>{
-      try{
-        const fn=window[name];
-        if(typeof fn==='function' && !fn.__finalUxWrapped){
-          const wrapped=function(){ const r=fn.apply(this,arguments); Promise.resolve(r).finally(afterRender); return r; };
-          wrapped.__finalUxWrapped=true;
-          window[name]=wrapped;
-        }
-      }catch(e){}
-    });
-  },500);
-})();
-</script>
 
 
 <script id="final-2d-zoom-mobile-fix">
@@ -568,7 +372,7 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
     }
     if(!(yMin!=null&&yMax!=null&&yMax>yMin)){
       const isF=document.querySelector('[data-u="f"].active,[data-unit="f"].active');
-      yMin=isF?70:20; yMax=isF?105:42;
+      yMin=isF?14:-10; yMax=isF?158:70;
     }
     return {xMin,xMax,yMin,yMax};
   }
@@ -683,198 +487,131 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
 
 
 
-<script id="final-pan-drag-snap-tooltip-fix">
-(function(){
-  const $=id=>document.getElementById(id);
-  const N=v=>{const x=Number(v);return Number.isFinite(x)?x:null};
-  const cToF=c=>N(c)==null?null:N(c)*9/5+32;
-  const fToC=f=>N(f)==null?null:(N(f)-32)*5/9;
-  const fmt=v=>{const x=N(v);if(x==null)return '—';return x.toFixed(3).replace(/\.?0+$/,'')};
-  function fmtAMPM(h){
-    if(N(h)==null)return '—';
-    let hh=Math.floor(h), mm=Math.round((h-hh)*60);
-    if(mm===60){hh++;mm=0;}
-    const ap=hh>=12?'PM':'AM';
-    return `${hh%12||12}:${String(mm).padStart(2,'0')} ${ap}`;
-  }
-  function parseHour(s){
-    s=String(s||'').trim();
-    let m=s.match(/T(\d{1,2}):(\d{2})/)||s.match(/\b(\d{1,2}):(\d{2})(?::\d{2})?\b/);
-    if(!m)return null;
-    let h=+m[1], mi=+m[2], lo=s.toLowerCase();
-    if((lo.includes('pm')||/\bp\b/.test(lo))&&h<12)h+=12;
-    if((lo.includes('am')||/\ba\b/.test(lo))&&h===12)h=0;
-    return h+mi/60;
-  }
-  function getUnit(){
-    try{
-      if(window.state?.unit)return String(state.unit).toLowerCase().startsWith('f')?'f':'c';
-      if(window.masterChart?.unit)return String(masterChart.unit).toLowerCase().startsWith('f')?'f':'c';
-      if(window.S?.unit)return String(S.unit).toLowerCase().startsWith('f')?'f':'c';
-    }catch(e){}
-    return document.querySelector('[data-u="f"].active,[data-unit="f"].active')?'f':'c';
-  }
-  function info(){
-    const c=$('chart'); if(!c)return null;
-    const r=c.getBoundingClientRect();
-    return {c,r,W:c.width||1180,H:c.height||560,L:70,R:28,T:48,B:60};
-  }
-  function axis(){
-    if(!window.__axisState)window.__axisState={xMin:null,xMax:null,yMin:null,yMax:null};
-    return window.__axisState;
-  }
-  function readRange(){
-    const ax=axis();
-    let xMin=N($('xMinManual')?.value)??N(ax.xMin);
-    let xMax=N($('xMaxManual')?.value)??N(ax.xMax);
-    let yMin=N($('yMinManual')?.value)??N(ax.yMin);
-    let yMax=N($('yMaxManual')?.value)??N(ax.yMax);
-    if(!(xMin!=null&&xMax!=null&&xMax>xMin)){
-      if(document.querySelector('[data-x="peak"].active,[data-xrange="peak"].active')){xMin=9;xMax=18}
-      else{xMin=0;xMax=24}
-    }
-    if(!(yMin!=null&&yMax!=null&&yMax>yMin)){
-      // try infer visible from cached points
-      const pts=collectPoints();
-      const vals=pts.map(p=>p.y).filter(v=>N(v)!=null);
-      if(vals.length){yMin=Math.min(...vals)-1.2;yMax=Math.max(...vals)+1.2}
-      else{const f=getUnit()==='f';yMin=f?70:20;yMax=f?105:42}
-    }
-    return {xMin,xMax,yMin,yMax};
-  }
-  function writeRange(r){
-    if(r.xMin<0){r.xMax-=r.xMin;r.xMin=0}
-    if(r.xMax>24){r.xMin-=r.xMax-24;r.xMax=24}
-    if(r.xMin<0)r.xMin=0;if(r.xMax>24)r.xMax=24;
-    const ax=axis();Object.assign(ax,r);
-    const map={xMin:'xMinManual',xMax:'xMaxManual',yMin:'yMinManual',yMax:'yMaxManual'};
-    Object.entries(map).forEach(([k,id])=>{const el=$(id);if(el)el.value=Number(r[k]).toFixed(2).replace(/\.?0+$/,'')});
-  }
-  function rerender(){
-    try{
-      if(typeof window.masterRender==='function')window.masterRender();
-      else if(typeof window.renderAll==='function')window.renderAll();
-      else if(typeof window.render==='function')window.render();
-      else if(typeof window.fetchAll==='function')window.fetchAll();
-    }catch(e){console.warn(e)}
-  }
-  function collectPoints(){
-    const pts=[], unit=getUnit();
-    const hist=(window.__lastMasterData&&window.__lastMasterData.hist)||window.__goodHist||window.goodHist||(window.S&&window.S.data&&window.S.data.hist)||{};
-    function addWU(x){
-      const h=parseHour(x.saved_at||x.obs_time||x.fetched_at||x.slot);
-      const c=N(x.temp_c), f=N(x.temp_f);
-      const y=unit==='f'?(f??cToF(c)):(c??fToC(f));
-      if(h!=null&&y!=null)pts.push({h,y,c,f,type:'WU',raw:x});
-    }
-    Object.values(hist.wu_obs_rows||{}).forEach(list=>(Array.isArray(list)?list:[]).forEach(addWU));
-    (hist.metar_rows||[]).forEach(x=>{
-      const h=parseHour(x.slot||x.valid_ist||x.fetched_at);
-      const c=N(x.temp_c), f=cToF(c), y=unit==='f'?f:c;
-      if(h!=null&&y!=null)pts.push({h,y,c,f,type:'METAR',raw:x});
-    });
-    return pts;
-  }
-  function screenForPoint(p,rr,inf){
-    const plotW=inf.W-inf.L-inf.R, plotH=inf.H-inf.T-inf.B;
-    return {
-      x:inf.L+(p.h-rr.xMin)/(rr.xMax-rr.xMin)*plotW,
-      y:inf.T+(rr.yMax-p.y)/(rr.yMax-rr.yMin)*plotH
-    };
-  }
-  function nearestByPixel(px,py){
-    const inf=info(); if(!inf)return null;
-    const rr=readRange(), pts=collectPoints();
-    let best=null,bd=999999;
-    for(const p of pts){
-      if(p.h<rr.xMin||p.h>rr.xMax)continue;
-      const s=screenForPoint(p,rr,inf);
-      const d=Math.hypot(s.x-px,s.y-py);
-      if(d<bd){bd=d;best=p}
-    }
-    return bd<55?best:null; // easier snap
-  }
-  function tooltip(e){
-    const inf=info(), tip=$('tooltip'); if(!inf||!tip)return;
-    const px=(e.clientX-inf.r.left)/inf.r.width*inf.W;
-    const py=(e.clientY-inf.r.top)/inf.r.height*inf.H;
-    const rr=readRange();
-    if(px<inf.L||px>inf.W-inf.R||py<inf.T||py>inf.H-inf.B){tip.style.display='none';return}
-    const plotW=inf.W-inf.L-inf.R, plotH=inf.H-inf.T-inf.B;
-    const hour=rr.xMin+(px-inf.L)/plotW*(rr.xMax-rr.xMin);
-    const temp=rr.yMax-(py-inf.T)/plotH*(rr.yMax-rr.yMin);
-    const p=nearestByPixel(px,py);
-    let html=`<div class="ttTitle">${fmtAMPM(hour)} · ${fmt(temp)}°${getUnit().toUpperCase()}</div>`;
-    if(p){
-      if(p.type==='WU'){
-        html+=`<div class="ttLine ttRaw"><b>WU observation</b></div>
-        <div class="ttLine">Time: <b>${fmtAMPM(p.h)}</b></div>
-        <div class="ttLine">Raw Fahrenheit: <b>${fmt(p.f)}°F</b></div>
-        <div class="ttLine">Raw Celsius: <b>${fmt(p.c)}°C</b></div>
-        <div class="ttLine">Converted C from F: <b>${fmt(fToC(p.f))}°C</b></div>
-        <div class="ttLine">Converted F from C: <b>${fmt(cToF(p.c))}°F</b></div>
-        ${p.raw?.humidity!=null?`<div class="ttLine">Humidity: <b>${p.raw.humidity}%</b></div>`:''}
-        ${p.raw?.condition?`<div class="ttLine">Condition: <b>${p.raw.condition}</b></div>`:''}`;
-      }else{
-        html+=`<div class="ttLine ttMetar"><b>METAR official</b></div>
-        <div class="ttLine">Time: <b>${fmtAMPM(p.h)}</b></div>
-        <div class="ttLine">Raw Celsius: <b>${fmt(p.c)}°C</b></div>
-        <div class="ttLine">Converted Fahrenheit: <b>${fmt(p.f)}°F</b></div>`;
-      }
-    }else{
-      html+=`<div class="ttLine" style="color:#9bd4ff">Move closer to a dot/line for exact reading.</div>`;
-    }
-    tip.innerHTML=html;tip.style.display='block';
-    let l=e.clientX+18,t=e.clientY+18;
-    if(l+520>innerWidth)l=e.clientX-540;if(t+260>innerHeight)t=e.clientY-280;
-    tip.style.left=Math.max(8,l)+'px';tip.style.top=Math.max(8,t)+'px';
-  }
 
-  let drag=null,lastMove=0;
-  function bind(){
-    const c=$('chart'); if(!c||c.dataset.panDragSnapBound)return;
-    c.dataset.panDragSnapBound='1';
-    c.addEventListener('mousemove',e=>{
-      tooltip(e);
-      if(!drag)return;
-      const inf=info(); if(!inf)return;
-      const now=Date.now(); if(now-lastMove<16)return; lastMove=now;
-      const dx=e.clientX-drag.x, dy=e.clientY-drag.y;
-      drag.x=e.clientX; drag.y=e.clientY;
-      const rr=readRange();
-      const plotW=inf.W-inf.L-inf.R, plotH=inf.H-inf.T-inf.B;
-      const xShift=-(dx/plotW)*(rr.xMax-rr.xMin);
-      const yShift=(dy/plotH)*(rr.yMax-rr.yMin); // drag down => chart data moves down
-      if(drag.mode==='body'||drag.mode==='x') {rr.xMin+=xShift;rr.xMax+=xShift;}
-      if(drag.mode==='body'||drag.mode==='y') {rr.yMin+=yShift;rr.yMax+=yShift;}
-      writeRange(rr);rerender();
-    });
-    c.addEventListener('mousedown',e=>{
-      const inf=info(); if(!inf)return;
-      const px=(e.clientX-inf.r.left)/inf.r.width*inf.W;
-      const py=(e.clientY-inf.r.top)/inf.r.height*inf.H;
-      let mode='body';
-      if(px<inf.L+30)mode='y';       // left Y-axis drag = move Y only
-      else if(py>inf.H-inf.B-20)mode='x'; // bottom X-axis drag = move X only
-      drag={mode,x:e.clientX,y:e.clientY};
-      c.classList.add('dragging');
-      e.preventDefault();
-    });
-    window.addEventListener('mouseup',()=>{drag=null;c.classList.remove('dragging')});
-    c.addEventListener('mouseleave',()=>{const t=$('tooltip');if(t)t.style.display='none'});
-    c.addEventListener('dblclick',()=>{
-      ['xMinManual','xMaxManual','yMinManual','yMaxManual'].forEach(id=>{const el=$(id);if(el)el.value=''});
-      window.__axisState={xMin:null,xMax:null,yMin:null,yMax:null};
-      rerender();
+
+
+
+
+
+<script id="fixed-temp-axis-range-patch">
+(function(){
+  function isF(){
+    try{
+      if(window.state && state.unit) return String(state.unit).toLowerCase().startsWith('f');
+      if(window.masterChart && masterChart.unit) return String(masterChart.unit).toLowerCase().startsWith('f');
+      if(window.S && S.unit) return String(S.unit).toLowerCase().startsWith('f');
+    }catch(e){}
+    return !!document.querySelector('[data-u="f"].active,[data-unit="f"].active');
+  }
+  function limits(){
+    return isF() ? {min:14,max:158} : {min:-10,max:70};
+  }
+  function clampAxis(){
+    if(!window.__axisState) window.__axisState={xMin:null,xMax:null,yMin:null,yMax:null};
+    const lim=limits();
+    const ids=['yMinManual','yMaxManual'];
+    let yMin=Number(document.getElementById('yMinManual')?.value);
+    let yMax=Number(document.getElementById('yMaxManual')?.value);
+
+    if(!Number.isFinite(yMin)) yMin=Number(window.__axisState.yMin);
+    if(!Number.isFinite(yMax)) yMax=Number(window.__axisState.yMax);
+
+    if(Number.isFinite(yMin)) yMin=Math.max(lim.min,Math.min(lim.max,yMin));
+    if(Number.isFinite(yMax)) yMax=Math.max(lim.min,Math.min(lim.max,yMax));
+
+    if(Number.isFinite(yMin) && Number.isFinite(yMax) && yMax<=yMin){
+      yMax=Math.min(lim.max,yMin+(isF()?2:1));
+      if(yMax<=yMin){yMin=lim.min;yMax=lim.max;}
+    }
+
+    if(Number.isFinite(yMin)) window.__axisState.yMin=yMin;
+    if(Number.isFinite(yMax)) window.__axisState.yMax=yMax;
+
+    const a=document.getElementById('yMinManual'), b=document.getElementById('yMaxManual');
+    if(a && Number.isFinite(yMin)) a.value=String(+yMin.toFixed(2));
+    if(b && Number.isFinite(yMax)) b.value=String(+yMax.toFixed(2));
+  }
+  function forceDefaultRangeOnAuto(){
+    const a=document.getElementById('yMinManual'), b=document.getElementById('yMaxManual');
+    const lim=limits();
+    if(a && b && (!a.value || !b.value)){
+      // keep auto chart free, but hard safety still applied by wrapper
+      if(!window.__axisState) window.__axisState={xMin:null,xMax:null,yMin:null,yMax:null};
+      if(window.__axisState.yMin!=null) window.__axisState.yMin=Math.max(lim.min,window.__axisState.yMin);
+      if(window.__axisState.yMax!=null) window.__axisState.yMax=Math.min(lim.max,window.__axisState.yMax);
+    }
+  }
+  function patchRender(){
+    ['render','renderAll','masterRender','fetchAll','loadAll'].forEach(name=>{
+      try{
+        const fn=window[name];
+        if(typeof fn==='function' && !fn.__tempClampWrapped){
+          const wrapped=function(){
+            clampAxis();
+            const r=fn.apply(this,arguments);
+            Promise.resolve(r).finally(()=>setTimeout(clampAxis,50));
+            return r;
+          };
+          wrapped.__tempClampWrapped=true;
+          window[name]=wrapped;
+        }
+      }catch(e){}
     });
   }
-  window.addEventListener('load',bind);
-  setInterval(bind,1000);
+  function patchButtons(){
+    document.querySelectorAll('[data-unit],[data-u],button').forEach(btn=>{
+      if(btn.dataset.tempRangeBound) return;
+      const text=(btn.textContent||'').trim();
+      if(btn.dataset.unit || btn.dataset.u || text==='°C' || text==='°F'){
+        btn.dataset.tempRangeBound='1';
+        btn.addEventListener('click',()=>setTimeout(()=>{
+          // When unit changes, reset manual Y to safe full range in that unit
+          const lim=limits();
+          const a=document.getElementById('yMinManual'), b=document.getElementById('yMaxManual');
+          if(a) a.value=lim.min;
+          if(b) b.value=lim.max;
+          if(!window.__axisState) window.__axisState={xMin:null,xMax:null,yMin:null,yMax:null};
+          window.__axisState.yMin=lim.min;
+          window.__axisState.yMax=lim.max;
+          try{
+            if(typeof window.masterRender==='function') window.masterRender();
+            else if(typeof window.renderAll==='function') window.renderAll();
+            else if(typeof window.render==='function') window.render();
+          }catch(e){}
+        },80));
+      }
+    });
+  }
+  function patchWheelZoomSafety(){
+    const c=document.getElementById('chart');
+    if(!c || c.dataset.tempRangeWheelClamp) return;
+    c.dataset.tempRangeWheelClamp='1';
+    c.addEventListener('wheel',()=>setTimeout(clampAxis,20),{passive:true});
+    c.addEventListener('mousemove',()=>setTimeout(clampAxis,20),{passive:true});
+  }
+  function addHint(){
+    if(document.getElementById('tempRangeHint')) return;
+    const el=document.createElement('div');
+    el.id='tempRangeHint';
+    el.style.cssText='font-family:ui-monospace,Consolas,monospace;color:#ffd433;font-size:12px;margin:6px 0;font-weight:900';
+    el.textContent='Temp axis locked: -10°C to 70°C / 14°F to 158°F. Zoom and pan cannot go outside this range.';
+    const chart=document.getElementById('chart');
+    if(chart && chart.parentElement) chart.parentElement.before(el);
+  }
+  function init(){
+    patchRender();
+    patchButtons();
+    patchWheelZoomSafety();
+    forceDefaultRangeOnAuto();
+    addHint();
+  }
+  window.addEventListener('load',init);
+  setInterval(init,1000);
 })();
 </script>
 
 
-<script id="force-api-backed-tooltip-fix">
+<script id="full-label-aware-tooltip-final-fix">
 (function(){
   const $=id=>document.getElementById(id);
   const N=v=>{const x=Number(v);return Number.isFinite(x)?x:null};
@@ -885,101 +622,157 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
   function fmtAMPM(h){if(N(h)==null)return '—';let hh=Math.floor(h),mm=Math.round((h-hh)*60);if(mm===60){hh++;mm=0}const ap=hh>=12?'PM':'AM';return `${hh%12||12}:${String(mm).padStart(2,'0')} ${ap}`}
   function parseHour(s){s=String(s||'').trim();let m=s.match(/T(\d{1,2}):(\d{2})/)||s.match(/\b(\d{1,2}):(\d{2})(?::\d{2})?\b/);if(!m)return null;let h=+m[1],mi=+m[2],lo=s.toLowerCase();if((lo.includes('pm')||/\bp\b/.test(lo))&&h<12)h+=12;if((lo.includes('am')||/\ba\b/.test(lo))&&h===12)h=0;return h+mi/60}
   function unit(){try{if(window.state&&state.unit)return String(state.unit).toLowerCase().startsWith('f')?'f':'c';if(window.masterChart&&masterChart.unit)return String(masterChart.unit).toLowerCase().startsWith('f')?'f':'c';if(window.S&&S.unit)return String(S.unit).toLowerCase().startsWith('f')?'f':'c'}catch(e){}return document.querySelector('[data-u="f"].active,[data-unit="f"].active')?'f':'c'}
-  function chartInfo(){const c=$('chart');if(!c)return null;const r=c.getBoundingClientRect();return{c,r,W:c.width||1180,H:c.height||560,L:70,R:28,T:48,B:60}}
-  function axis(){if(!window.__axisState)window.__axisState={xMin:null,xMax:null,yMin:null,yMax:null};let ax=window.__axisState;let xMin=N($('xMinManual')?.value)??N(ax.xMin),xMax=N($('xMaxManual')?.value)??N(ax.xMax);let yMin=N($('yMinManual')?.value)??N(ax.yMin),yMax=N($('yMaxManual')?.value)??N(ax.yMax);if(!(xMin!=null&&xMax!=null&&xMax>xMin)){if(document.querySelector('[data-x="peak"].active,[data-xrange="peak"].active')){xMin=9;xMax=18}else{xMin=0;xMax=24}}if(!(yMin!=null&&yMax!=null&&yMax>yMin)){const pts=window.__tooltipPts||[];const vals=pts.map(p=>p.y).filter(v=>N(v)!=null);if(vals.length){yMin=Math.min(...vals)-1.5;yMax=Math.max(...vals)+1.5}else{yMin=unit()==='f'?70:20;yMax=unit()==='f'?105:42}}return{xMin,xMax,yMin,yMax}}
   function yVal(c,f){return unit()==='f'?(N(f)??cToF(c)):(N(c)??fToC(f))}
-  async function loadTooltipData(){
+  function chartInfo(){const c=$('chart');if(!c)return null;const r=c.getBoundingClientRect();return{c,r,W:c.width||1180,H:c.height||560,L:70,R:28,T:48,B:60}}
+  function axis(){
+    if(!window.__axisState)window.__axisState={xMin:null,xMax:null,yMin:null,yMax:null};
+    const ax=window.__axisState;
+    let xMin=N($('xMinManual')?.value)??N(ax.xMin),xMax=N($('xMaxManual')?.value)??N(ax.xMax);
+    let yMin=N($('yMinManual')?.value)??N(ax.yMin),yMax=N($('yMaxManual')?.value)??N(ax.yMax);
+    if(!(xMin!=null&&xMax!=null&&xMax>xMin)){if(document.querySelector('[data-x="peak"].active,[data-xrange="peak"].active')){xMin=9;xMax=18}else{xMin=0;xMax=24}}
+    if(!(yMin!=null&&yMax!=null&&yMax>yMin)){
+      const pts=window.__labelTooltipPts||[];const vals=pts.map(p=>p.y).filter(v=>N(v)!=null);
+      if(vals.length){yMin=Math.min(...vals)-1.5;yMax=Math.max(...vals)+1.5}else{yMin=unit()==='f'?14:-10;yMax=unit()==='f'?158:70}
+    }
+    return{xMin,xMax,yMin,yMax};
+  }
+  function pxPoint(p,inf,ax){return{x:inf.L+(p.h-ax.xMin)/(ax.xMax-ax.xMin)*(inf.W-inf.L-inf.R),y:inf.T+(ax.yMax-p.y)/(ax.yMax-ax.yMin)*(inf.H-inf.T-inf.B)}}
+  function interpLine(points,h){
+    points=(points||[]).filter(p=>N(p.h)!=null&&N(p.y)!=null).sort((a,b)=>a.h-b.h);
+    if(points.length<2)return null;
+    for(let i=1;i<points.length;i++){
+      const a=points[i-1],b=points[i];
+      if((h>=a.h&&h<=b.h)||(h>=b.h&&h<=a.h)){
+        const t=(h-a.h)/(b.h-a.h||1);
+        return {h,y:a.y+(b.y-a.y)*t,a,b};
+      }
+    }
+    return null;
+  }
+  async function loadData(){
     const date=todayIST();let hist=null,snaps=null;
     try{hist=await fetch('/api/history?date='+date+'&t='+Date.now(),{cache:'no-store'}).then(r=>r.json())}catch(e){hist=window.__goodHist||window.goodHist||(window.__lastMasterData&&window.__lastMasterData.hist)||{}}
     try{snaps=await fetch('/api/forecast-snapshots?date='+date+'&t='+Date.now(),{cache:'no-store'}).then(r=>r.json())}catch(e){snaps=window.__goodSnaps||window.goodSnaps||(window.__lastMasterData&&window.__lastMasterData.snaps)||{rows:[]}}
-    const pts=[];
+    window.__goodHist=hist;window.__goodSnaps=snaps;
+    const pts=[], lines={forecast:[],old:[],bias:[],ceiling:[],analog:[]};
     Object.values((hist&&hist.wu_obs_rows)||{}).forEach(list=>{
       (Array.isArray(list)?list:[]).forEach(x=>{
         const h=parseHour(x.saved_at||x.obs_time||x.fetched_at||x.slot);
         const c=N(x.temp_c),f=N(x.temp_f),y=yVal(c,f);
-        if(h!=null&&y!=null)pts.push({type:'WU',h,y,c,f,raw:x});
+        if(h!=null&&y!=null)pts.push({kind:'WU_RAW',label:'🔴 WU OBSERVED RAW',colorClass:'ttRed',h,y,c,f,raw:x});
+        const cy=unit()==='f'?(cToF(c)??f):(fToC(f)??c);
+        if(h!=null&&cy!=null)pts.push({kind:'WU_CONVERTED',label:'🔴 WU CONVERTED CHECK',colorClass:'ttRed',h,y:cy,c,f,raw:x});
       });
     });
     ((hist&&hist.metar_rows)||[]).forEach(x=>{
       const h=parseHour(x.slot||x.valid_ist||x.fetched_at);
       const c=N(x.temp_c),f=cToF(c),y=unit()==='f'?f:c;
-      if(h!=null&&y!=null)pts.push({type:'METAR',h,y,c,f,raw:x});
+      if(h!=null&&y!=null)pts.push({kind:'METAR_RAW',label:'🟢 METAR OFFICIAL RAW',colorClass:'ttGreen',h,y,c,f,raw:x});
+      if(h!=null&&y!=null)pts.push({kind:'METAR_CONVERTED',label:'🟢 METAR CONVERTED',colorClass:'ttGreen',h,y,c,f,raw:x});
     });
     const rows=((snaps&&snaps.rows)||[]).filter(r=>r.target_date===date||+r.horizon_days===0);
-    const latest=rows.at(-1);
-    try{
-      JSON.parse((latest&&latest.hourly_json)||'[]').forEach(x=>{
-        const h=parseHour(x.time);
-        const c=N(x.temp_c),f=N(x.temp_f),y=yVal(c,f);
-        if(h!=null&&y!=null)pts.push({type:'FORECAST',h,y,c,f,raw:x});
-      });
-    }catch(e){}
-    window.__tooltipPts=pts;window.__goodHist=hist;window.__goodSnaps=snaps;return pts;
+    const latest=rows.at(-1), old=rows[0];
+    function hourly(row){
+      try{return JSON.parse((row&&row.hourly_json)||'[]').map(x=>{
+        const h=parseHour(x.time),c=N(x.temp_c),f=N(x.temp_f),y=yVal(c,f);
+        return h!=null&&y!=null?{h,y,c,f,raw:x}:null;
+      }).filter(Boolean)}catch(e){return[]}
+    }
+    lines.forecast=hourly(latest).map(p=>({...p,kind:'LATEST_FORECAST',label:'⚫ LATEST FORECAST',colorClass:'ttBlack'}));
+    lines.old=hourly(old).map(p=>({...p,kind:'OLD_FORECAST',label:'🔵 OLDER FORECAST RUN',colorClass:'ttBlue'}));
+    const wuRaw=pts.filter(p=>p.kind==='WU_RAW').sort((a,b)=>a.h-b.h);
+    if(lines.forecast.length&&wuRaw.length){
+      const last=wuRaw.at(-1);
+      const near=lines.forecast.reduce((a,b)=>Math.abs(b.h-last.h)<Math.abs(a.h-last.h)?b:a,lines.forecast[0]);
+      const bias=last.y-near.y;
+      lines.bias=lines.forecast.map(p=>({...p,y:p.y+bias,bias,orig:p.y,kind:'BIAS',label:'🟦 BIAS CORRECTED FORECAST',colorClass:'ttCyan'}));
+    }
+    if(wuRaw.length){
+      const peak=Math.max(...wuRaw.map(p=>p.y));
+      lines.ceiling=[{h:0,y:peak,kind:'CEILING',label:'🟣 HISTORICAL 95% / PEAK CEILING',colorClass:'ttPurple'},{h:24,y:peak,kind:'CEILING',label:'🟣 HISTORICAL 95% / PEAK CEILING',colorClass:'ttPurple'}];
+    }
+    window.__labelTooltipPts=pts;
+    window.__labelTooltipLines=lines;
   }
-  function pxPoint(p,inf,ax){return{x:inf.L+(p.h-ax.xMin)/(ax.xMax-ax.xMin)*(inf.W-inf.L-inf.R),y:inf.T+(ax.yMax-p.y)/(ax.yMax-ax.yMin)*(inf.H-inf.T-inf.B)}}
-  function nearest(px,py){
-    const pts=window.__tooltipPts||[],inf=chartInfo(),ax=axis();if(!inf||!pts.length)return null;
+  function nearest(px,py,hoverH,hoverY){
+    const inf=chartInfo(),ax=axis();if(!inf)return null;
     let best=null,bd=Infinity;
-    const hoverH=ax.xMin+(px-inf.L)/(inf.W-inf.L-inf.R)*(ax.xMax-ax.xMin);
-    for(const p of pts){
+    const pointKinds=['WU_RAW','METAR_RAW','WU_CONVERTED','METAR_CONVERTED'];
+    for(const p of (window.__labelTooltipPts||[])){
       if(p.h<ax.xMin-.25||p.h>ax.xMax+.25)continue;
       const s=pxPoint(p,inf,ax);
-      const d=Math.hypot(s.x-px,s.y-py);
-      const score=d+Math.abs(p.h-hoverH)*22;
-      if(score<bd){bd=score;best=p}
+      const score=Math.hypot(s.x-px,s.y-py)+Math.abs(p.h-hoverH)*18;
+      if(score<bd){bd=score;best={type:'point',p,score}};
     }
-    return bd<160?best:null;
+    const lines=window.__labelTooltipLines||{};
+    const lineSets=[lines.forecast,lines.old,lines.bias,lines.ceiling];
+    for(const arr of lineSets){
+      const q=interpLine(arr,hoverH);
+      if(!q)continue;
+      const p={...q.a,h:hoverH,y:q.y};
+      const s=pxPoint(p,inf,ax);
+      const score=Math.abs(s.y-py)+10;
+      if(score<bd){bd=score;best={type:'line',p:{...q.a,h:hoverH,y:q.y,interp:q},score}};
+    }
+    return best&&best.score<180?best:null;
   }
-  function htmlForPoint(p,hoverHour,hoverTemp){
+  function htmlPoint(p,hoverH,hoverY){
     const U=unit().toUpperCase();
-    let out=`<div class="ttTitle">${fmtAMPM(hoverHour)} · ${fmt(hoverTemp)}°${U}</div>`;
-    if(!p)return out+`<div class="ttLine">No source point loaded here yet.</div>`;
-    if(p.type==='WU'){
-      out+=`<div class="ttLine ttRaw"><b>WU observation</b></div>
-      <div class="ttLine">Nearest time: <b>${fmtAMPM(p.h)}</b></div>
+    let out=`<div class="ttTitle">${fmtAMPM(hoverH)} · ${fmt(hoverY)}°${U}</div>`;
+    out+=`<div class="ttName ${p.colorClass}">${p.label}</div>`;
+    if(p.kind==='WU_RAW'||p.kind==='WU_CONVERTED'){
+      out+=`<div class="ttLine">Nearest time: <b>${fmtAMPM(p.h)}</b></div>
       <div class="ttLine">Raw Fahrenheit: <b>${fmt(p.f)}°F</b></div>
       <div class="ttLine">Raw Celsius: <b>${fmt(p.c)}°C</b></div>
       <div class="ttLine">Converted C from F: <b>${fmt(fToC(p.f))}°C</b></div>
       <div class="ttLine">Converted F from C: <b>${fmt(cToF(p.c))}°F</b></div>
       ${p.raw&&p.raw.humidity!=null?`<div class="ttLine">Humidity: <b>${p.raw.humidity}%</b></div>`:''}
       ${p.raw&&p.raw.condition?`<div class="ttLine">Condition: <b>${p.raw.condition}</b></div>`:''}`;
-    }else if(p.type==='METAR'){
-      out+=`<div class="ttLine ttMetar"><b>METAR official</b></div>
-      <div class="ttLine">Nearest time: <b>${fmtAMPM(p.h)}</b></div>
+    }else if(p.kind==='METAR_RAW'||p.kind==='METAR_CONVERTED'){
+      out+=`<div class="ttLine">Nearest time: <b>${fmtAMPM(p.h)}</b></div>
       <div class="ttLine">Raw Celsius: <b>${fmt(p.c)}°C</b></div>
-      <div class="ttLine">Converted Fahrenheit: <b>${fmt(p.f)}°F</b></div>`;
-    }else{
-      out+=`<div class="ttLine ttFc"><b>Latest forecast</b></div>
-      <div class="ttLine">Forecast time: <b>${fmtAMPM(p.h)}</b></div>
-      <div class="ttLine">Forecast: <b>${fmt(p.y)}°${U}</b></div>
-      <div class="ttLine">C/F: <b>${fmt(p.c)}°C / ${fmt(p.f)}°F</b></div>`;
+      <div class="ttLine">Converted Fahrenheit: <b>${fmt(p.f)}°F</b></div>
+      ${p.raw&&p.raw.raw_metar?`<div class="ttLine">METAR: <b>${String(p.raw.raw_metar).slice(0,120)}</b></div>`:''}`;
+    }else if(p.kind==='BIAS'){
+      const sign=p.bias>=0?'+':'';
+      out+=`<div class="ttLine">Forecast time: <b>${fmtAMPM(p.h)}</b></div>
+      <div class="ttLine">Original forecast: <b>${fmt(p.orig)}°${U}</b></div>
+      <div class="ttLine">Live bias: <b>${sign}${fmt(p.bias)}°${U}</b></div>
+      <div class="ttLine">Bias corrected value: <b>${fmt(p.y)}°${U}</b></div>
+      <div class="ttLine" style="color:#9bd4ff">Read it as: if current forecast error continues, expected line becomes this cyan value.</div>`;
+    }else if(p.kind==='LATEST_FORECAST'||p.kind==='OLD_FORECAST'){
+      out+=`<div class="ttLine">Forecast time: <b>${fmtAMPM(p.h)}</b></div>
+      <div class="ttLine">Forecast value: <b>${fmt(p.y)}°${U}</b></div>
+      <div class="ttLine">C/F in source: <b>${fmt(p.c)}°C / ${fmt(p.f)}°F</b></div>`;
+    }else if(p.kind==='CEILING'){
+      out+=`<div class="ttLine">Ceiling level: <b>${fmt(p.y)}°${U}</b></div>
+      <div class="ttLine" style="color:#9bd4ff">This is the peak/95% ceiling reference. Above this is historically rare.</div>`;
     }
     return out;
   }
   async function show(e){
     const inf=chartInfo(),tip=$('tooltip');if(!inf||!tip)return;
-    if(!window.__tooltipPts)await loadTooltipData();
-    const px=(e.clientX-inf.r.left)/inf.r.width*inf.W;
-    const py=(e.clientY-inf.r.top)/inf.r.height*inf.H;
+    if(!window.__labelTooltipPts)await loadData();
+    const px=(e.clientX-inf.r.left)/inf.r.width*inf.W,py=(e.clientY-inf.r.top)/inf.r.height*inf.H;
     if(px<inf.L||px>inf.W-inf.R||py<inf.T||py>inf.H-inf.B){tip.style.display='none';return}
     const ax=axis();
-    const hour=ax.xMin+(px-inf.L)/(inf.W-inf.L-inf.R)*(ax.xMax-ax.xMin);
-    const temp=ax.yMax-(py-inf.T)/(inf.H-inf.T-inf.B)*(ax.yMax-ax.yMin);
-    const p=nearest(px,py);
-    tip.innerHTML=htmlForPoint(p,hour,temp);
+    const hoverH=ax.xMin+(px-inf.L)/(inf.W-inf.L-inf.R)*(ax.xMax-ax.xMin);
+    const hoverY=ax.yMax-(py-inf.T)/(inf.H-inf.T-inf.B)*(ax.yMax-ax.yMin);
+    const hit=nearest(px,py,hoverH,hoverY);
+    tip.innerHTML=hit?htmlPoint(hit.p,hoverH,hoverY):`<div class="ttTitle">${fmtAMPM(hoverH)} · ${fmt(hoverY)}°${unit().toUpperCase()}</div><div class="ttLine">No line/dot near cursor.</div>`;
     tip.style.display='block';
     let l=e.clientX+18,t=e.clientY+18;
-    if(l+560>innerWidth)l=e.clientX-580;if(t+300>innerHeight)t=e.clientY-320;
+    if(l+600>innerWidth)l=e.clientX-620;if(t+340>innerHeight)t=e.clientY-360;
     tip.style.left=Math.max(8,l)+'px';tip.style.top=Math.max(8,t)+'px';
   }
   function bind(){
-    const c=$('chart');if(!c||c.dataset.forceTooltipBound)return;
-    c.dataset.forceTooltipBound='1';
+    const c=$('chart');if(!c||c.dataset.labelAwareTooltip)return;
+    c.dataset.labelAwareTooltip='1';
     c.addEventListener('mousemove',show);
     c.addEventListener('mouseleave',()=>{const t=$('tooltip');if(t)t.style.display='none'});
   }
-  window.addEventListener('load',()=>{bind();loadTooltipData()});
-  setInterval(()=>{bind();loadTooltipData()},30000);
+  window.addEventListener('load',()=>{bind();loadData()});
+  setInterval(()=>{bind();loadData()},30000);
 })();
 </script>
 
