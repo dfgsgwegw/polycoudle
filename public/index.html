@@ -404,6 +404,15 @@ section:has(table){
 .pro-curve-svg text{font-family:Arial,system-ui,sans-serif}
 @media(max-width:700px){#temp-chart{min-height:500px!important}.pro-curve-shell{min-width:980px;padding:14px}.pro-curve-head{font-size:12px}.pro-curve-summary{font-size:12px}}
 
+
+/* FORCE ONLY CURVE CHART, NO BAR CHART OVERWRITE */
+#temp-chart, [id*="chart" i], .chart {
+  min-height: 520px !important;
+}
+.pro-curve-wrap, #pro-curve, canvas#pro-curve {
+  min-height: 480px !important;
+}
+
 </style>
 </head>
 <body>
@@ -2533,6 +2542,79 @@ window.fetchAll = fetchAll;
   window.patchCFDisplay=patchCFDisplay;
   window.addEventListener('load',()=>setTimeout(patchCFDisplay,1200));
   setInterval(patchCFDisplay,30000);
+})();
+</script>
+
+
+<script id="force-curve-only-fix">
+(function(){
+  function killOldBarChart(){
+    // Old renderer names from previous patches. Disable them so they cannot overwrite curve.
+    const noop = function(){ return false; };
+    [
+      'renderHTMLChart',
+      'loadHTMLChart',
+      'drawHTMLChart',
+      'loadChart',
+      'drawChart',
+      'drawTempChart',
+      'renderTempChart'
+    ].forEach(name=>{
+      try{
+        if(typeof window[name] === 'function') window[name] = noop;
+        if(typeof eval(name) === 'function') eval(name + ' = window["'+name+'"];');
+      }catch(e){}
+    });
+
+    // Remove old chart scroll-control shells that duplicate wrappers.
+    document.querySelectorAll('.chart-scroll-top').forEach(x=>{
+      if(!x.textContent.includes('Curve')) x.remove();
+    });
+  }
+
+  async function forceCurve(){
+    try{
+      killOldBarChart();
+
+      // Prefer pro curve function if available.
+      if(typeof window.loadProCurve === 'function'){
+        await window.loadProCurve();
+        return;
+      }
+      if(typeof loadProCurve === 'function'){
+        await loadProCurve();
+        return;
+      }
+      if(typeof window.drawProCurve === 'function'){
+        await window.drawProCurve();
+        return;
+      }
+      if(typeof drawProCurve === 'function'){
+        await drawProCurve();
+        return;
+      }
+    }catch(e){
+      console.warn('force curve failed', e.message);
+    }
+  }
+
+  // Patch fetchAll: old fetchAll can update tables/stats, then curve immediately redraws after it.
+  const oldFetchAll = window.fetchAll || (typeof fetchAll !== 'undefined' ? fetchAll : null);
+  if(oldFetchAll && !window.__curveOnlyFetchPatched){
+    window.__curveOnlyFetchPatched = true;
+    window.fetchAll = async function(){
+      let ret = null;
+      try{ ret = await oldFetchAll.apply(this, arguments); }
+      catch(e){ console.warn('fetchAll non-critical error:', e.message); }
+      setTimeout(forceCurve, 80);
+      return ret;
+    };
+    try{ fetchAll = window.fetchAll; }catch(e){}
+  }
+
+  killOldBarChart();
+  window.addEventListener('load',()=>setTimeout(forceCurve,700));
+  setInterval(forceCurve,30000);
 })();
 </script>
 
