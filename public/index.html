@@ -42,6 +42,13 @@ th{color:#8bb4d6;font-size:12px;text-transform:uppercase;letter-spacing:.12em;po
 td{font-size:13px} .wu{color:var(--orange);font-weight:800}.metar{color:#19ff99;font-weight:900}.muted{color:#7199b8}
 #tooltip{position:fixed;pointer-events:none;background:#06111e;color:#fff;border:1px solid #2a6b92;border-radius:10px;padding:8px 10px;font:12px ui-monospace,Consolas;display:none;z-index:50;box-shadow:0 8px 24px #0008}
 @media(max-width:760px){.wrap{padding:10px}.header{display:block}h1{font-size:28px}.grid{grid-template-columns:1fr 1fr}.value{font-size:22px}#chart{width:1050px;height:540px}.status h2{font-size:24px}}
+
+.togglebar{display:flex;gap:10px;flex-wrap:wrap;margin:8px 0 12px;color:#a9d8ff;font-size:13px}
+.togglebar label{background:#092238;border:1px solid rgba(0,212,255,.22);border-radius:999px;padding:7px 10px;cursor:pointer}
+.togglebar input{vertical-align:middle;margin-right:5px}
+.customRange{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0 12px;color:#a9d8ff;font-size:13px}
+.customRange input{width:86px;background:#061522;border:1px solid #17435f;color:#e8f7ff;border-radius:10px;padding:8px}
+.helpbox{font-size:12px;color:#9bd4ff;line-height:1.45;background:#061522;border:1px solid rgba(0,212,255,.18);padding:10px;border-radius:12px;margin:8px 0}
 </style>
 </head>
 <body>
@@ -67,8 +74,28 @@ td{font-size:13px} .wu{color:var(--orange);font-weight:800}.metar{color:#19ff99;
       <button data-x="peak" class="active">Peak 9–18h</button>
       <button data-x="last3">Last 3h</button>
       <button data-x="full">24h</button>
+      <button data-x="custom">Custom</button>
       <button data-u="c" class="active">°C</button>
       <button data-u="f">°F</button>
+    </div>
+    <div class="customRange">
+      <b>Custom time:</b>
+      <input id="xStart" type="time" value="09:00">
+      <span>to</span>
+      <input id="xEnd" type="time" value="18:00">
+      <button class="btn" id="applyRange" type="button" style="padding:8px 12px;border-radius:10px">Apply</button>
+    </div>
+    <div class="togglebar">
+      <label><input type="checkbox" data-show="wu" checked>WU observed red = Weather Underground obs</label>
+      <label><input type="checkbox" data-show="metar" checked>METAR green = official report</label>
+      <label><input type="checkbox" data-show="latestFc" checked>Latest forecast black</label>
+      <label><input type="checkbox" data-show="oldFc" checked>Old forecast blue dashed</label>
+      <label><input type="checkbox" data-show="bias" checked>Bias-corrected dotted</label>
+      <label><input type="checkbox" data-show="peakLine" checked>Peak projection line</label>
+      <label><input type="checkbox" data-show="peakWindow" checked>Peak window yellow</label>
+    </div>
+    <div class="helpbox">
+      <b>Chart meaning:</b> red line = live WU observations, green dots = official METAR bins, black = latest forecast path, blue dashed = older forecast snapshot, dotted black = forecast shifted by current live bias, purple horizontal = highest/peak projection. Use Custom time for exact range zoom; Y zoom changes temperature range, not website zoom.
     </div>
     <div class="chartScroll"><canvas id="chart" width="1180" height="560"></canvas></div>
     <div class="legend">
@@ -76,7 +103,7 @@ td{font-size:13px} .wu{color:var(--orange);font-weight:800}.metar{color:#19ff99;
       <span><i class="dot" style="background:#10b981"></i>METAR official</span>
       <span><i class="dot" style="background:#111827"></i>latest WU forecast</span>
       <span><i class="dot" style="background:#93c5fd"></i>old forecast</span>
-      <span><i class="dot" style="background:#111827;border-top:2px dotted #111827"></i>bias corrected</span>
+      <span><i class="dot" style="background:#111827;border-top:2px dotted #111827"></i>bias corrected</span><span><i class="dot" style="background:#a855f7"></i>peak projection</span><span><i class="dot" style="background:#facc15"></i>peak window</span>
     </div>
     <div id="curveSummary" class="summary">Loading curve...</div>
   </section>
@@ -107,7 +134,7 @@ td{font-size:13px} .wu{color:var(--orange);font-weight:800}.metar{color:#19ff99;
 </div>
 <div id="tooltip"></div>
 <script>
-const state={unit:'c',x:'peak',y:'tight',data:null,points:[]};
+const state={unit:'c',x:'peak',y:'tight',customStart:9,customEnd:18,show:{wu:true,metar:true,latestFc:true,oldFc:true,bias:true,peakLine:true,peakWindow:true},data:null,points:[]};
 const $=id=>document.getElementById(id);
 function todayIST(){return new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});}
 function nowIST(){return new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Kolkata'}));}
@@ -191,8 +218,8 @@ function updateCards(wu,metar,fc){
   const peak=wu.length?wu.reduce((a,b)=>b.y>a.y?b:a,wu[0]):null;
   const nowH=nowIST().getHours()+nowIST().getMinutes()/60;
   const fcNear=fc.latest.length?fc.latest.reduce((a,b)=>Math.abs(b.hour-nowH)<Math.abs(a.hour-nowH)?b:a,fc.latest[0]):null;
-  $('curWu').textContent=last?cf(last.c,last.f,'WU'):'—'; $('curWuSub').textContent=last?`At ${last.raw.obs_time||fmtTime(last.hour)} · ${last.raw.condition||''}`:'—';
-  $('curMetar').textContent=mlast?cf(mlast.c,mlast.f,'METAR'):'—'; $('curMetarSub').textContent=mlast?`At ${mlast.raw.slot||fmtTime(mlast.hour)} · WX ${mlast.raw.wx||'-'}`:'—';
+  $('curWu').innerHTML=last?cf(last.c,last.f,'WU'):'—'; $('curWuSub').textContent=last?`At ${last.raw.obs_time||fmtTime(last.hour)} · ${last.raw.condition||''}`:'—';
+  $('curMetar').innerHTML=mlast?cf(mlast.c,mlast.f,'METAR'):'—'; $('curMetarSub').textContent=mlast?`At ${mlast.raw.slot||fmtTime(mlast.hour)} · WX ${mlast.raw.wx||'-'}`:'—';
   $('peakSoFar').textContent=peak?tf(peak.c,peak.f):'—'; $('dropFromPeak').textContent=(last&&peak)?`Current ${((last.y-peak.y).toFixed(1))}° from peak`:'—';
   $('fcNow').textContent=fcNear?tf(fcNear.c,fcNear.f):'—';
   $('fcBias').textContent=(last&&fcNear)?`Running ${(last.y-fcNear.y>=0?'+':'')+(last.y-fcNear.y).toFixed(1)}° ${last.y>=fcNear.y?'HOT':'COLD'}`:'—';
@@ -203,7 +230,7 @@ function drawPts(ctx,pts,color,r=4){ctx.save();ctx.fillStyle=color;ctx.strokeSty
 function renderChart(wu,metar,fc){
   const c=$('chart'),ctx=c.getContext('2d'),W=c.width,H=c.height,L=70,R=28,T=48,B=64;
   const nowH=nowIST().getHours()+nowIST().getMinutes()/60;
-  let xMin=9,xMax=18;if(state.x==='full'){xMin=0;xMax=24}else if(state.x==='last3'){xMin=Math.max(0,nowH-3);xMax=Math.min(24,nowH+0.5)}
+  let xMin=9,xMax=18;if(state.x==='full'){xMin=0;xMax=24}else if(state.x==='last3'){xMin=Math.max(0,nowH-3);xMax=Math.min(24,nowH+0.5)}else if(state.x==='custom'){xMin=state.customStart;xMax=state.customEnd;if(xMax<=xMin)xMax=xMin+1}
   let all=[...wu,...metar,...fc.latest,...fc.old].filter(p=>p.hour>=xMin&&p.hour<=xMax);
   if(!all.length)all=[...wu,...metar,...fc.latest,...fc.old];
   let vals=all.map(p=>p.y).filter(Number.isFinite);if(!vals.length) vals=state.unit==='c'?[20,45]:[68,113];
@@ -212,7 +239,7 @@ function renderChart(wu,metar,fc){
   if(yMax-yMin<1.2){yMin-=.6;yMax+=.6}
   const pw=W-L-R,ph=H-T-B,X=h=>L+(h-xMin)/(xMax-xMin)*pw,Y=v=>T+(yMax-v)/(yMax-yMin)*ph;
   ctx.clearRect(0,0,W,H);ctx.fillStyle='#fafafa';ctx.fillRect(0,0,W,H);
-  if(xMax>=14&&xMin<=17){ctx.fillStyle='rgba(250,204,21,.20)';ctx.fillRect(Math.max(L,X(14)),T,Math.min(L+pw,X(17))-Math.max(L,X(14)),ph);ctx.fillStyle='#92400e';ctx.font='bold 15px sans-serif';ctx.fillText('peak window 14–17h',Math.max(L+8,X(14)+8),T+22)}
+  if(state.show.peakWindow&&xMax>=14&&xMin<=17){ctx.fillStyle='rgba(250,204,21,.20)';ctx.fillRect(Math.max(L,X(14)),T,Math.min(L+pw,X(17))-Math.max(L,X(14)),ph);ctx.fillStyle='#92400e';ctx.font='bold 15px sans-serif';ctx.fillText('peak window 14–17h',Math.max(L+8,X(14)+8),T+22)}
   /* forecast range band removed: it was visually misleading */
   ctx.strokeStyle='#e5e7eb';ctx.lineWidth=1;ctx.font='13px sans-serif';ctx.fillStyle='#6b7280';
   for(let h=Math.ceil(xMin);h<=xMax;h+= state.x==='last3'?0.5:2){const x=X(h);ctx.beginPath();ctx.moveTo(x,T);ctx.lineTo(x,T+ph);ctx.stroke();ctx.fillText(fmtTime(h),x-18,H-28)}
@@ -221,9 +248,9 @@ function renderChart(wu,metar,fc){
   ctx.strokeStyle='#9ca3af';ctx.strokeRect(L,T,pw,ph);
   const map=a=>a.filter(p=>p.hour>=xMin&&p.hour<=xMax).map(p=>({...p,x:X(p.hour),sy:Y(p.y),v:p.y}));
   let bias=0;if(wu.length&&fc.latest.length){const last=wu.at(-1);const near=fc.latest.reduce((a,b)=>Math.abs(b.hour-last.hour)<Math.abs(a.hour-last.hour)?b:a,fc.latest[0]);bias=last.y-near.y}
-  drawLine(ctx,map(fc.old),'#93c5fd',2,[6,6]);drawLine(ctx,map(fc.latest),'#111827',4);drawLine(ctx,map(fc.latest.map(p=>({...p,y:p.y+bias}))),'#111827',3,[2,6]);drawLine(ctx,map(wu),'#ef4444',3);drawPts(ctx,map(wu),'#ef4444',3);drawPts(ctx,map(metar),'#10b981',6);
+  if(state.show.oldFc)drawLine(ctx,map(fc.old),'#93c5fd',2,[6,6]);if(state.show.latestFc)drawLine(ctx,map(fc.latest),'#111827',4);if(state.show.bias)drawLine(ctx,map(fc.latest.map(p=>({...p,y:p.y+bias}))),'#111827',3,[2,6]);if(state.show.wu){drawLine(ctx,map(wu),'#ef4444',3);drawPts(ctx,map(wu),'#ef4444',3)}if(state.show.metar)drawPts(ctx,map(metar),'#10b981',6);if(state.show.peakLine&&wu.length){const pk=Math.max(...wu.map(p=>p.y));const py=Y(pk);ctx.save();ctx.strokeStyle='#a855f7';ctx.lineWidth=2;ctx.setLineDash([8,5]);ctx.beginPath();ctx.moveTo(L,py);ctx.lineTo(L+pw,py);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='#7e22ce';ctx.font='bold 13px sans-serif';ctx.fillText('peak projection '+pk.toFixed(3)+'°'+state.unit.toUpperCase(),L+8,py-6);ctx.restore();}
   if(nowH>=xMin&&nowH<=xMax){const x=X(nowH);ctx.strokeStyle='#6b7280';ctx.setLineDash([5,6]);ctx.beginPath();ctx.moveTo(x,T-8);ctx.lineTo(x,T+ph);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='#374151';ctx.font='bold 14px sans-serif';ctx.fillText('now',x+8,T-12)}
-  state.points=[...map(wu),...map(metar),...map(fc.latest).map(p=>({...p,type:'Forecast'}))];
+  state.points=[...(state.show.wu?map(wu):[]),...(state.show.metar?map(metar):[]),...(state.show.latestFc?map(fc.latest).map(p=>({...p,type:'Forecast'})):[])];
 }
 function renderTable(wu,metar){
   const slots=[...new Set([...metar.map(m=>m.raw.slot||slotFromObsTime(m.raw.valid_ist)),...wu.map(w=>rowSlot(w))].filter(Boolean))].sort();
@@ -240,7 +267,7 @@ function render(){
   const last=wu.at(-1), fcNear=last&&fc.latest.length?fc.latest.reduce((a,b)=>Math.abs(b.hour-last.hour)<Math.abs(a.hour-last.hour)?b:a,fc.latest[0]):null;
   $('curveSummary').innerHTML=last?`Current WU: <b>${tf(last.c,last.f)}</b> · Peak so far: <b>${tf(wu.reduce((a,b)=>b.y>a.y?b:a,wu[0]).c,wu.reduce((a,b)=>b.y>a.y?b:a,wu[0]).f)}</b>${fcNear?` · vs forecast: <b style="color:${last.y>=fcNear.y?'#ef4444':'#3b82f6'}">${(last.y-fcNear.y>=0?'+':'')+(last.y-fcNear.y).toFixed(1)}° ${last.y>=fcNear.y?'HOT':'COLD'}</b>`:''} · Forecast snapshots: ${fc.rows.length}`:'Waiting for WU';
 }
-document.querySelectorAll('.toolbar button').forEach(b=>b.onclick=()=>{if(b.dataset.y){state.y=b.dataset.y;document.querySelectorAll('[data-y]').forEach(x=>x.classList.toggle('active',x.dataset.y===state.y))}if(b.dataset.x){state.x=b.dataset.x;document.querySelectorAll('[data-x]').forEach(x=>x.classList.toggle('active',x.dataset.x===state.x))}if(b.dataset.u){state.unit=b.dataset.u;document.querySelectorAll('[data-u]').forEach(x=>x.classList.toggle('active',x.dataset.u===state.unit))}render();});
+document.querySelectorAll('.toolbar button').forEach(b=>b.onclick=()=>{if(b.dataset.y){state.y=b.dataset.y;document.querySelectorAll('[data-y]').forEach(x=>x.classList.toggle('active',x.dataset.y===state.y))}if(b.dataset.x){state.x=b.dataset.x;document.querySelectorAll('[data-x]').forEach(x=>x.classList.toggle('active',x.dataset.x===state.x))}if(b.dataset.u){state.unit=b.dataset.u;document.querySelectorAll('[data-u]').forEach(x=>x.classList.toggle('active',x.dataset.u===state.unit))}render();});document.querySelectorAll('[data-show]').forEach(cb=>cb.onchange=()=>{state.show[cb.dataset.show]=cb.checked;render();});$('applyRange').onclick=()=>{const a=$('xStart').value||'09:00',b=$('xEnd').value||'18:00';const toH=s=>{const [h,m]=s.split(':').map(Number);return h+m/60};state.customStart=toH(a);state.customEnd=toH(b);state.x='custom';document.querySelectorAll('[data-x]').forEach(x=>x.classList.toggle('active',x.dataset.x==='custom'));render();};
 $('chart').addEventListener('mousemove',e=>{const r=e.target.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;let best=null,bd=1e9;state.points.forEach(p=>{const yy=Number.isFinite(p.sy)?p.sy:p.y;const d=Math.hypot(p.x-x,yy-y);if(d<bd){bd=d;best=p}});const tt=$('tooltip');if(best&&bd<18){tt.style.display='block';tt.style.left=e.clientX+14+'px';tt.style.top=e.clientY+14+'px';tt.innerHTML=`${best.type||best.raw?.source||'Point'}<br>${fmtTime(best.hour)}<br>${best.type==='METAR'?cf(best.c,best.f,'METAR'):(best.type==='FC'||best.type==='Forecast'?cf(best.c,best.f,'FORECAST'):cf(best.c,best.f,'WU'))}`;}else tt.style.display='none';});
 $('chart').addEventListener('mouseleave',()=>{$('tooltip').style.display='none'});
 $('refreshBtn').onclick=loadAll; loadAll(); setInterval(loadAll,30000);
