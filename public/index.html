@@ -130,7 +130,7 @@
 
     
 <div class="forecastExplain" id="forecastExplain">
-  <b>How to read lines:</b> Red solid = WU Raw, Red dashed = WU Converted, Green dots = METAR Raw, Green dashed = METAR Converted, Black = latest forecast, Cyan dashed = bias-corrected, Purple dashed = peak/ceiling. WU Raw C/F are direct from Weather.com units=m/e; converted lines are calculated cross-checks.
+  <b>How to read lines:</b> Red solid = WU Raw, Red dashed = WU Converted, Green dots = METAR, Black = latest forecast, Light-blue dashed = older forecast, Cyan dashed = bias-corrected, Purple dashed = peak/ceiling.
 </div>
 
 <div class="chartScroll"><canvas id="chart" width="1180" height="560"></canvas></div>
@@ -198,42 +198,247 @@ document.querySelectorAll('.toolbar button').forEach(b=>b.onclick=()=>{if(b.data
 
 
 
+
+
+
+
 <script id="master-chart-controls-fixed">
 (function(){
-  const DEFAULTS={yMode:'tight',xMode:'peak',unit:'c',sourceMode:'raw',show:{wu:true,metar:true,forecast:true,bias:true,ceiling:true,extreme:false,analog:true,peak:true},rawLines:{wuRaw:true,wuConv:false,metarRaw:true,metarConv:false}};
-  window.masterChart=window.masterChart||JSON.parse(JSON.stringify(DEFAULTS));
-  window.masterChart.rawLines=window.masterChart.rawLines||{...DEFAULTS.rawLines};
-  const $=id=>document.getElementById(id);
-  const N=v=>{const x=Number(v);return Number.isFinite(x)?x:null};
-  const cToF=c=>N(c)==null?null:N(c)*9/5+32;
-  const fToC=f=>N(f)==null?null:(N(f)-32)*5/9;
-  const fmt=v=>{const x=N(v);if(x==null)return '—';return x.toFixed(3).replace(/\.?0+$/,'')};
-  const todayIST=()=>new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});
-  function nowHour(){const d=new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Kolkata'}));return d.getHours()+d.getMinutes()/60}
-  function timeHour(s){s=String(s||'');let m=s.match(/T(\d{1,2}):(\d{2})/)||s.match(/(\d{1,2}):(\d{2})/);return m?Number(m[1])+Number(m[2])/60:null}
-  function fmtTime(h){let hh=Math.floor(h),mm=Math.round((h-hh)*60);if(mm===60){hh++;mm=0}const am=hh>=12?'p':'a';return `${hh%12||12}:${String(mm).padStart(2,'0')}${am}`}
-  function valWUraw(c,f){return masterChart.unit==='f'?(N(f)??cToF(c)):(N(c)??fToC(f))}
-  function valWUconv(c,f){return masterChart.unit==='f'?(cToF(c)??N(f)):(fToC(f)??N(c))}
-  function valMETARraw(c){return masterChart.unit==='f'?cToF(c):N(c)}
-  function valMETARconv(c){return masterChart.unit==='f'?cToF(c):N(c)}
-  async function refreshData(){const date=todayIST();let hist={},snaps={rows:[]};try{hist=await fetch('/api/history?date='+date+'&t='+Date.now(),{cache:'no-store'}).then(r=>r.json())}catch(e){hist=window.__lastHist||{}}try{snaps=await fetch('/api/forecast-snapshots?date='+date+'&t='+Date.now(),{cache:'no-store'}).then(r=>r.json())}catch(e){snaps=window.__lastSnaps||{rows:[]}}window.__lastHist=hist;window.__lastSnaps=snaps;window.__lastMasterData={hist,snaps,date};return window.__lastMasterData}
-  async function loadData(){return window.__lastMasterData||refreshData()}
-  function flattenWU(hist,kind='raw'){const out=[];Object.values(hist.wu_obs_rows||{}).forEach(list=>(Array.isArray(list)?list:[]).forEach(x=>{const h=timeHour(x.saved_at||x.obs_time),y=kind==='conv'?valWUconv(x.temp_c,x.temp_f):valWUraw(x.temp_c,x.temp_f);if(h!=null&&N(y)!=null)out.push({hour:h,y,c:N(x.temp_c),f:N(x.temp_f),raw:x,type:kind==='conv'?'WU Converted':'WU Raw'})}));return out.sort((a,b)=>a.hour-b.hour)}
-  function flattenMETAR(hist,kind='raw'){return (hist.metar_rows||[]).map(m=>{const h=timeHour(m.slot||m.valid_ist),y=kind==='conv'?valMETARconv(m.temp_c):valMETARraw(m.temp_c);return{hour:h,y,c:N(m.temp_c),f:cToF(m.temp_c),raw:m,type:kind==='conv'?'METAR Converted':'METAR Raw'}}).filter(p=>p.hour!=null&&N(p.y)!=null).sort((a,b)=>a.hour-b.hour)}
-  function chooseForecast(c,f){return masterChart.unit==='f'?(N(f)??cToF(c)):(N(c)??fToC(f))}
-  function hourly(row){try{return JSON.parse(row?.hourly_json||'[]').map(x=>{const h=timeHour(x.time),y=chooseForecast(x.temp_c,x.temp_f);return{hour:h,y,c:N(x.temp_c),f:N(x.temp_f),type:'Forecast'}}).filter(p=>p.hour!=null&&N(p.y)!=null)}catch(e){return[]}}
-  function forecast(snaps,date){const rows=(snaps.rows||[]).filter(r=>r.target_date===date||Number(r.horizon_days)===0);return{rows,latest:hourly(rows.at(-1)),old:hourly(rows[0]),runs:rows.map(hourly)}}
-  function getRange(){const ax=window.__axisState||{};if(ax.xMin!=null&&ax.xMax!=null)return[Number(ax.xMin),Number(ax.xMax)];if(masterChart.xMode==='full')return[0,24];if(masterChart.xMode==='last3'){const h=nowHour();return[Math.max(0,h-3),Math.min(24,h+0.5)]}if(masterChart.xMode==='custom'){const a=N($('xMinManual')?.value),b=N($('xMaxManual')?.value);if(a!=null&&b!=null&&b>a)return[a,b]}return[9,18]}
-  function drawLine(ctx,pts,X,Y,color,w=3,dash=[]){pts=(pts||[]).filter(p=>N(p.hour)!=null&&N(p.y)!=null).sort((a,b)=>a.hour-b.hour);if(pts.length<2)return;ctx.save();ctx.strokeStyle=color;ctx.lineWidth=w;ctx.setLineDash(dash);ctx.lineCap='round';ctx.lineJoin='round';ctx.beginPath();ctx.moveTo(X(pts[0].hour),Y(pts[0].y));for(let i=1;i<pts.length;i++)ctx.lineTo(X(pts[i].hour),Y(pts[i].y));ctx.stroke();ctx.restore()}
-  function drawPts(ctx,pts,X,Y,color,r=5){ctx.save();ctx.fillStyle=color;ctx.strokeStyle='#fff';ctx.lineWidth=1.2;(pts||[]).forEach(p=>{if(N(p.hour)==null||N(p.y)==null)return;ctx.beginPath();ctx.arc(X(p.hour),Y(p.y),r,0,Math.PI*2);ctx.fill();ctx.stroke()});ctx.restore()}
-  function syncChecks(){document.querySelectorAll('input[type=checkbox]').forEach(cb=>{if(cb.dataset.rawLine){masterChart.rawLines[cb.dataset.rawLine]=cb.checked;cb.closest('label')?.classList.toggle('active',cb.checked);return}const label=(cb.closest('button,label')?.textContent||cb.parentElement?.textContent||'').toLowerCase();let k=null;if(label.includes('wu'))k='wu';else if(label.includes('metar'))k='metar';else if(label.includes('99')||label.includes('extreme'))k='extreme';else if(label.includes('95')||label.includes('ceiling'))k='ceiling';else if(label.includes('analog'))k='analog';else if(label.includes('peak window'))k='peak';else if(label.includes('bias'))k='bias';else if(label.includes('forecast'))k='forecast';if(k)masterChart.show[k]=cb.checked})}
-  function updateButtons(){document.querySelectorAll('button').forEach(b=>{const t=(b.textContent||'').trim().toLowerCase();if(b.dataset.sourceMode)b.classList.toggle('active',b.dataset.sourceMode===masterChart.sourceMode);if(b.dataset.u)b.classList.toggle('active',b.dataset.u===masterChart.unit);if(t==='°c')b.classList.toggle('active',masterChart.unit==='c');if(t==='°f')b.classList.toggle('active',masterChart.unit==='f');if(t.includes('tight'))b.classList.toggle('active',masterChart.yMode==='tight');if(t.includes('±1'))b.classList.toggle('active',masterChart.yMode==='plus1');if(t.includes('±2'))b.classList.toggle('active',masterChart.yMode==='plus2');if(t==='wide')b.classList.toggle('active',masterChart.yMode==='wide');if(t.includes('peak 9'))b.classList.toggle('active',masterChart.xMode==='peak');if(t.includes('last 3'))b.classList.toggle('active',masterChart.xMode==='last3');if(t==='24h')b.classList.toggle('active',masterChart.xMode==='full')})}
-  function setCards(wuRaw,metRaw,fc){const w=wuRaw.at(-1),m=metRaw.at(-1),curWu=$('curWu'),curMetar=$('curMetar'),peak=$('peakSoFar'),fnow=$('fcNow'),sum=$('curveSummary');if(curWu&&w)curWu.innerHTML=`<b>${fmt(masterChart.unit==='f'?w.f:w.c)}°${masterChart.unit.toUpperCase()}</b><span class="rawConv">WU raw: ${fmt(w.f)}°F + ${fmt(w.c)}°C<br>converted: ${fmt(fToC(w.f))}°C from F · ${fmt(cToF(w.c))}°F from C</span>`;if(curMetar&&m)curMetar.innerHTML=`<b>${fmt(masterChart.unit==='f'?cToF(m.c):m.c)}°${masterChart.unit.toUpperCase()}</b><span class="rawConv">METAR raw: ${fmt(m.c)}°C<br>converted: ${fmt(cToF(m.c))}°F</span>`;if(peak&&wuRaw.length){const p=wuRaw.reduce((a,b)=>b.y>a.y?b:a,wuRaw[0]);peak.textContent=`${fmt(p.y)}°${masterChart.unit.toUpperCase()}`}if(fnow&&fc.latest.length){const h=nowHour(),near=fc.latest.reduce((a,b)=>Math.abs(b.hour-h)<Math.abs(a.hour-h)?b:a,fc.latest[0]);fnow.textContent=`${fmt(near.y)}°${masterChart.unit.toUpperCase()}`}if(sum&&w)sum.innerHTML=`Chart: ${masterChart.unit.toUpperCase()} · Red solid WU raw / red dashed converted · Green raw METAR / green dashed converted · WU raw F ${fmt(w.f)} / raw C ${fmt(w.c)}`}
-  async function masterRender(){syncChecks();updateButtons();const data=await loadData(),wuRaw=flattenWU(data.hist,'raw'),wuConv=flattenWU(data.hist,'conv'),metRaw=flattenMETAR(data.hist,'raw'),metConv=flattenMETAR(data.hist,'conv'),fc=forecast(data.snaps,data.date);setCards(wuRaw,metRaw,fc);const canvas=$('chart');if(!canvas)return;const ctx=canvas.getContext('2d'),W=canvas.width,H=canvas.height,L=70,R=28,T=48,B=60;const [xMin,xMax]=getRange(),show=masterChart.show,rl=masterChart.rawLines;let vals=[];const add=a=>(a||[]).forEach(p=>{if(p.hour>=xMin&&p.hour<=xMax&&N(p.y)!=null)vals.push(p.y)});if(show.wu&&rl.wuRaw)add(wuRaw);if(show.wu&&rl.wuConv)add(wuConv);if(show.metar&&rl.metarRaw)add(metRaw);if(show.metar&&rl.metarConv)add(metConv);if(show.forecast){add(fc.latest);add(fc.old)}if(!vals.length)vals=masterChart.unit==='f'?[70,100]:[20,40];let yMin=N($('yMinManual')?.value),yMax=N($('yMaxManual')?.value);if(yMin==null||yMax==null){const pad=masterChart.unit==='f'?4:1.2;yMin=Math.min(...vals)-pad;yMax=Math.max(...vals)+pad;if(yMax-yMin<(masterChart.unit==='f'?6:2)){const mid=(yMin+yMax)/2;yMin=mid-(masterChart.unit==='f'?3:1);yMax=mid+(masterChart.unit==='f'?3:1)}yMin=masterChart.unit==='f'?Math.floor(yMin):Math.floor(yMin*10)/10;yMax=masterChart.unit==='f'?Math.ceil(yMax):Math.ceil(yMax*10)/10}const pw=W-L-R,ph=H-T-B,X=h=>L+(h-xMin)/(xMax-xMin)*pw,Y=v=>T+(yMax-v)/(yMax-yMin)*ph;ctx.clearRect(0,0,W,H);ctx.fillStyle='#fafafa';ctx.fillRect(0,0,W,H);if(show.peak&&wuRaw.length){const pk=Math.max(...wuRaw.map(p=>p.y)),near=wuRaw.filter(p=>p.hour>=xMin&&p.hour<=xMax&&p.y>=pk-(masterChart.unit==='f'?0.6:0.3));if(near.length>=2){const a=near[0].hour,b=near.at(-1).hour;ctx.fillStyle='rgba(250,204,21,.18)';ctx.fillRect(X(a),T,Math.max(2,X(b)-X(a)),ph);ctx.fillStyle='#92400e';ctx.font='bold 13px sans-serif';ctx.fillText(`today peak plateau ${fmtTime(a)}–${fmtTime(b)}`,X(a)+8,T+22)}}ctx.font='13px sans-serif';ctx.fillStyle='#6b7280';ctx.strokeStyle='#e5e7eb';ctx.lineWidth=1;const xStep=(xMax-xMin)<=4?0.5:2;for(let h=Math.ceil(xMin/xStep)*xStep;h<=xMax+1e-9;h+=xStep){const x=X(h);ctx.beginPath();ctx.moveTo(x,T);ctx.lineTo(x,T+ph);ctx.stroke();ctx.fillText(fmtTime(h),x-18,H-24)}const yr=yMax-yMin,ys=masterChart.unit==='f'?(yr<=10?1:2):(yr<=3?0.1:0.5);for(let v=Math.ceil(yMin/ys)*ys;v<=yMax+1e-9;v+=ys){const y=Y(v);ctx.strokeStyle=Math.abs(v-Math.round(v))<.001?'#d1d5db':'#eef2f7';ctx.beginPath();ctx.moveTo(L,y);ctx.lineTo(L+pw,y);ctx.stroke();ctx.fillStyle='#6b7280';ctx.fillText((ys<1?v.toFixed(1):Math.round(v))+'°',18,y+4)}ctx.strokeStyle='#9ca3af';ctx.strokeRect(L,T,pw,ph);const nh=nowHour();if(nh>=xMin&&nh<=xMax){const x=X(nh);ctx.strokeStyle='#6b7280';ctx.setLineDash([5,6]);ctx.beginPath();ctx.moveTo(x,T-8);ctx.lineTo(x,T+ph);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='#374151';ctx.font='bold 14px sans-serif';ctx.fillText('now',x+8,T-12)}if(show.forecast){drawLine(ctx,fc.old,X,Y,'#93c5fd',2,[6,6]);drawLine(ctx,fc.latest,X,Y,'#111827',4)}if(show.bias&&fc.latest.length&&wuRaw.length){const last=wuRaw.at(-1),near=fc.latest.reduce((a,b)=>Math.abs(b.hour-last.hour)<Math.abs(a.hour-last.hour)?b:a,fc.latest[0]),bias=last.y-near.y;drawLine(ctx,fc.latest.map(p=>({...p,y:p.y+bias})),X,Y,'#06b6d4',3,[2,5])}if(show.ceiling&&wuRaw.length){const p=Math.max(...wuRaw.map(x=>x.y));drawLine(ctx,[{hour:xMin,y:p},{hour:xMax,y:p}],X,Y,'#a855f7',3,[8,6])}if(show.wu&&rl.wuRaw){drawLine(ctx,wuRaw,X,Y,'#ef4444',3);drawPts(ctx,wuRaw,X,Y,'#ef4444',3)}if(show.wu&&rl.wuConv)drawLine(ctx,wuConv,X,Y,'#ef4444',2,[5,5]);if(show.metar&&rl.metarRaw)drawPts(ctx,metRaw,X,Y,'#10b981',6);if(show.metar&&rl.metarConv){drawLine(ctx,metConv,X,Y,'#10b981',2,[4,5]);drawPts(ctx,metConv,X,Y,'#10b981',3)}}
-  function bind(){document.querySelectorAll('button').forEach(btn=>{if(btn.dataset.masterBound)return;btn.dataset.masterBound='1';btn.addEventListener('click',()=>{const t=(btn.textContent||'').trim().toLowerCase();if(btn.dataset.sourceMode)masterChart.sourceMode=btn.dataset.sourceMode;if(btn.dataset.u)masterChart.unit=btn.dataset.u;if(t==='°c')masterChart.unit='c';if(t==='°f')masterChart.unit='f';if(t.includes('tight'))masterChart.yMode='tight';if(t.includes('±1'))masterChart.yMode='plus1';if(t.includes('±2'))masterChart.yMode='plus2';if(t==='wide')masterChart.yMode='wide';if(t.includes('peak 9'))masterChart.xMode='peak';if(t.includes('last 3'))masterChart.xMode='last3';if(t==='24h')masterChart.xMode='full';if(t==='apply')masterChart.xMode='custom';setTimeout(masterRender,20)})});document.querySelectorAll('input[type=checkbox]').forEach(cb=>{if(cb.dataset.masterBound)return;cb.dataset.masterBound='1';cb.addEventListener('change',()=>setTimeout(masterRender,20))});const apply=$('applyAxisBtn');if(apply&&!apply.dataset.masterBound){apply.dataset.masterBound='1';apply.onclick=()=>{masterChart.xMode='custom';masterRender()}}const auto=$('autoAxisBtn');if(auto&&!auto.dataset.masterBound){auto.dataset.masterBound='1';auto.onclick=()=>{['xMinManual','xMaxManual','yMinManual','yMaxManual'].forEach(id=>{const e=$(id);if(e)e.value=''});window.__axisState={xMin:null,xMax:null,yMin:null,yMax:null};masterRender()}}}
-  window.render=masterRender;window.masterRender=masterRender;window.addEventListener('load',()=>{bind();refreshData().then(masterRender)});setInterval(()=>{bind();refreshData().then(masterRender)},30000);
+  const cfg = window.masterChart = window.masterChart || {
+    unit:'c',
+    xMode:'full',
+    show:{wu:true,metar:true,forecast:true,bias:true,ceiling:true,extreme:false,analog:true,peak:true},
+    rawLines:{wuRaw:true,wuConv:false,metarRaw:true,metarConv:false}
+  };
+
+  const $ = id => document.getElementById(id);
+  const N = v => { const x=Number(v); return Number.isFinite(x)?x:null; };
+  const cToF = c => N(c)==null ? null : N(c)*9/5+32;
+  const fToC = f => N(f)==null ? null : (N(f)-32)*5/9;
+  const fmt = v => { const x=N(v); if(x==null) return '—'; return x.toFixed(3).replace(/\.?0+$/,''); };
+  const todayIST = () => new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});
+  function nowHour(){ const d=new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Kolkata'})); return d.getHours()+d.getMinutes()/60; }
+  function parseHour(s){
+    s=String(s||'').trim(); if(!s) return null;
+    let m=s.match(/T(\d{1,2}):(\d{2})/) || s.match(/\b(\d{1,2}):(\d{2})(?::\d{2})?\b/);
+    if(!m) return null;
+    let h=Number(m[1]), min=Number(m[2]);
+    const low=s.toLowerCase();
+    if((low.includes('pm') || /\bp\b/.test(low)) && h<12) h+=12;
+    if((low.includes('am') || /\ba\b/.test(low)) && h===12) h=0;
+    return Number.isFinite(h)&&Number.isFinite(min) ? h+min/60 : null;
+  }
+  function fmtTime(h){ let hh=Math.floor(h), mm=Math.round((h-hh)*60); if(mm===60){hh++;mm=0;} const am=hh>=12?'p':'a'; return `${hh%12||12}:${String(mm).padStart(2,'0')}${am}`; }
+
+  async function fetchData(){
+    const date=todayIST();
+    let hist, snaps;
+    try{ hist=await fetch('/api/history?date='+date+'&t='+Date.now(),{cache:'no-store'}).then(r=>r.json()); window.__goodHist=hist; }catch(e){ hist=window.__goodHist || {}; }
+    try{ snaps=await fetch('/api/forecast-snapshots?date='+date+'&t='+Date.now(),{cache:'no-store'}).then(r=>r.json()); window.__goodSnaps=snaps; }catch(e){ snaps=window.__goodSnaps || {rows:[]}; }
+    return {date,hist:hist||{},snaps:snaps||{rows:[]}};
+  }
+
+  function wuValue(x, converted=false){
+    const c=N(x.temp_c), f=N(x.temp_f);
+    if(cfg.unit==='f') return converted ? (cToF(c) ?? f) : (f ?? cToF(c));
+    return converted ? (fToC(f) ?? c) : (c ?? fToC(f));
+  }
+  function metarValue(x){
+    const c=N(x.temp_c);
+    return cfg.unit==='f' ? cToF(c) : c;
+  }
+  function flattenWU(hist, converted=false){
+    const out=[];
+    const rows=hist.wu_obs_rows || {};
+    Object.values(rows).forEach(list => (Array.isArray(list)?list:[]).forEach(x=>{
+      const h=parseHour(x.saved_at || x.obs_time || x.fetched_at);
+      const y=wuValue(x, converted);
+      if(h!=null && N(y)!=null) out.push({hour:h,y,c:N(x.temp_c),f:N(x.temp_f),raw:x});
+    }));
+    // fallback: if grouped rows fail, use meta latest only
+    const latest=hist.meta && hist.meta.latest_wu;
+    if(!out.length && latest){
+      const h=parseHour(latest.obs_time || latest.fetched_at) ?? nowHour();
+      const y=wuValue(latest, converted);
+      if(N(y)!=null) out.push({hour:h,y,c:N(latest.temp_c),f:N(latest.temp_f),raw:latest});
+    }
+    return out.sort((a,b)=>a.hour-b.hour);
+  }
+  function flattenMETAR(hist){
+    const out=(hist.metar_rows||[]).map(x=>{
+      const h=parseHour(x.slot || x.valid_ist || x.fetched_at);
+      const y=metarValue(x);
+      return {hour:h,y,c:N(x.temp_c),f:cToF(x.temp_c),raw:x};
+    }).filter(p=>p.hour!=null && N(p.y)!=null).sort((a,b)=>a.hour-b.hour);
+    const latest=hist.meta && hist.meta.latest_metar;
+    if(!out.length && latest){
+      const h=parseHour(latest.slot || latest.valid_ist || latest.fetched_at) ?? nowHour();
+      const y=metarValue(latest);
+      if(N(y)!=null) out.push({hour:h,y,c:N(latest.temp_c),f:cToF(latest.temp_c),raw:latest});
+    }
+    return out;
+  }
+  function forecastValue(x){ return cfg.unit==='f' ? (N(x.temp_f) ?? cToF(x.temp_c)) : (N(x.temp_c) ?? fToC(x.temp_f)); }
+  function hourly(row){
+    try{
+      return JSON.parse(row && row.hourly_json || '[]').map(x=>{
+        const h=parseHour(x.time);
+        const y=forecastValue(x);
+        return {hour:h,y,c:N(x.temp_c),f:N(x.temp_f),raw:x};
+      }).filter(p=>p.hour!=null && N(p.y)!=null);
+    }catch(e){ return []; }
+  }
+  function flattenForecast(snaps,date){
+    const rows=(snaps.rows||[]).filter(r=>r.target_date===date || Number(r.horizon_days)===0);
+    return {latest:hourly(rows.at(-1)), old:hourly(rows[0]), rows};
+  }
+
+  function readControls(){
+    document.querySelectorAll('input[type=checkbox]').forEach(cb=>{
+      if(cb.dataset.rawLine){
+        cfg.rawLines[cb.dataset.rawLine]=cb.checked;
+        cb.closest('label')?.classList.toggle('active',cb.checked);
+        return;
+      }
+      const label=(cb.closest('button,label')?.textContent || cb.parentElement?.textContent || '').toLowerCase();
+      let k=null;
+      if(label.includes('wu')) k='wu';
+      else if(label.includes('metar')) k='metar';
+      else if(label.includes('forecast')) k='forecast';
+      else if(label.includes('bias')) k='bias';
+      else if(label.includes('95') || label.includes('ceiling')) k='ceiling';
+      else if(label.includes('99') || label.includes('extreme')) k='extreme';
+      else if(label.includes('analog')) k='analog';
+      else if(label.includes('peak window')) k='peak';
+      if(k) cfg.show[k]=cb.checked;
+    });
+  }
+  function rangeFromControls(allPts){
+    let a=N($('xMinManual')?.value), b=N($('xMaxManual')?.value);
+    if(!(a!=null && b!=null && b>a)){
+      if(cfg.xMode==='peak'){ a=9; b=18; }
+      else if(cfg.xMode==='last3'){ const h=nowHour(); a=Math.max(0,h-3); b=Math.min(24,h+0.5); }
+      else { a=0; b=24; }
+    }
+    const has=allPts.some(p=>p.hour>=a && p.hour<=b);
+    if(!has && allPts.length){
+      a=Math.max(0,Math.floor(Math.min(...allPts.map(p=>p.hour))));
+      b=Math.min(24,Math.ceil(Math.max(...allPts.map(p=>p.hour))));
+      if(b<=a) b=Math.min(24,a+2);
+    }
+    return [a,b];
+  }
+
+  function setCards(wuRaw,metar,fc){
+    const w=wuRaw.at(-1), m=metar.at(-1);
+    const curWu=$('curWu'), curMetar=$('curMetar'), peak=$('peakSoFar'), fnow=$('fcNow'), sum=$('curveSummary');
+    if(curWu && w) curWu.innerHTML=`<b>${fmt(cfg.unit==='f'?w.f:w.c)}°${cfg.unit.toUpperCase()}</b><span class="rawConv">WU raw: ${fmt(w.f)}°F + ${fmt(w.c)}°C<br>converted: ${fmt(fToC(w.f))}°C from F · ${fmt(cToF(w.c))}°F from C</span>`;
+    if(curMetar && m) curMetar.innerHTML=`<b>${fmt(cfg.unit==='f'?cToF(m.c):m.c)}°${cfg.unit.toUpperCase()}</b><span class="rawConv">METAR raw: ${fmt(m.c)}°C<br>converted: ${fmt(cToF(m.c))}°F</span>`;
+    if(peak && wuRaw.length){ const p=wuRaw.reduce((a,b)=>b.y>a.y?b:a,wuRaw[0]); peak.textContent=`${fmt(p.y)}°${cfg.unit.toUpperCase()}`; }
+    if(fnow && fc.latest.length){ const h=nowHour(); const near=fc.latest.reduce((a,b)=>Math.abs(b.hour-h)<Math.abs(a.hour-h)?b:a,fc.latest[0]); fnow.textContent=`${fmt(near.y)}°${cfg.unit.toUpperCase()}`; }
+    if(sum && w) sum.innerHTML=`Chart OK · Current WU ${fmt(w.y)}°${cfg.unit.toUpperCase()} · raw F ${fmt(w.f)} / raw C ${fmt(w.c)}`;
+  }
+
+  function drawLine(ctx,pts,X,Y,color,w=3,dash=[]){
+    pts=(pts||[]).filter(p=>N(p.hour)!=null && N(p.y)!=null).sort((a,b)=>a.hour-b.hour);
+    if(pts.length<2) return;
+    ctx.save(); ctx.strokeStyle=color; ctx.lineWidth=w; ctx.setLineDash(dash); ctx.lineCap='round'; ctx.lineJoin='round';
+    ctx.beginPath(); ctx.moveTo(X(pts[0].hour),Y(pts[0].y));
+    for(let i=1;i<pts.length;i++) ctx.lineTo(X(pts[i].hour),Y(pts[i].y));
+    ctx.stroke(); ctx.restore();
+  }
+  function drawPts(ctx,pts,X,Y,color,r=5){
+    ctx.save(); ctx.fillStyle=color; ctx.strokeStyle='#fff'; ctx.lineWidth=1.2;
+    (pts||[]).forEach(p=>{ ctx.beginPath(); ctx.arc(X(p.hour),Y(p.y),r,0,Math.PI*2); ctx.fill(); ctx.stroke(); });
+    ctx.restore();
+  }
+
+  async function render(){
+    readControls();
+    const data=await fetchData();
+    const wuRaw=flattenWU(data.hist,false), wuConv=flattenWU(data.hist,true), metar=flattenMETAR(data.hist), fc=flattenForecast(data.snaps,data.date);
+    setCards(wuRaw,metar,fc);
+    const canvas=$('chart'); if(!canvas) return;
+    const ctx=canvas.getContext('2d');
+    const W=canvas.width,H=canvas.height,L=70,R=28,T=48,B=60,pw=W-L-R,ph=H-T-B;
+    const allPts=[...wuRaw,...wuConv,...metar,...fc.latest,...fc.old].filter(p=>N(p.hour)!=null&&N(p.y)!=null);
+    let [xMin,xMax]=rangeFromControls(allPts);
+    let visible=[];
+    function add(arr){ (arr||[]).forEach(p=>{ if(p.hour>=xMin && p.hour<=xMax && N(p.y)!=null) visible.push(p.y); }); }
+    if(cfg.show.wu && cfg.rawLines.wuRaw) add(wuRaw);
+    if(cfg.show.wu && cfg.rawLines.wuConv) add(wuConv);
+    if(cfg.show.metar) add(metar);
+    if(cfg.show.forecast){ add(fc.latest); add(fc.old); }
+    if(!visible.length) visible=allPts.map(p=>p.y).filter(v=>N(v)!=null);
+    if(!visible.length) visible=cfg.unit==='f'?[70,100]:[20,40];
+    let yMin=N($('yMinManual')?.value), yMax=N($('yMaxManual')?.value);
+    if(yMin==null || yMax==null){
+      const pad=cfg.unit==='f'?4:1.2;
+      yMin=Math.min(...visible)-pad; yMax=Math.max(...visible)+pad;
+      if(yMax-yMin<(cfg.unit==='f'?6:2)){ const mid=(yMin+yMax)/2; yMin=mid-(cfg.unit==='f'?3:1); yMax=mid+(cfg.unit==='f'?3:1); }
+      yMin=cfg.unit==='f'?Math.floor(yMin):Math.floor(yMin*10)/10;
+      yMax=cfg.unit==='f'?Math.ceil(yMax):Math.ceil(yMax*10)/10;
+    }
+    const X=h=>L+(h-xMin)/(xMax-xMin)*pw, Y=v=>T+(yMax-v)/(yMax-yMin)*ph;
+    ctx.clearRect(0,0,W,H); ctx.fillStyle='#fafafa'; ctx.fillRect(0,0,W,H);
+
+    if(cfg.show.peak && wuRaw.length){
+      const pk=Math.max(...wuRaw.map(p=>p.y));
+      const near=wuRaw.filter(p=>p.hour>=xMin&&p.hour<=xMax&&p.y>=pk-(cfg.unit==='f'?0.6:0.3));
+      if(near.length>=2){
+        const a=near[0].hour,b=near.at(-1).hour;
+        ctx.fillStyle='rgba(250,204,21,.18)'; ctx.fillRect(X(a),T,Math.max(2,X(b)-X(a)),ph);
+        ctx.fillStyle='#92400e'; ctx.font='bold 13px sans-serif'; ctx.fillText(`today peak plateau ${fmtTime(a)}–${fmtTime(b)}`,X(a)+8,T+22);
+      }
+    }
+
+    ctx.font='13px sans-serif'; ctx.fillStyle='#6b7280'; ctx.strokeStyle='#e5e7eb'; ctx.lineWidth=1;
+    const xStep=(xMax-xMin)<=4?0.5:2;
+    for(let h=Math.ceil(xMin/xStep)*xStep;h<=xMax+1e-9;h+=xStep){
+      const x=X(h); ctx.beginPath(); ctx.moveTo(x,T); ctx.lineTo(x,T+ph); ctx.stroke(); ctx.fillText(fmtTime(h),x-18,H-24);
+    }
+    const yr=yMax-yMin, ys=cfg.unit==='f'?(yr<=10?1:2):(yr<=3?0.1:0.5);
+    for(let v=Math.ceil(yMin/ys)*ys;v<=yMax+1e-9;v+=ys){
+      const y=Y(v); ctx.strokeStyle=Math.abs(v-Math.round(v))<.001?'#d1d5db':'#eef2f7'; ctx.beginPath(); ctx.moveTo(L,y); ctx.lineTo(L+pw,y); ctx.stroke();
+      ctx.fillStyle='#6b7280'; ctx.fillText((ys<1?v.toFixed(1):Math.round(v))+'°',18,y+4);
+    }
+    ctx.strokeStyle='#9ca3af'; ctx.strokeRect(L,T,pw,ph);
+    const nh=nowHour(); if(nh>=xMin&&nh<=xMax){ const x=X(nh); ctx.strokeStyle='#6b7280'; ctx.setLineDash([5,6]); ctx.beginPath(); ctx.moveTo(x,T-8); ctx.lineTo(x,T+ph); ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle='#374151'; ctx.font='bold 14px sans-serif'; ctx.fillText('now',x+8,T-12); }
+
+    if(cfg.show.forecast){ drawLine(ctx,fc.old,X,Y,'#93c5fd',2,[6,6]); drawLine(ctx,fc.latest,X,Y,'#111827',4); }
+    if(cfg.show.bias && fc.latest.length && wuRaw.length){ const last=wuRaw.at(-1); const near=fc.latest.reduce((a,b)=>Math.abs(b.hour-last.hour)<Math.abs(a.hour-last.hour)?b:a,fc.latest[0]); const bias=last.y-near.y; drawLine(ctx,fc.latest.map(p=>({...p,y:p.y+bias})),X,Y,'#06b6d4',3,[2,5]); }
+    if(cfg.show.ceiling && wuRaw.length){ const p=Math.max(...wuRaw.map(x=>x.y)); drawLine(ctx,[{hour:xMin,y:p},{hour:xMax,y:p}],X,Y,'#a855f7',3,[8,6]); }
+    if(cfg.show.wu && cfg.rawLines.wuRaw){ drawLine(ctx,wuRaw,X,Y,'#ef4444',3); drawPts(ctx,wuRaw,X,Y,'#ef4444',3); }
+    if(cfg.show.wu && cfg.rawLines.wuConv) drawLine(ctx,wuConv,X,Y,'#ef4444',2,[5,5]);
+    if(cfg.show.metar){ drawPts(ctx,metar,X,Y,'#10b981',6); }
+  }
+
+  function bind(){
+    document.querySelectorAll('button').forEach(btn=>{
+      if(btn.dataset.safeBound) return; btn.dataset.safeBound='1';
+      btn.addEventListener('click',()=>{
+        const t=(btn.textContent||'').trim().toLowerCase();
+        if(btn.dataset.u) cfg.unit=btn.dataset.u;
+        if(t==='°c') cfg.unit='c'; if(t==='°f') cfg.unit='f';
+        if(t.includes('peak 9')) cfg.xMode='peak';
+        if(t.includes('last 3')) cfg.xMode='last3';
+        if(t==='24h') cfg.xMode='full';
+        if(t==='apply') cfg.xMode='custom';
+        if(btn.dataset.sourceMode){} // cards show both anyway
+        setTimeout(render,20);
+      });
+    });
+    document.querySelectorAll('input[type=checkbox]').forEach(cb=>{
+      if(cb.dataset.safeBound) return; cb.dataset.safeBound='1';
+      cb.addEventListener('change',()=>setTimeout(render,20));
+    });
+    const apply=$('applyAxisBtn'); if(apply && !apply.dataset.safeBound){ apply.dataset.safeBound='1'; apply.onclick=()=>{ cfg.xMode='custom'; render(); }; }
+    const auto=$('autoAxisBtn'); if(auto && !auto.dataset.safeBound){ auto.dataset.safeBound='1'; auto.onclick=()=>{ ['xMinManual','xMaxManual','yMinManual','yMaxManual'].forEach(id=>{const e=$(id); if(e)e.value='';}); cfg.xMode='full'; render(); }; }
+  }
+  window.render=render; window.masterRender=render;
+  window.addEventListener('load',()=>{ bind(); render(); });
+  setInterval(()=>{ bind(); render(); },30000);
 })();
 </script>
-
 
 </body></html>
