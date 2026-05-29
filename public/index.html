@@ -525,6 +525,25 @@ td{
   #forecastHighTrendCanvas{height:220px}
 }
 
+
+/* ===== FORECAST MAX LINE + SOURCE CLARITY PATCH ===== */
+.forecastSourceBadge{
+  display:inline-block;
+  margin-top:8px;
+  padding:6px 10px;
+  border-radius:999px;
+  background:#17324a;
+  color:#9bd4ff;
+  font-weight:1000;
+  font-size:14px;
+}
+.forecastSourceBadge.hourly{background:#064e3b;color:#8fffd2}
+.forecastSourceBadge.daily{background:#5a3b05;color:#ffd76a}
+.forecastMaxLineLegend{
+  color:#f97316;
+  font-weight:1000;
+}
+
 </style></head><body>
 <div class="wrap">
   <div class="header"><div><h1>VILK <span class="cyan">Live Signal</span></h1><div class="sub">● UI refresh 30 sec · cron save 1 min · Lucknow Airport (VILK) · D1 archive</div></div><div><button class="btn" id="refreshBtn">↻ Refresh Now</button><div class="updated" id="updated">Updated --</div></div></div>
@@ -632,7 +651,7 @@ td{
 <section class="card" id="threeDayHighForecastSection">
   <h2 style="margin-top:0;letter-spacing:4px;color:#a9d8ff">🔥 POLYMARKET HIGH FORECAST — TODAY + NEXT 2 DAYS</h2>
   <div class="note">
-    Shows highest forecast temperature from saved WU forecast snapshots. Useful for markets like “highest temperature in Lucknow on 31 May”.
+    Shows highest forecast temperature from saved WU forecast snapshots. Today/tomorrow normally use WU hourly forecast; day-after may use WU daily max if hourly data is not available. Useful for markets like “highest temperature in Lucknow on 31 May”.
   </div>
   <div class="highForecastGrid">
     <div class="highForecastCard">
@@ -1138,109 +1157,13 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
 </script>
 
 
-<script id="three-day-high-forecast-patch">
-(function(){
-  const $=id=>document.getElementById(id);
-  const N=v=>{const x=Number(v);return Number.isFinite(x)?x:null};
-  const cToF=c=>N(c)==null?null:N(c)*9/5+32;
-  const fToC=f=>N(f)==null?null:(N(f)-32)*5/9;
-  const fmt=v=>{const x=N(v);if(x==null)return '—';return x.toFixed(1).replace(/\.0$/,'')};
-  function dateIST(offset=0){
-    const d=new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Kolkata'}));
-    d.setDate(d.getDate()+offset);
-    return d.toLocaleDateString('en-CA');
-  }
-  function prettyDate(date){
-    try{
-      const d=new Date(date+'T00:00:00');
-      return d.toLocaleDateString('en-IN',{weekday:'short',day:'2-digit',month:'short',year:'numeric'});
-    }catch(e){return date}
-  }
-  function hourFromTime(t){
-    const s=String(t||'');
-    let m=s.match(/T(\d{1,2}):(\d{2})/)||s.match(/\b(\d{1,2}):(\d{2})/);
-    if(!m)return null;
-    return Number(m[1])+Number(m[2])/60;
-  }
-  function fmtTime(h){
-    if(N(h)==null)return '—';
-    let hh=Math.floor(h),mm=Math.round((h-hh)*60);
-    if(mm===60){hh++;mm=0}
-    const ap=hh>=12?'PM':'AM';
-    return `${hh%12||12}:${String(mm).padStart(2,'0')} ${ap}`;
-  }
-  function marketBin(c){
-    const x=N(c);
-    if(x==null)return '—';
-    return Math.round(x); // same bin logic user asked earlier: 40.9 -> 41, 40.3 -> 40
-  }
-  async function fetchSnapsFor(date){
-    try{
-      const r=await fetch('/api/forecast-snapshots?date='+date+'&t='+Date.now(),{cache:'no-store'});
-      if(r.ok)return await r.json();
-    }catch(e){}
-    return {rows:[]};
-  }
-  function parseHourly(row){
-    try{
-      return JSON.parse(row.hourly_json||'[]').map(x=>{
-        const c=N(x.temp_c) ?? fToC(x.temp_f);
-        const f=N(x.temp_f) ?? cToF(c);
-        return {time:x.time,hour:hourFromTime(x.time),c,f,raw:x};
-      }).filter(x=>N(x.c)!=null);
-    }catch(e){return[]}
-  }
-  function bestHigh(snaps,targetDate){
-    const rows=(snaps.rows||[]).filter(r=>{
-      return r.target_date===targetDate || r.forecast_date===targetDate || String(r.date||'')===targetDate || Number(r.horizon_days)>=0;
-    });
-    let best=null,bestRow=null;
-    for(const row of rows){
-      const hourly=parseHourly(row);
-      // Prefer hourly entries matching target date when time contains date
-      const filtered=hourly.filter(x=>!String(x.time||'').includes('-') || String(x.time||'').startsWith(targetDate));
-      const arr=filtered.length?filtered:hourly;
-      for(const x of arr){
-        if(!best || x.c>best.c){best=x;bestRow=row;}
-      }
-    }
-    return best?{...best,row:bestRow,count:rows.length}:null;
-  }
-  async function render3DayHigh(){
-    const dates=[dateIST(0),dateIST(1),dateIST(2)];
-    const ids=[
-      ['hfToday','hfTodayMeta','hfTodayBin'],
-      ['hfTomorrow','hfTomorrowMeta','hfTomorrowBin'],
-      ['hfDayAfter','hfDayAfterMeta','hfDayAfterBin']
-    ];
-    for(let i=0;i<3;i++){
-      const date=dates[i];
-      let snaps=await fetchSnapsFor(date);
-      let best=bestHigh(snaps,date);
-      // fallback: today's endpoint may include all horizon rows
-      if(!best && i>0){
-        const todaySnaps=await fetchSnapsFor(dateIST(0));
-        best=bestHigh(todaySnaps,date);
-      }
-      const [vId,mId,bId]=ids[i];
-      if(best){
-        $(vId).textContent=`${fmt(best.c)}°C`;
-        $(mId).innerHTML=`${prettyDate(date)}<br>Peak forecast time: <b>${fmtTime(best.hour)}</b><br>Raw/converted: ${fmt(best.c)}°C / ${fmt(best.f)}°F<br>Snapshots checked: ${best.count||0}`;
-        $(bId).textContent=`Market bin ≈ ${marketBin(best.c)}°C`;
-      }else{
-        $(vId).textContent='—';
-        $(mId).textContent='No forecast snapshot found yet';
-        $(bId).textContent='Bin —';
-      }
-    }
-  }
-  window.addEventListener('load',()=>setTimeout(render3DayHigh,800));
-  setInterval(render3DayHigh,60000);
-})();
-</script>
 
 
-<script id="current-day-forecast-high-trend-patch">
+
+
+
+
+<script id="forecast-max-main-chart-line-patch">
 (function(){
   const $=id=>document.getElementById(id);
   const N=v=>{const x=Number(v);return Number.isFinite(x)?x:null};
@@ -1248,6 +1171,14 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
   const fToC=f=>N(f)==null?null:(N(f)-32)*5/9;
   const fmt=v=>{const x=N(v);if(x==null)return '—';return x.toFixed(1).replace(/\.0$/,'')};
   const todayIST=()=>new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});
+  function dateIST(offset=0){
+    const d=new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Kolkata'}));
+    d.setDate(d.getDate()+offset);
+    return d.toLocaleDateString('en-CA');
+  }
+  function prettyDate(date){
+    try{return new Date(date+'T00:00:00').toLocaleDateString('en-IN',{weekday:'short',day:'2-digit',month:'short',year:'numeric'})}catch(e){return date}
+  }
   function parseHour(s){
     s=String(s||'');
     let m=s.match(/T(\d{1,2}):(\d{2})/)||s.match(/\b(\d{1,2}):(\d{2})/);
@@ -1264,143 +1195,219 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
     const ap=hh>=12?'PM':'AM';
     return `${hh%12||12}:${String(mm).padStart(2,'0')} ${ap}`;
   }
-  function prettyDate(d){
-    try{return new Date(d+'T00:00:00').toLocaleDateString('en-IN',{weekday:'short',day:'2-digit',month:'short'})}catch(e){return d}
+  function unit(){
+    try{
+      if(window.state&&state.unit)return String(state.unit).toLowerCase().startsWith('f')?'f':'c';
+      if(window.masterChart&&masterChart.unit)return String(masterChart.unit).toLowerCase().startsWith('f')?'f':'c';
+      if(window.S&&S.unit)return String(S.unit).toLowerCase().startsWith('f')?'f':'c';
+    }catch(e){}
+    return document.querySelector('[data-u="f"].active,[data-unit="f"].active')?'f':'c';
   }
   function marketBin(c){return N(c)==null?'—':Math.round(N(c));}
   async function fetchSnaps(date){
     try{
       const r=await fetch('/api/forecast-snapshots?date='+date+'&t='+Date.now(),{cache:'no-store'});
-      if(r.ok)return await r.json();
+      if(r.ok){const j=await r.json(); window.__goodForecastSnaps=j; return j;}
     }catch(e){}
     return window.__goodForecastSnaps||{rows:[]};
   }
-  function parseHourly(row){
+  function parseHourly(row, targetDate){
     try{
       return JSON.parse(row.hourly_json||'[]').map(x=>{
         const c=N(x.temp_c)??fToC(x.temp_f);
         const f=N(x.temp_f)??cToF(c);
         return {time:x.time,hour:parseHour(x.time),c,f,raw:x};
-      }).filter(x=>N(x.c)!=null);
+      }).filter(x=>N(x.c)!=null && (!String(x.time||'').includes('-') || String(x.time||'').startsWith(targetDate)));
     }catch(e){return[]}
   }
-  function snapshotTime(row){
-    const s=row.fetched_at||row.created_at||row.snapshot_at||row.saved_at||row.updated_at||row.run_time||row.obs_time||'';
+  function snapshotTime(row, fallbackIndex=0){
+    const s=row.fetched_at||row.fetch_time_ist||row.created_at||row.snapshot_at||row.saved_at||row.updated_at||row.forecast_issue_time_ist||'';
     const h=parseHour(s);
-    if(h!=null)return h;
-    // fallback sequence order later
-    return null;
+    return h!=null?h:(8+fallbackIndex*0.25);
   }
-  function targetRows(snaps,date){
-    return (snaps.rows||[]).filter(r=>{
-      return r.target_date===date || r.forecast_date===date || String(r.date||'')===date || Number(r.horizon_days)===0 || r.hourly_json;
-    }).sort((a,b)=>{
-      const ah=snapshotTime(a), bh=snapshotTime(b);
-      if(ah!=null&&bh!=null)return ah-bh;
-      return 0;
-    });
+  function rowsFor(snaps,date){
+    return (snaps.rows||[]).filter(r=>r.target_date===date || r.forecast_date===date || String(r.date||'')===date || r.hourly_json)
+      .sort((a,b)=>snapshotTime(a)-snapshotTime(b));
   }
   function highForRow(row,date){
-    const hourly=parseHourly(row);
-    const filtered=hourly.filter(x=>!String(x.time||'').includes('-') || String(x.time||'').startsWith(date));
-    const arr=filtered.length?filtered:hourly;
-    let best=null;
-    arr.forEach(x=>{if(!best||x.c>best.c)best=x});
-    return best;
+    const hourly=parseHourly(row,date);
+    if(hourly.length){
+      let best=hourly[0];
+      hourly.forEach(x=>{if(x.c>best.c)best=x});
+      return {highC:best.c,highF:best.f,peakHour:best.hour,source:'hourly',hourlyCount:hourly.length,row,best};
+    }
+    const hc=N(row.high_c), hf=N(row.high_f)??cToF(hc);
+    if(hc!=null)return {highC:hc,highF:hf,peakHour:null,source:'daily',hourlyCount:0,row,best:null};
+    return null;
+  }
+  function latestHigh(snaps,date){
+    const rows=rowsFor(snaps,date);
+    let latest=null;
+    rows.forEach((r,i)=>{
+      const h=highForRow(r,date);
+      if(h) latest={...h,snapshotHour:snapshotTime(r,i),snapCount:rows.length};
+    });
+    return latest;
   }
   function buildTrend(snaps,date){
-    const rows=targetRows(snaps,date);
-    const out=[];
-    rows.forEach((row,i)=>{
-      const best=highForRow(row,date);
-      if(!best)return;
-      let h=snapshotTime(row);
-      if(h==null)h=8+i*0.25; // fallback if DB doesn't expose snapshot time
-      out.push({snapshotHour:h,highC:best.c,highF:best.f,peakHour:best.hour,row,best});
+    const rows=rowsFor(snaps,date), out=[];
+    rows.forEach((r,i)=>{
+      const h=highForRow(r,date);
+      if(h) out.push({...h,snapshotHour:snapshotTime(r,i),snapCount:rows.length});
     });
-    // de-dupe same snapshot hour/high
     const uniq=[];
     out.forEach(p=>{
       const last=uniq.at(-1);
-      if(!last||Math.abs(last.snapshotHour-p.snapshotHour)>0.01||Math.abs(last.highC-p.highC)>0.01)uniq.push(p);
+      if(!last||Math.abs(last.snapshotHour-p.snapshotHour)>0.01||Math.abs(last.highC-p.highC)>0.01||last.source!==p.source)uniq.push(p);
     });
     return uniq;
   }
+  function set3DayCards(data){
+    const ids=[
+      ['hfToday','hfTodayMeta','hfTodayBin'],
+      ['hfTomorrow','hfTomorrowMeta','hfTomorrowBin'],
+      ['hfDayAfter','hfDayAfterMeta','hfDayAfterBin']
+    ];
+    data.forEach((d,i)=>{
+      const [vId,mId,bId]=ids[i];
+      const v=$(vId),m=$(mId),b=$(bId);
+      if(!v||!m||!b)return;
+      if(!d.best){
+        v.textContent='—';m.textContent='No forecast snapshot found yet';b.textContent='Bin —';return;
+      }
+      const x=d.best;
+      v.textContent=`${fmt(x.highC)}°C`;
+      const badge=x.source==='hourly'
+        ? '<span class="forecastSourceBadge hourly">Source: WU hourly forecast</span>'
+        : '<span class="forecastSourceBadge daily">Source: WU daily forecast max</span>';
+      m.innerHTML=`${prettyDate(d.date)}<br>Peak forecast time: <b>${x.peakHour!=null?fmtTime(x.peakHour):'daily max only'}</b><br>Raw/converted: ${fmt(x.highC)}°C / ${fmt(x.highF)}°F<br>Snapshots checked: ${x.snapCount||0}<br>${badge}`;
+      b.textContent=`Market bin ≈ ${marketBin(x.highC)}°C`;
+    });
+  }
+  async function render3DayHigh(){
+    const dates=[dateIST(0),dateIST(1),dateIST(2)];
+    const arr=[];
+    for(let i=0;i<3;i++){
+      let snaps=await fetchSnaps(dates[i]);
+      let best=latestHigh(snaps,dates[i]);
+      if(!best && i>0){
+        const todaySnaps=await fetchSnaps(dateIST(0));
+        best=latestHigh(todaySnaps,dates[i]);
+      }
+      arr.push({date:dates[i],best});
+    }
+    set3DayCards(arr);
+  }
+
   function drawTrend(points){
     const c=$('forecastHighTrendCanvas');
     if(!c)return;
-    const ctx=c.getContext('2d');
-    const W=c.width,H=c.height,L=70,R=25,T=28,B=44;
-    ctx.clearRect(0,0,W,H);
-    ctx.fillStyle='#fafafa';ctx.fillRect(0,0,W,H);
+    const ctx=c.getContext('2d'),W=c.width,H=c.height,L=70,R=25,T=28,B=44;
+    ctx.clearRect(0,0,W,H);ctx.fillStyle='#fafafa';ctx.fillRect(0,0,W,H);
     ctx.font='14px ui-monospace,Consolas,monospace';
-    if(!points.length){
-      ctx.fillStyle='#6b7280';ctx.fillText('No WU forecast snapshots found yet',L,T+40);return;
-    }
-    let xMin=Math.floor(Math.min(...points.map(p=>p.snapshotHour)));
-    let xMax=Math.ceil(Math.max(...points.map(p=>p.snapshotHour)));
+    if(!points.length){ctx.fillStyle='#6b7280';ctx.fillText('No WU forecast snapshots found yet',L,T+40);return;}
+    let xMin=Math.floor(Math.min(...points.map(p=>p.snapshotHour))),xMax=Math.ceil(Math.max(...points.map(p=>p.snapshotHour)));
     if(xMax<=xMin){xMin=Math.max(0,xMin-1);xMax=Math.min(24,xMax+1)}
-    let yMin=Math.floor((Math.min(...points.map(p=>p.highC))-1)*10)/10;
-    let yMax=Math.ceil((Math.max(...points.map(p=>p.highC))+1)*10)/10;
+    let yMin=Math.floor((Math.min(...points.map(p=>p.highC))-1)*10)/10,yMax=Math.ceil((Math.max(...points.map(p=>p.highC))+1)*10)/10;
     if(yMax-yMin<2){const mid=(yMin+yMax)/2;yMin=mid-1;yMax=mid+1}
     const pw=W-L-R,ph=H-T-B,X=x=>L+(x-xMin)/(xMax-xMin)*pw,Y=y=>T+(yMax-y)/(yMax-yMin)*ph;
     ctx.strokeStyle='#e5e7eb';ctx.lineWidth=1;
-    for(let h=Math.ceil(xMin);h<=xMax;h++){
-      const x=X(h);ctx.beginPath();ctx.moveTo(x,T);ctx.lineTo(x,T+ph);ctx.stroke();
-      ctx.fillStyle='#6b7280';ctx.fillText(fmtTime(h).replace(':00',''),x-22,H-16);
-    }
+    for(let h=Math.ceil(xMin);h<=xMax;h++){const x=X(h);ctx.beginPath();ctx.moveTo(x,T);ctx.lineTo(x,T+ph);ctx.stroke();ctx.fillStyle='#6b7280';ctx.fillText(fmtTime(h).replace(':00',''),x-22,H-16);}
     const step=(yMax-yMin)<=4?0.5:1;
-    for(let v=Math.ceil(yMin/step)*step;v<=yMax+1e-9;v+=step){
-      const y=Y(v);ctx.strokeStyle=Math.abs(v-Math.round(v))<.01?'#d1d5db':'#eef2f7';
-      ctx.beginPath();ctx.moveTo(L,y);ctx.lineTo(L+pw,y);ctx.stroke();
-      ctx.fillStyle='#6b7280';ctx.fillText(fmt(v)+'°',15,y+4);
-    }
+    for(let v=Math.ceil(yMin/step)*step;v<=yMax+1e-9;v+=step){const y=Y(v);ctx.strokeStyle=Math.abs(v-Math.round(v))<.01?'#d1d5db':'#eef2f7';ctx.beginPath();ctx.moveTo(L,y);ctx.lineTo(L+pw,y);ctx.stroke();ctx.fillStyle='#6b7280';ctx.fillText(fmt(v)+'°',15,y+4);}
     ctx.strokeStyle='#94a3b8';ctx.strokeRect(L,T,pw,ph);
-    // line
-    ctx.strokeStyle='#f97316';ctx.lineWidth=4;ctx.lineCap='round';ctx.lineJoin='round';
-    ctx.beginPath();ctx.moveTo(X(points[0].snapshotHour),Y(points[0].highC));
-    for(let i=1;i<points.length;i++)ctx.lineTo(X(points[i].snapshotHour),Y(points[i].highC));
-    ctx.stroke();
-    points.forEach((p,i)=>{
-      ctx.fillStyle=i===points.length-1?'#ef4444':'#f97316';
-      ctx.strokeStyle='#fff';ctx.lineWidth=2;
-      ctx.beginPath();ctx.arc(X(p.snapshotHour),Y(p.highC),6,0,Math.PI*2);ctx.fill();ctx.stroke();
-    });
-    const first=points[0], last=points.at(-1);
-    const diff=last.highC-first.highC;
-    ctx.fillStyle=diff>0?'#dc2626':(diff<0?'#059669':'#374151');
-    ctx.font='bold 16px ui-monospace,Consolas,monospace';
-    ctx.fillText(`Forecast high trend: ${fmt(first.highC)}°C → ${fmt(last.highC)}°C (${diff>=0?'+':''}${fmt(diff)}°C)`,L+8,T+22);
+    ctx.strokeStyle='#f97316';ctx.lineWidth=4;ctx.lineCap='round';ctx.lineJoin='round';ctx.beginPath();ctx.moveTo(X(points[0].snapshotHour),Y(points[0].highC));for(let i=1;i<points.length;i++)ctx.lineTo(X(points[i].snapshotHour),Y(points[i].highC));ctx.stroke();
+    points.forEach((p,i)=>{ctx.fillStyle=p.source==='hourly'?'#f97316':'#facc15';if(i===points.length-1)ctx.fillStyle='#ef4444';ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(X(p.snapshotHour),Y(p.highC),6,0,Math.PI*2);ctx.fill();ctx.stroke();});
+    const first=points[0],last=points.at(-1),diff=last.highC-first.highC;
+    ctx.fillStyle=diff>0?'#dc2626':(diff<0?'#059669':'#374151');ctx.font='bold 16px ui-monospace,Consolas,monospace';
+    ctx.fillText(`WU forecast high trend: ${fmt(first.highC)}°C → ${fmt(last.highC)}°C (${diff>=0?'+':''}${fmt(diff)}°C)`,L+8,T+22);
   }
-  function renderCards(points,date){
-    const latest=points.at(-1), first=points[0];
+  function renderTrendCards(points,date){
+    const latest=points.at(-1),first=points[0];
     const set=(id,v)=>{const e=$(id);if(e)e.innerHTML=v};
-    if(!latest){
-      set('fhLatest','—');set('fhLatestSub','No WU forecast snapshot found');
-      set('fhFirst','—');set('fhFirstSub','—');set('fhChange','—');set('fhChangeSub','—');set('fhBin','—');set('fhBinSub','—');
-      return;
-    }
+    if(!latest){set('fhLatest','—');set('fhLatestSub','No WU forecast snapshot found');set('fhFirst','—');set('fhFirstSub','—');set('fhChange','—');set('fhChangeSub','—');set('fhBin','—');set('fhBinSub','—');return;}
     const diff=latest.highC-first.highC;
+    const badge=latest.source==='hourly'?'<span class="forecastSourceBadge hourly">WU hourly forecast</span>':'<span class="forecastSourceBadge daily">WU daily max</span>';
     set('fhLatest',`${fmt(latest.highC)}°C`);
-    set('fhLatestSub',`${prettyDate(date)} · forecast peak ${fmtTime(latest.peakHour)}<br>${fmt(latest.highF)}°F · snapshot ${fmtTime(latest.snapshotHour)}`);
+    set('fhLatestSub',`${prettyDate(date)} · peak ${latest.peakHour!=null?fmtTime(latest.peakHour):'daily max'}<br>${fmt(latest.highF)}°F · snapshot ${fmtTime(latest.snapshotHour)}<br>${badge}`);
     set('fhFirst',`${fmt(first.highC)}°C`);
-    set('fhFirstSub',`first saved snapshot ${fmtTime(first.snapshotHour)}<br>peak forecast ${fmtTime(first.peakHour)}`);
+    set('fhFirstSub',`first saved snapshot ${fmtTime(first.snapshotHour)}<br>source: ${first.source==='hourly'?'hourly':'daily'}`);
     set('fhChange',`${diff>=0?'+':''}${fmt(diff)}°C`);
     set('fhChangeSub',diff>0?'forecast high increased 🔴':(diff<0?'forecast high decreased 🟢':'no change'));
     set('fhBin',`${marketBin(latest.highC)}°C`);
-    set('fhBinSub',`Polymarket approx bin from latest WU forecast high`);
+    set('fhBinSub','Polymarket approx bin from latest WU forecast high');
   }
   async function renderForecastHighTrend(){
     const date=todayIST();
     const snaps=await fetchSnaps(date);
-    window.__goodForecastSnaps=snaps;
     const trend=buildTrend(snaps,date);
     window.__forecastHighTrend=trend;
-    renderCards(trend,date);
+    renderTrendCards(trend,date);
     drawTrend(trend);
   }
-  window.addEventListener('load',()=>setTimeout(renderForecastHighTrend,900));
-  setInterval(renderForecastHighTrend,60000);
+
+  // Draw orange forecast max line onto main chart after existing renderer.
+  function chartAxis(){
+    if(!window.__axisState)window.__axisState={};
+    let xMin=N($('xMinManual')?.value)??N(window.__axisState.xMin);
+    let xMax=N($('xMaxManual')?.value)??N(window.__axisState.xMax);
+    let yMin=N($('yMinManual')?.value)??N(window.__axisState.yMin);
+    let yMax=N($('yMaxManual')?.value)??N(window.__axisState.yMax);
+    if(!(xMin!=null&&xMax!=null&&xMax>xMin)){
+      if(document.querySelector('[data-x="peak"].active,[data-xrange="peak"].active')){xMin=9;xMax=18}else{xMin=0;xMax=24}
+    }
+    if(!(yMin!=null&&yMax!=null&&yMax>yMin)){yMin=unit()==='f'?14:-10;yMax=unit()==='f'?158:70}
+    return {xMin,xMax,yMin,yMax};
+  }
+  function drawMainForecastMax(){
+    const trend=window.__forecastHighTrend||[];
+    const latest=trend.at(-1), c=$('chart');
+    if(!latest||!c)return;
+    const ctx=c.getContext('2d');
+    const W=c.width,H=c.height,L=78,R=30,T=48,B=68;
+    const ax=chartAxis();
+    const yVal=unit()==='f'?cToF(latest.highC):latest.highC;
+    if(yVal<ax.yMin||yVal>ax.yMax)return;
+    const X=x=>L+(x-ax.xMin)/(ax.xMax-ax.xMin)*(W-L-R);
+    const Y=y=>T+(ax.yMax-y)/(ax.yMax-ax.yMin)*(H-T-B);
+    const y=Y(yVal), x1=Math.max(L,X(ax.xMin)), x2=Math.min(W-R,X(ax.xMax));
+    ctx.save();
+    ctx.strokeStyle='#f97316';
+    ctx.lineWidth=4;
+    ctx.setLineDash([10,8]);
+    ctx.beginPath();ctx.moveTo(x1,y);ctx.lineTo(x2,y);ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle='rgba(249,115,22,.14)';
+    ctx.fillRect(x1,y-10,x2-x1,20);
+    ctx.fillStyle='#c2410c';
+    ctx.font='bold 16px ui-monospace,Consolas,monospace';
+    ctx.fillText(`latest WU forecast max ${fmt(latest.highC)}°C (${latest.source})`,x1+10,y-14);
+    ctx.restore();
+  }
+  function wrapRender(){
+    ['masterRender','renderAll','render','fetchAll','loadAll'].forEach(name=>{
+      try{
+        const fn=window[name];
+        if(typeof fn==='function'&&!fn.__forecastMaxWrapped){
+          const w=function(){
+            const r=fn.apply(this,arguments);
+            Promise.resolve(r).finally(()=>setTimeout(drawMainForecastMax,80));
+            return r;
+          };
+          w.__forecastMaxWrapped=true;
+          window[name]=w;
+        }
+      }catch(e){}
+    });
+  }
+  async function runAll(){
+    await render3DayHigh();
+    await renderForecastHighTrend();
+    setTimeout(drawMainForecastMax,300);
+    wrapRender();
+  }
+  window.addEventListener('load',()=>setTimeout(runAll,900));
+  setInterval(runAll,60000);
 })();
 </script>
 
