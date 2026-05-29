@@ -84,9 +84,62 @@ async function collect(env){
  try{
   let data=null; for(const u of [`https://api.weather.com/v3/wx/observations/current?icaoCode=${ICAO}&apiKey=${WU_KEY}&units=e&language=en-US&format=json`,`https://api.weather.com/v3/wx/observations/current?iataCode=${IATA}&apiKey=${WU_KEY}&units=e&language=en-US&format=json`,`https://api.weather.com/v3/wx/observations/current?geocode=${GEO}&apiKey=${WU_KEY}&units=e&language=en-US&format=json`]){try{data=await getJson(u);break;}catch(e){}}
   const o=parseWU(data||{});
+<<<<<<< HEAD
   const ex=await env.DB.prepare('SELECT id FROM wu_obs WHERE obs_date=? AND obs_time=? LIMIT 1').bind(o.obs_date,o.obs_time).first();
   if(ex) out.wu={ok:true,saved:false,duplicate:true,reason:'same WU obs_time cached/repeated',temp:o.temp_c,temp_f:o.temp_f,obsTime:o.obs_time,slot:o.slot};
   else{ await env.DB.prepare(`INSERT INTO wu_obs (obs_date,obs_time,slot,temp_c,temp_f,dewpoint_c,dewpoint_f,peak_since_7am_c,peak_since_7am_f,humidity,wind_kph,condition,source,fetched_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(o.obs_date,o.obs_time,o.slot,o.temp_c,o.temp_f,o.dewpoint_c,o.dewpoint_f,o.peak_since_7am_c,o.peak_since_7am_f,o.humidity,o.wind_kph,o.condition,o.source,timeIST()).run(); out.wu={ok:true,saved:true,duplicate:false,reason:'new WU obs_time',temp:o.temp_c,temp_f:o.temp_f,obsTime:o.obs_time,slot:o.slot}; }
+=======
+ // WU obs_time is the real Weather.com observation timestamp.
+// Same obs_time = cached/repeated observation -> skip.
+// New obs_time = save, even if temp is exactly the same.
+
+const ex = await env.DB.prepare(
+  "SELECT id FROM wu_obs WHERE obs_date=? AND obs_time=? LIMIT 1"
+).bind(
+  o.obs_date,
+  o.obs_time
+).first();
+
+if(ex){
+  out.wu = {
+    ok:true,
+    saved:false,
+    duplicate:true,
+    reason:"same WU obs_time cached/repeated",
+    temp:o.temp_c,
+    obsTime:o.obs_time,
+    slot:o.slot
+  };
+}else{
+  await env.DB.prepare(
+    `INSERT INTO wu_obs
+    (obs_date,obs_time,slot,temp_c,dewpoint_c,peak_since_7am_c,humidity,wind_kph,condition,source,fetched_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?)`
+  ).bind(
+    o.obs_date,
+    o.obs_time,
+    o.slot,
+    o.temp_c,
+    o.dewpoint_c,
+    o.peak_since_7am_c,
+    o.humidity,
+    o.wind_kph,
+    o.condition,
+    o.source,
+    timeIST()
+  ).run();
+
+  out.wu = {
+    ok:true,
+    saved:true,
+    duplicate:false,
+    reason:"new WU obs_time",
+    temp:o.temp_c,
+    obsTime:o.obs_time,
+    slot:o.slot
+  };
+}
+>>>>>>> 04d4a0aa6f3d15e6f7f617ff1ad3e998ff50d7c4
  }catch(e){out.wu={ok:false,error:e.message};}
  try{
   let daily=null, hourly=null;
@@ -113,5 +166,17 @@ async function history(env, day){
  const rows={}; for(const x of (wu.results||[])){if(!x.slot)continue; rows[x.slot]=rows[x.slot]||[]; rows[x.slot].push({temp_c:x.temp_c,temp_f:x.temp_f,dewpoint_c:x.dewpoint_c,dewpoint_f:x.dewpoint_f,humidity:x.humidity,wind_kph:x.wind_kph,condition:x.condition||'',saved_at:x.obs_time,fetched_at:x.fetched_at||''});}
  return {ok:true,today_ist:day,wu_obs_rows:rows,metar_rows:mt.results||[],forecast_rows:fc.results||[],forecast_snapshot_rows:fs.results||[],meta:{wu_count:(wu.results||[]).length,metar_count:(mt.results||[]).length,forecast_count:(fc.results||[]).length,forecast_snapshot_count:(fs.results||[]).length,latest_wu:(wu.results||[]).at(-1)||null,latest_metar:(mt.results||[]).at(-1)||null,latest_forecast:(fc.results||[]).at(-1)||null}};
 }
+<<<<<<< HEAD
 async function forecastSnapshots(env, day){ const rows=await env.DB.prepare('SELECT * FROM forecast_snapshots WHERE target_date=? ORDER BY forecast_date, forecast_issue_time_ist, fetch_time_ist LIMIT 1000').bind(day).all(); return {ok:true,target_date:day,rows:rows.results||[]}; }
 export default { async fetch(request, env){ const url=new URL(request.url); if(url.pathname==='/api/collect') return json(await collect(env)); if(url.pathname==='/api/history') return json(await history(env, url.searchParams.get('date')||dateIST())); if(url.pathname==='/api/forecast-snapshots') return json(await forecastSnapshots(env, url.searchParams.get('date')||dateIST())); return env.ASSETS.fetch(request); }, async scheduled(event, env, ctx){ctx.waitUntil(collect(env));} };
+=======
+export default {
+ async fetch(request, env){
+  const url=new URL(request.url);
+  if(url.pathname==='/api/collect') return json(await collect(env));
+  if(url.pathname==='/api/history') return json(await history(env, url.searchParams.get('date')||dateIST()));
+  return env.ASSETS.fetch(request);
+ },
+ async scheduled(event, env, ctx){ctx.waitUntil(collect(env));}
+};
+>>>>>>> 04d4a0aa6f3d15e6f7f617ff1ad3e998ff50d7c4
