@@ -74,6 +74,15 @@
 .sourceModeBar button.active{background:#00d4ff;color:#00131c}
 .sourceModeBar .modeLabel{font-weight:900;color:#dff6ff;margin-right:3px}
 
+
+/* ===== RAW VS CONVERTED DATASETS FIX ===== */
+.rawDatasetBar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0;font-family:ui-monospace,Consolas,monospace;color:#a9d8ff}
+.rawDatasetBar label{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:8px 12px;background:#10304a;color:#a9d8ff;font-weight:900;cursor:pointer}
+.rawDatasetBar label.active{background:#00d4ff;color:#00131c}
+.rawDatasetBar .modeLabel{font-weight:900;color:#dff6ff;margin-right:4px}
+.rawConv{display:block;margin-top:3px;color:#8bb4d6;font-size:.70em;line-height:1.28;font-weight:800}
+.rawConv b{color:#fff}
+
 </style></head><body>
 <div class="wrap">
   <div class="header"><div><h1>VILK <span class="cyan">Live Signal</span></h1><div class="sub">● UI refresh 30 sec · cron save 1 min · Lucknow Airport (VILK) · D1 archive</div></div><div><button class="btn" id="refreshBtn">↻ Refresh Now</button><div class="updated" id="updated">Updated --</div></div></div>
@@ -94,6 +103,15 @@
   <button type="button" data-source-mode="both">Raw + converted</button>
 </div>
 
+<div class="rawDatasetBar" id="rawDatasetBar">
+  <span class="modeLabel">Raw/Converted lines:</span>
+  <label class="active"><input type="checkbox" data-raw-line="wuRaw" checked> WU Raw</label>
+  <label><input type="checkbox" data-raw-line="wuConv"> WU Converted</label>
+  <label class="active"><input type="checkbox" data-raw-line="metarRaw" checked> METAR Raw</label>
+  <label><input type="checkbox" data-raw-line="metarConv"> METAR Converted</label>
+</div>
+
+
 
 <div class="axisBox" id="axisControls">
   <label>Time:</label>
@@ -112,7 +130,7 @@
 
     
 <div class="forecastExplain" id="forecastExplain">
-  <b>How to read lines:</b> Red = WU observed, Green = METAR official, Black = latest forecast, Light-blue dashed = older forecast, Cyan dashed = bias-corrected, Purple dashed = peak/ceiling. Chart temp mode: Raw source uses WU raw C/F; Converted uses calculated opposite-unit value; Raw + converted shows raw in chart and both values in cards/tooltips.
+  <b>How to read lines:</b> Red solid = WU Raw, Red dashed = WU Converted, Green dots = METAR Raw, Green dashed = METAR Converted, Black = latest forecast, Cyan dashed = bias-corrected, Purple dashed = peak/ceiling. WU Raw C/F are direct from Weather.com units=m/e; converted lines are calculated cross-checks.
 </div>
 
 <div class="chartScroll"><canvas id="chart" width="1180" height="560"></canvas></div>
@@ -179,212 +197,43 @@ document.querySelectorAll('.toolbar button').forEach(b=>b.onclick=()=>{if(b.data
 
 
 
+
 <script id="master-chart-controls-fixed">
 (function(){
-  const DEFAULTS = {
-    yMode:'tight', xMode:'peak', unit:'c', sourceMode:'raw',
-    show:{wu:true,metar:true,forecast:true,bias:true,ceiling:true,extreme:false,analog:true,peak:true}
-  };
-  window.masterChart = window.masterChart || JSON.parse(JSON.stringify(DEFAULTS));
-
-  function $(id){return document.getElementById(id);}
-  function n(v){const x=Number(v); return Number.isFinite(x)?x:null;}
-  function cToF(c){const x=n(c); return x==null?null:x*9/5+32;}
-  function fToC(f){const x=n(f); return x==null?null:(x-32)*5/9;}
-  function fmt(v){const x=n(v); if(x==null)return '—'; return (Math.abs(x)>=100?x.toFixed(1):x.toFixed(3)).replace(/\.?0+$/,'');}
-  function todayIST(){return new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});}
-  function nowHour(){const d=new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Kolkata'}));return d.getHours()+d.getMinutes()/60;}
-  function timeHour(s){s=String(s||'');let m=s.match(/T(\d{1,2}):(\d{2})/)||s.match(/(\d{1,2}):(\d{2})/);return m?Number(m[1])+Number(m[2])/60:null;}
-  function fmtTime(h){let hh=Math.floor(h),mm=Math.round((h-hh)*60);if(mm===60){hh++;mm=0}const am=hh>=12?'p':'a';return `${hh%12||12}:${String(mm).padStart(2,'0')}${am}`;}
-  function rawVal(c,f,src){
-    const st=window.masterChart;
-    if(src==='METAR'){
-      return st.unit==='f'?cToF(c):n(c); // METAR raw C, converted F
-    }
-    if(st.unit==='f') return n(f)!=null?n(f):cToF(c); // WU raw F
-    return n(c)!=null?n(c):fToC(f); // WU raw C (after dual worker)
-  }
-  function convVal(c,f,src){
-    const st=window.masterChart;
-    if(src==='METAR'){
-      return st.unit==='f'?cToF(c):n(c);
-    }
-    if(st.unit==='f') return n(c)!=null?cToF(c):n(f); // F converted from raw C
-    return n(f)!=null?fToC(f):n(c); // C converted from raw F
-  }
-  function chooseVal(c,f,src){
-    const st=window.masterChart;
-    return st.sourceMode==='converted'?convVal(c,f,src):rawVal(c,f,src);
-  }
-  function slotFromObs(t){const h=timeHour(t); if(h==null)return ''; const hh=Math.floor(h), mm=(h-hh)*60; return String(hh).padStart(2,'0')+':' +(mm<30?'00':'30');}
-  async function loadData(){
-    if(window.__lastMasterData) return window.__lastMasterData;
-    return refreshData();
-  }
-  async function refreshData(){
-    const date=todayIST();
-    let hist={}, snaps={rows:[]};
-    try{hist=await fetch('/api/history?date='+date+'&t='+Date.now(),{cache:'no-store'}).then(r=>r.json());}catch(e){hist=window.__lastHist||{};}
-    try{snaps=await fetch('/api/forecast-snapshots?date='+date+'&t='+Date.now(),{cache:'no-store'}).then(r=>r.json());}catch(e){snaps=window.__lastSnaps||{rows:[]};}
-    window.__lastHist=hist; window.__lastSnaps=snaps;
-    window.__lastMasterData={hist,snaps,date};
-    return window.__lastMasterData;
-  }
-  function flattenWU(hist){
-    const out=[];
-    Object.values(hist.wu_obs_rows||{}).forEach(list=>(Array.isArray(list)?list:[]).forEach(x=>{
-      const h=timeHour(x.saved_at||x.obs_time);
-      const y=chooseVal(x.temp_c,x.temp_f,'WU');
-      if(h!=null&&n(y)!=null) out.push({hour:h,y,c:n(x.temp_c),f:n(x.temp_f),raw:x,type:'WU'});
-    }));
-    return out.sort((a,b)=>a.hour-b.hour);
-  }
-  function flattenMETAR(hist){
-    return (hist.metar_rows||[]).map(m=>{
-      const h=timeHour(m.slot||m.valid_ist);
-      const y=chooseVal(m.temp_c,null,'METAR');
-      return {hour:h,y,c:n(m.temp_c),f:cToF(m.temp_c),raw:m,type:'METAR'};
-    }).filter(p=>p.hour!=null&&n(p.y)!=null).sort((a,b)=>a.hour-b.hour);
-  }
-  function hourly(row){
-    try{return JSON.parse(row?.hourly_json||'[]').map(x=>{
-      const h=timeHour(x.time);
-      const y=chooseVal(x.temp_c,x.temp_f,'WU');
-      return {hour:h,y,c:n(x.temp_c),f:n(x.temp_f),type:'Forecast'};
-    }).filter(p=>p.hour!=null&&n(p.y)!=null);}catch(e){return[]}
-  }
-  function forecast(snaps,date){
-    const rows=(snaps.rows||[]).filter(r=>r.target_date===date||Number(r.horizon_days)===0);
-    return {rows, latest:hourly(rows.at(-1)), old:hourly(rows[0]), runs:rows.map(hourly)};
-  }
-  function getRange(){
-    const st=window.masterChart;
-    const ax=window.__axisState||{};
-    if(ax.xMin!=null&&ax.xMax!=null) return [Number(ax.xMin),Number(ax.xMax)];
-    if(st.xMode==='full') return [0,24];
-    if(st.xMode==='last3'){const h=nowHour();return [Math.max(0,h-3),Math.min(24,h+0.5)];}
-    if(st.xMode==='custom'){
-      const a=n($('xMinManual')?.value), b=n($('xMaxManual')?.value);
-      if(a!=null&&b!=null&&b>a)return [a,b];
-    }
-    return [9,18];
-  }
-  function drawLine(ctx,pts,X,Y,color,w=3,dash=[]){
-    pts=pts.filter(p=>n(p.hour)!=null&&n(p.y)!=null).sort((a,b)=>a.hour-b.hour);
-    if(pts.length<2)return;
-    ctx.save();ctx.strokeStyle=color;ctx.lineWidth=w;ctx.setLineDash(dash);ctx.lineCap='round';ctx.lineJoin='round';
-    ctx.beginPath();ctx.moveTo(X(pts[0].hour),Y(pts[0].y));
-    for(let i=1;i<pts.length;i++){ctx.lineTo(X(pts[i].hour),Y(pts[i].y));}
-    ctx.stroke();ctx.restore();
-  }
-  function drawPts(ctx,pts,X,Y,color,r=5){
-    ctx.save();ctx.fillStyle=color;ctx.strokeStyle='#fff';ctx.lineWidth=1.2;
-    pts.forEach(p=>{if(n(p.hour)==null||n(p.y)==null)return;ctx.beginPath();ctx.arc(X(p.hour),Y(p.y),r,0,Math.PI*2);ctx.fill();ctx.stroke();});
-    ctx.restore();
-  }
-  function updateButtons(){
-    const st=window.masterChart;
-    document.querySelectorAll('button').forEach(b=>{
-      const t=(b.textContent||'').trim().toLowerCase();
-      if(b.dataset.sourceMode) b.classList.toggle('active',b.dataset.sourceMode===st.sourceMode);
-      if(b.dataset.y) b.classList.toggle('active',b.dataset.y===st.yMode);
-      if(b.dataset.x) b.classList.toggle('active',b.dataset.x===st.xMode);
-      if(b.dataset.u) b.classList.toggle('active',b.dataset.u===st.unit);
-      if(t==='°c') b.classList.toggle('active',st.unit==='c');
-      if(t==='°f') b.classList.toggle('active',st.unit==='f');
-    });
-  }
-  function syncChecks(){
-    const st=window.masterChart;
-    document.querySelectorAll('input[type=checkbox]').forEach(cb=>{
-      const label=(cb.closest('button,label')?.textContent||cb.parentElement?.textContent||'').toLowerCase();
-      let k=null;
-      if(label.includes('wu'))k='wu'; else if(label.includes('metar'))k='metar'; else if(label.includes('99')||label.includes('extreme'))k='extreme'; else if(label.includes('95')||label.includes('ceiling'))k='ceiling'; else if(label.includes('analog'))k='analog'; else if(label.includes('peak window'))k='peak'; else if(label.includes('bias'))k='bias'; else if(label.includes('forecast'))k='forecast';
-      if(k) st.show[k]=cb.checked;
-    });
-  }
-  function setCards(wu,mt,fc){
-    const last=wu.at(-1), m=mt.at(-1);
-    const curWu=$('curWu'), curMetar=$('curMetar'), peak=$('peakSoFar'), fnow=$('fcNow'), sum=$('curveSummary');
-    function wuHtml(x){return x?`<b>${fmt(x.y)}°${window.masterChart.unit.toUpperCase()}</b><span class="rawConv">WU raw: ${fmt(x.f)}°F + ${fmt(x.c)}°C<br>converted: ${fmt(fToC(x.f))}°C from F · ${fmt(cToF(x.c))}°F from C</span>`:'—';}
-    function metHtml(x){return x?`<b>${fmt(x.y)}°${window.masterChart.unit.toUpperCase()}</b><span class="rawConv">METAR raw: ${fmt(x.c)}°C<br>converted: ${fmt(cToF(x.c))}°F</span>`:'—';}
-    if(curWu)curWu.innerHTML=wuHtml(last);
-    if(curMetar)curMetar.innerHTML=metHtml(m);
-    if(peak&&wu.length){const p=wu.reduce((a,b)=>b.y>a.y?b:a,wu[0]);peak.textContent=`${fmt(p.y)}°${window.masterChart.unit.toUpperCase()}`;}
-    if(fnow&&fc.latest.length){const h=nowHour();const near=fc.latest.reduce((a,b)=>Math.abs(b.hour-h)<Math.abs(a.hour-h)?b:a,fc.latest[0]);fnow.textContent=`${fmt(near.y)}°${window.masterChart.unit.toUpperCase()}`;}
-    if(sum&&last){sum.innerHTML=`Chart mode: <b>${window.masterChart.sourceMode}</b> · Current WU: <b>${fmt(last.y)}°${window.masterChart.unit.toUpperCase()}</b> · WU raw F ${fmt(last.f)} / raw C ${fmt(last.c)}`;}
-  }
-  async function masterRender(){
-    syncChecks(); updateButtons();
-    const data=await loadData();
-    const wu=flattenWU(data.hist), mt=flattenMETAR(data.hist), fc=forecast(data.snaps,data.date);
-    setCards(wu,mt,fc);
-    const canvas=$('chart'); if(!canvas)return;
-    const ctx=canvas.getContext('2d');
-    const W=canvas.width,H=canvas.height,L=70,R=28,T=48,B=60;
-    const [xMin,xMax]=getRange();
-    const show=window.masterChart.show;
-    let vals=[];
-    function addVals(arr){(arr||[]).forEach(p=>{if(p.hour>=xMin&&p.hour<=xMax&&n(p.y)!=null)vals.push(p.y);});}
-    if(show.wu)addVals(wu); if(show.metar)addVals(mt); if(show.forecast){addVals(fc.latest);addVals(fc.old);}
-    if(!vals.length) vals=window.masterChart.unit==='f'?[70,100]:[20,40];
-    let yMin=n($('yMinManual')?.value), yMax=n($('yMaxManual')?.value);
-    if(yMin==null||yMax==null){
-      const pad=window.masterChart.unit==='f'?4:1.2;
-      yMin=Math.min(...vals)-pad; yMax=Math.max(...vals)+pad;
-      if(yMax-yMin<(window.masterChart.unit==='f'?6:2)){const mid=(yMin+yMax)/2;yMin=mid-(window.masterChart.unit==='f'?3:1);yMax=mid+(window.masterChart.unit==='f'?3:1);}
-      yMin=window.masterChart.unit==='f'?Math.floor(yMin):Math.floor(yMin*10)/10;
-      yMax=window.masterChart.unit==='f'?Math.ceil(yMax):Math.ceil(yMax*10)/10;
-    }
-    const pw=W-L-R,ph=H-T-B,X=h=>L+(h-xMin)/(xMax-xMin)*pw,Y=v=>T+(yMax-v)/(yMax-yMin)*ph;
-    ctx.clearRect(0,0,W,H);ctx.fillStyle='#fafafa';ctx.fillRect(0,0,W,H);
-    // peak plateau band
-    if(show.peak&&wu.length){
-      const peak=Math.max(...wu.map(p=>p.y)); const near=wu.filter(p=>p.hour>=xMin&&p.hour<=xMax&&p.y>=peak-(window.masterChart.unit==='f'?0.6:0.3));
-      if(near.length>=2){const a=near[0].hour,b=near.at(-1).hour;ctx.fillStyle='rgba(250,204,21,.18)';ctx.fillRect(X(a),T,Math.max(2,X(b)-X(a)),ph);ctx.fillStyle='#92400e';ctx.font='bold 13px sans-serif';ctx.fillText(`today peak plateau ${fmtTime(a)}–${fmtTime(b)}`,X(a)+8,T+22);}
-    }
-    ctx.font='13px sans-serif';ctx.fillStyle='#6b7280';ctx.strokeStyle='#e5e7eb';ctx.lineWidth=1;
-    const xStep=(xMax-xMin)<=4?0.5:2;
-    for(let h=Math.ceil(xMin/xStep)*xStep;h<=xMax+1e-9;h+=xStep){const x=X(h);ctx.beginPath();ctx.moveTo(x,T);ctx.lineTo(x,T+ph);ctx.stroke();ctx.fillText(fmtTime(h),x-18,H-24);}
-    const yr=yMax-yMin, yStep=window.masterChart.unit==='f'?(yr<=10?1:2):(yr<=3?0.1:0.5);
-    for(let v=Math.ceil(yMin/yStep)*yStep;v<=yMax+1e-9;v+=yStep){const y=Y(v);ctx.strokeStyle=Math.abs(v-Math.round(v))<.001?'#d1d5db':'#eef2f7';ctx.beginPath();ctx.moveTo(L,y);ctx.lineTo(L+pw,y);ctx.stroke();ctx.fillStyle='#6b7280';if(Math.abs((v/yStep)-Math.round(v/yStep))<.01)ctx.fillText((yStep<1?v.toFixed(1):Math.round(v))+'°',18,y+4);}
-    ctx.strokeStyle='#9ca3af';ctx.strokeRect(L,T,pw,ph);
-    const now=nowHour(); if(now>=xMin&&now<=xMax){const x=X(now);ctx.strokeStyle='#6b7280';ctx.setLineDash([5,6]);ctx.beginPath();ctx.moveTo(x,T-8);ctx.lineTo(x,T+ph);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='#374151';ctx.font='bold 14px sans-serif';ctx.fillText('now',x+8,T-12);}
-    if(show.forecast){drawLine(ctx,fc.old,X,Y,'#93c5fd',2,[6,6]); drawLine(ctx,fc.latest,X,Y,'#111827',4);}
-    if(show.bias&&fc.latest.length&&wu.length){const last=wu.at(-1);const near=fc.latest.reduce((a,b)=>Math.abs(b.hour-last.hour)<Math.abs(a.hour-last.hour)?b:a,fc.latest[0]);const bias=last.y-near.y;drawLine(ctx,fc.latest.map(p=>({...p,y:p.y+bias})),X,Y,'#06b6d4',3,[2,5]);}
-    if(show.ceiling&&wu.length){const p=Math.max(...wu.map(x=>x.y));drawLine(ctx,[{hour:xMin,y:p},{hour:xMax,y:p}],X,Y,'#a855f7',3,[8,6]);}
-    if(show.wu){drawLine(ctx,wu,X,Y,'#ef4444',3);drawPts(ctx,wu,X,Y,'#ef4444',3);}
-    if(show.metar)drawPts(ctx,mt,X,Y,'#10b981',6);
-  }
-
-  function bind(){
-    document.querySelectorAll('button').forEach(btn=>{
-      if(btn.dataset.masterBound)return; btn.dataset.masterBound='1';
-      btn.addEventListener('click',()=>{
-        const st=window.masterChart; const t=(btn.textContent||'').trim().toLowerCase();
-        if(btn.dataset.y)st.yMode=btn.dataset.y;
-        if(btn.dataset.x)st.xMode=btn.dataset.x;
-        if(btn.dataset.u)st.unit=btn.dataset.u;
-        if(btn.dataset.sourceMode)st.sourceMode=btn.dataset.sourceMode;
-        if(t==='°c')st.unit='c'; if(t==='°f')st.unit='f';
-        if(t.includes('tight'))st.yMode='tight'; if(t.includes('±1'))st.yMode='plus1'; if(t.includes('±2'))st.yMode='plus2'; if(t==='wide')st.yMode='wide';
-        if(t.includes('peak 9'))st.xMode='peak'; if(t.includes('last 3'))st.xMode='last3'; if(t==='24h')st.xMode='full'; if(t==='apply')st.xMode='custom';
-        setTimeout(masterRender,20);
-      });
-    });
-    document.querySelectorAll('input[type=checkbox]').forEach(cb=>{
-      if(cb.dataset.masterBound)return; cb.dataset.masterBound='1';
-      cb.addEventListener('change',()=>setTimeout(masterRender,20));
-    });
-    const apply=$('applyAxisBtn'); if(apply&&!apply.dataset.masterBound){apply.dataset.masterBound='1';apply.onclick=()=>{window.masterChart.xMode='custom';masterRender();};}
-    const auto=$('autoAxisBtn'); if(auto&&!auto.dataset.masterBound){auto.dataset.masterBound='1';auto.onclick=()=>{['xMinManual','xMaxManual','yMinManual','yMaxManual'].forEach(id=>{const e=$(id);if(e)e.value='';});window.__axisState={xMin:null,xMax:null,yMin:null,yMax:null};masterRender();};}
-  }
-  // Override old render with master renderer
-  window.render=masterRender;
-  window.masterRender=masterRender;
-  window.addEventListener('load',()=>{bind();refreshData().then(masterRender);});
-  setInterval(()=>{bind();refreshData().then(masterRender);},30000);
+  const DEFAULTS={yMode:'tight',xMode:'peak',unit:'c',sourceMode:'raw',show:{wu:true,metar:true,forecast:true,bias:true,ceiling:true,extreme:false,analog:true,peak:true},rawLines:{wuRaw:true,wuConv:false,metarRaw:true,metarConv:false}};
+  window.masterChart=window.masterChart||JSON.parse(JSON.stringify(DEFAULTS));
+  window.masterChart.rawLines=window.masterChart.rawLines||{...DEFAULTS.rawLines};
+  const $=id=>document.getElementById(id);
+  const N=v=>{const x=Number(v);return Number.isFinite(x)?x:null};
+  const cToF=c=>N(c)==null?null:N(c)*9/5+32;
+  const fToC=f=>N(f)==null?null:(N(f)-32)*5/9;
+  const fmt=v=>{const x=N(v);if(x==null)return '—';return x.toFixed(3).replace(/\.?0+$/,'')};
+  const todayIST=()=>new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});
+  function nowHour(){const d=new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Kolkata'}));return d.getHours()+d.getMinutes()/60}
+  function timeHour(s){s=String(s||'');let m=s.match(/T(\d{1,2}):(\d{2})/)||s.match(/(\d{1,2}):(\d{2})/);return m?Number(m[1])+Number(m[2])/60:null}
+  function fmtTime(h){let hh=Math.floor(h),mm=Math.round((h-hh)*60);if(mm===60){hh++;mm=0}const am=hh>=12?'p':'a';return `${hh%12||12}:${String(mm).padStart(2,'0')}${am}`}
+  function valWUraw(c,f){return masterChart.unit==='f'?(N(f)??cToF(c)):(N(c)??fToC(f))}
+  function valWUconv(c,f){return masterChart.unit==='f'?(cToF(c)??N(f)):(fToC(f)??N(c))}
+  function valMETARraw(c){return masterChart.unit==='f'?cToF(c):N(c)}
+  function valMETARconv(c){return masterChart.unit==='f'?cToF(c):N(c)}
+  async function refreshData(){const date=todayIST();let hist={},snaps={rows:[]};try{hist=await fetch('/api/history?date='+date+'&t='+Date.now(),{cache:'no-store'}).then(r=>r.json())}catch(e){hist=window.__lastHist||{}}try{snaps=await fetch('/api/forecast-snapshots?date='+date+'&t='+Date.now(),{cache:'no-store'}).then(r=>r.json())}catch(e){snaps=window.__lastSnaps||{rows:[]}}window.__lastHist=hist;window.__lastSnaps=snaps;window.__lastMasterData={hist,snaps,date};return window.__lastMasterData}
+  async function loadData(){return window.__lastMasterData||refreshData()}
+  function flattenWU(hist,kind='raw'){const out=[];Object.values(hist.wu_obs_rows||{}).forEach(list=>(Array.isArray(list)?list:[]).forEach(x=>{const h=timeHour(x.saved_at||x.obs_time),y=kind==='conv'?valWUconv(x.temp_c,x.temp_f):valWUraw(x.temp_c,x.temp_f);if(h!=null&&N(y)!=null)out.push({hour:h,y,c:N(x.temp_c),f:N(x.temp_f),raw:x,type:kind==='conv'?'WU Converted':'WU Raw'})}));return out.sort((a,b)=>a.hour-b.hour)}
+  function flattenMETAR(hist,kind='raw'){return (hist.metar_rows||[]).map(m=>{const h=timeHour(m.slot||m.valid_ist),y=kind==='conv'?valMETARconv(m.temp_c):valMETARraw(m.temp_c);return{hour:h,y,c:N(m.temp_c),f:cToF(m.temp_c),raw:m,type:kind==='conv'?'METAR Converted':'METAR Raw'}}).filter(p=>p.hour!=null&&N(p.y)!=null).sort((a,b)=>a.hour-b.hour)}
+  function chooseForecast(c,f){return masterChart.unit==='f'?(N(f)??cToF(c)):(N(c)??fToC(f))}
+  function hourly(row){try{return JSON.parse(row?.hourly_json||'[]').map(x=>{const h=timeHour(x.time),y=chooseForecast(x.temp_c,x.temp_f);return{hour:h,y,c:N(x.temp_c),f:N(x.temp_f),type:'Forecast'}}).filter(p=>p.hour!=null&&N(p.y)!=null)}catch(e){return[]}}
+  function forecast(snaps,date){const rows=(snaps.rows||[]).filter(r=>r.target_date===date||Number(r.horizon_days)===0);return{rows,latest:hourly(rows.at(-1)),old:hourly(rows[0]),runs:rows.map(hourly)}}
+  function getRange(){const ax=window.__axisState||{};if(ax.xMin!=null&&ax.xMax!=null)return[Number(ax.xMin),Number(ax.xMax)];if(masterChart.xMode==='full')return[0,24];if(masterChart.xMode==='last3'){const h=nowHour();return[Math.max(0,h-3),Math.min(24,h+0.5)]}if(masterChart.xMode==='custom'){const a=N($('xMinManual')?.value),b=N($('xMaxManual')?.value);if(a!=null&&b!=null&&b>a)return[a,b]}return[9,18]}
+  function drawLine(ctx,pts,X,Y,color,w=3,dash=[]){pts=(pts||[]).filter(p=>N(p.hour)!=null&&N(p.y)!=null).sort((a,b)=>a.hour-b.hour);if(pts.length<2)return;ctx.save();ctx.strokeStyle=color;ctx.lineWidth=w;ctx.setLineDash(dash);ctx.lineCap='round';ctx.lineJoin='round';ctx.beginPath();ctx.moveTo(X(pts[0].hour),Y(pts[0].y));for(let i=1;i<pts.length;i++)ctx.lineTo(X(pts[i].hour),Y(pts[i].y));ctx.stroke();ctx.restore()}
+  function drawPts(ctx,pts,X,Y,color,r=5){ctx.save();ctx.fillStyle=color;ctx.strokeStyle='#fff';ctx.lineWidth=1.2;(pts||[]).forEach(p=>{if(N(p.hour)==null||N(p.y)==null)return;ctx.beginPath();ctx.arc(X(p.hour),Y(p.y),r,0,Math.PI*2);ctx.fill();ctx.stroke()});ctx.restore()}
+  function syncChecks(){document.querySelectorAll('input[type=checkbox]').forEach(cb=>{if(cb.dataset.rawLine){masterChart.rawLines[cb.dataset.rawLine]=cb.checked;cb.closest('label')?.classList.toggle('active',cb.checked);return}const label=(cb.closest('button,label')?.textContent||cb.parentElement?.textContent||'').toLowerCase();let k=null;if(label.includes('wu'))k='wu';else if(label.includes('metar'))k='metar';else if(label.includes('99')||label.includes('extreme'))k='extreme';else if(label.includes('95')||label.includes('ceiling'))k='ceiling';else if(label.includes('analog'))k='analog';else if(label.includes('peak window'))k='peak';else if(label.includes('bias'))k='bias';else if(label.includes('forecast'))k='forecast';if(k)masterChart.show[k]=cb.checked})}
+  function updateButtons(){document.querySelectorAll('button').forEach(b=>{const t=(b.textContent||'').trim().toLowerCase();if(b.dataset.sourceMode)b.classList.toggle('active',b.dataset.sourceMode===masterChart.sourceMode);if(b.dataset.u)b.classList.toggle('active',b.dataset.u===masterChart.unit);if(t==='°c')b.classList.toggle('active',masterChart.unit==='c');if(t==='°f')b.classList.toggle('active',masterChart.unit==='f');if(t.includes('tight'))b.classList.toggle('active',masterChart.yMode==='tight');if(t.includes('±1'))b.classList.toggle('active',masterChart.yMode==='plus1');if(t.includes('±2'))b.classList.toggle('active',masterChart.yMode==='plus2');if(t==='wide')b.classList.toggle('active',masterChart.yMode==='wide');if(t.includes('peak 9'))b.classList.toggle('active',masterChart.xMode==='peak');if(t.includes('last 3'))b.classList.toggle('active',masterChart.xMode==='last3');if(t==='24h')b.classList.toggle('active',masterChart.xMode==='full')})}
+  function setCards(wuRaw,metRaw,fc){const w=wuRaw.at(-1),m=metRaw.at(-1),curWu=$('curWu'),curMetar=$('curMetar'),peak=$('peakSoFar'),fnow=$('fcNow'),sum=$('curveSummary');if(curWu&&w)curWu.innerHTML=`<b>${fmt(masterChart.unit==='f'?w.f:w.c)}°${masterChart.unit.toUpperCase()}</b><span class="rawConv">WU raw: ${fmt(w.f)}°F + ${fmt(w.c)}°C<br>converted: ${fmt(fToC(w.f))}°C from F · ${fmt(cToF(w.c))}°F from C</span>`;if(curMetar&&m)curMetar.innerHTML=`<b>${fmt(masterChart.unit==='f'?cToF(m.c):m.c)}°${masterChart.unit.toUpperCase()}</b><span class="rawConv">METAR raw: ${fmt(m.c)}°C<br>converted: ${fmt(cToF(m.c))}°F</span>`;if(peak&&wuRaw.length){const p=wuRaw.reduce((a,b)=>b.y>a.y?b:a,wuRaw[0]);peak.textContent=`${fmt(p.y)}°${masterChart.unit.toUpperCase()}`}if(fnow&&fc.latest.length){const h=nowHour(),near=fc.latest.reduce((a,b)=>Math.abs(b.hour-h)<Math.abs(a.hour-h)?b:a,fc.latest[0]);fnow.textContent=`${fmt(near.y)}°${masterChart.unit.toUpperCase()}`}if(sum&&w)sum.innerHTML=`Chart: ${masterChart.unit.toUpperCase()} · Red solid WU raw / red dashed converted · Green raw METAR / green dashed converted · WU raw F ${fmt(w.f)} / raw C ${fmt(w.c)}`}
+  async function masterRender(){syncChecks();updateButtons();const data=await loadData(),wuRaw=flattenWU(data.hist,'raw'),wuConv=flattenWU(data.hist,'conv'),metRaw=flattenMETAR(data.hist,'raw'),metConv=flattenMETAR(data.hist,'conv'),fc=forecast(data.snaps,data.date);setCards(wuRaw,metRaw,fc);const canvas=$('chart');if(!canvas)return;const ctx=canvas.getContext('2d'),W=canvas.width,H=canvas.height,L=70,R=28,T=48,B=60;const [xMin,xMax]=getRange(),show=masterChart.show,rl=masterChart.rawLines;let vals=[];const add=a=>(a||[]).forEach(p=>{if(p.hour>=xMin&&p.hour<=xMax&&N(p.y)!=null)vals.push(p.y)});if(show.wu&&rl.wuRaw)add(wuRaw);if(show.wu&&rl.wuConv)add(wuConv);if(show.metar&&rl.metarRaw)add(metRaw);if(show.metar&&rl.metarConv)add(metConv);if(show.forecast){add(fc.latest);add(fc.old)}if(!vals.length)vals=masterChart.unit==='f'?[70,100]:[20,40];let yMin=N($('yMinManual')?.value),yMax=N($('yMaxManual')?.value);if(yMin==null||yMax==null){const pad=masterChart.unit==='f'?4:1.2;yMin=Math.min(...vals)-pad;yMax=Math.max(...vals)+pad;if(yMax-yMin<(masterChart.unit==='f'?6:2)){const mid=(yMin+yMax)/2;yMin=mid-(masterChart.unit==='f'?3:1);yMax=mid+(masterChart.unit==='f'?3:1)}yMin=masterChart.unit==='f'?Math.floor(yMin):Math.floor(yMin*10)/10;yMax=masterChart.unit==='f'?Math.ceil(yMax):Math.ceil(yMax*10)/10}const pw=W-L-R,ph=H-T-B,X=h=>L+(h-xMin)/(xMax-xMin)*pw,Y=v=>T+(yMax-v)/(yMax-yMin)*ph;ctx.clearRect(0,0,W,H);ctx.fillStyle='#fafafa';ctx.fillRect(0,0,W,H);if(show.peak&&wuRaw.length){const pk=Math.max(...wuRaw.map(p=>p.y)),near=wuRaw.filter(p=>p.hour>=xMin&&p.hour<=xMax&&p.y>=pk-(masterChart.unit==='f'?0.6:0.3));if(near.length>=2){const a=near[0].hour,b=near.at(-1).hour;ctx.fillStyle='rgba(250,204,21,.18)';ctx.fillRect(X(a),T,Math.max(2,X(b)-X(a)),ph);ctx.fillStyle='#92400e';ctx.font='bold 13px sans-serif';ctx.fillText(`today peak plateau ${fmtTime(a)}–${fmtTime(b)}`,X(a)+8,T+22)}}ctx.font='13px sans-serif';ctx.fillStyle='#6b7280';ctx.strokeStyle='#e5e7eb';ctx.lineWidth=1;const xStep=(xMax-xMin)<=4?0.5:2;for(let h=Math.ceil(xMin/xStep)*xStep;h<=xMax+1e-9;h+=xStep){const x=X(h);ctx.beginPath();ctx.moveTo(x,T);ctx.lineTo(x,T+ph);ctx.stroke();ctx.fillText(fmtTime(h),x-18,H-24)}const yr=yMax-yMin,ys=masterChart.unit==='f'?(yr<=10?1:2):(yr<=3?0.1:0.5);for(let v=Math.ceil(yMin/ys)*ys;v<=yMax+1e-9;v+=ys){const y=Y(v);ctx.strokeStyle=Math.abs(v-Math.round(v))<.001?'#d1d5db':'#eef2f7';ctx.beginPath();ctx.moveTo(L,y);ctx.lineTo(L+pw,y);ctx.stroke();ctx.fillStyle='#6b7280';ctx.fillText((ys<1?v.toFixed(1):Math.round(v))+'°',18,y+4)}ctx.strokeStyle='#9ca3af';ctx.strokeRect(L,T,pw,ph);const nh=nowHour();if(nh>=xMin&&nh<=xMax){const x=X(nh);ctx.strokeStyle='#6b7280';ctx.setLineDash([5,6]);ctx.beginPath();ctx.moveTo(x,T-8);ctx.lineTo(x,T+ph);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='#374151';ctx.font='bold 14px sans-serif';ctx.fillText('now',x+8,T-12)}if(show.forecast){drawLine(ctx,fc.old,X,Y,'#93c5fd',2,[6,6]);drawLine(ctx,fc.latest,X,Y,'#111827',4)}if(show.bias&&fc.latest.length&&wuRaw.length){const last=wuRaw.at(-1),near=fc.latest.reduce((a,b)=>Math.abs(b.hour-last.hour)<Math.abs(a.hour-last.hour)?b:a,fc.latest[0]),bias=last.y-near.y;drawLine(ctx,fc.latest.map(p=>({...p,y:p.y+bias})),X,Y,'#06b6d4',3,[2,5])}if(show.ceiling&&wuRaw.length){const p=Math.max(...wuRaw.map(x=>x.y));drawLine(ctx,[{hour:xMin,y:p},{hour:xMax,y:p}],X,Y,'#a855f7',3,[8,6])}if(show.wu&&rl.wuRaw){drawLine(ctx,wuRaw,X,Y,'#ef4444',3);drawPts(ctx,wuRaw,X,Y,'#ef4444',3)}if(show.wu&&rl.wuConv)drawLine(ctx,wuConv,X,Y,'#ef4444',2,[5,5]);if(show.metar&&rl.metarRaw)drawPts(ctx,metRaw,X,Y,'#10b981',6);if(show.metar&&rl.metarConv){drawLine(ctx,metConv,X,Y,'#10b981',2,[4,5]);drawPts(ctx,metConv,X,Y,'#10b981',3)}}
+  function bind(){document.querySelectorAll('button').forEach(btn=>{if(btn.dataset.masterBound)return;btn.dataset.masterBound='1';btn.addEventListener('click',()=>{const t=(btn.textContent||'').trim().toLowerCase();if(btn.dataset.sourceMode)masterChart.sourceMode=btn.dataset.sourceMode;if(btn.dataset.u)masterChart.unit=btn.dataset.u;if(t==='°c')masterChart.unit='c';if(t==='°f')masterChart.unit='f';if(t.includes('tight'))masterChart.yMode='tight';if(t.includes('±1'))masterChart.yMode='plus1';if(t.includes('±2'))masterChart.yMode='plus2';if(t==='wide')masterChart.yMode='wide';if(t.includes('peak 9'))masterChart.xMode='peak';if(t.includes('last 3'))masterChart.xMode='last3';if(t==='24h')masterChart.xMode='full';if(t==='apply')masterChart.xMode='custom';setTimeout(masterRender,20)})});document.querySelectorAll('input[type=checkbox]').forEach(cb=>{if(cb.dataset.masterBound)return;cb.dataset.masterBound='1';cb.addEventListener('change',()=>setTimeout(masterRender,20))});const apply=$('applyAxisBtn');if(apply&&!apply.dataset.masterBound){apply.dataset.masterBound='1';apply.onclick=()=>{masterChart.xMode='custom';masterRender()}}const auto=$('autoAxisBtn');if(auto&&!auto.dataset.masterBound){auto.dataset.masterBound='1';auto.onclick=()=>{['xMinManual','xMaxManual','yMinManual','yMaxManual'].forEach(id=>{const e=$(id);if(e)e.value=''});window.__axisState={xMin:null,xMax:null,yMin:null,yMax:null};masterRender()}}}
+  window.render=masterRender;window.masterRender=masterRender;window.addEventListener('load',()=>{bind();refreshData().then(masterRender)});setInterval(()=>{bind();refreshData().then(masterRender)},30000);
 })();
 </script>
+
 
 </body></html>
