@@ -1,3 +1,4 @@
+// PRECISION SOURCE PATCH: stores WU/forecast source Fahrenheit and converted Celsius to 3 decimals; METAR Celsius remains source.
 function json(data, status=200){
   return new Response(JSON.stringify(data), {status, headers:{'content-type':'application/json','access-control-allow-origin':'*','cache-control':'no-store'}});
 }
@@ -6,9 +7,9 @@ function timeIST(d=new Date()){return new Date(d).toLocaleTimeString('en-IN',{ti
 function dtIST(d=new Date()){return new Date(d).toLocaleString('sv-SE',{timeZone:'Asia/Kolkata'}).replace('T',' ');}
 function slotFromTime(t){const m=String(t||'').match(/(\d{1,2}):(\d{2})/);if(!m)return null;return String(+m[1]).padStart(2,'0')+':'+(+m[2]<30?'00':'30');}
 function slotFromDate(d){return slotFromTime(timeIST(d));}
-function fToC(f){const n=Number(f);return Number.isFinite(n)?+((n-32)*5/9).toFixed(1):null;}
-function cToF(c){const n=Number(c);return Number.isFinite(n)?+(n*9/5+32).toFixed(1):null;}
-function n(v){if(v==null||v===''||v==='M')return null;const x=Number(v);return Number.isFinite(x)?x:null;}
+function fToC(f){const n=Number(f);return Number.isFinite(n)?+((n-32)*5/9).toFixed(3):null;}
+function cToF(c){const n=Number(c);return Number.isFinite(n)?+(n*9/5+32).toFixed(3):null;}
+function n(v){if(v==null||v===''||v==='M')return null;const x=Number(v);return Number.isFinite(x)?+x.toFixed(3):null;}
 function s(v){return v==null?'':String(v);}
 function first(...v){return v.find(x=>x!==undefined&&x!==null&&x!==''&&x!=='M');}
 function hash(str){let h=0;str=String(str||'');for(let i=0;i<str.length;i++){h=((h<<5)-h)+str.charCodeAt(i);h|=0;}return String(Math.abs(h));}
@@ -110,7 +111,7 @@ async function history(env, day){
  const mt=await env.DB.prepare('SELECT * FROM metar WHERE obs_date=? ORDER BY valid_utc ASC LIMIT 2000').bind(day).all();
  const fc=await env.DB.prepare('SELECT * FROM forecast WHERE forecast_date=? ORDER BY created_at ASC LIMIT 500').bind(day).all();
  let fs={results:[]}; try{fs=await env.DB.prepare('SELECT * FROM forecast_snapshots WHERE target_date=? ORDER BY forecast_date, forecast_issue_time_ist, fetch_time_ist LIMIT 1000').bind(day).all();}catch(e){}
- const rows={}; for(const x of (wu.results||[])){if(!x.slot)continue; rows[x.slot]=rows[x.slot]||[]; rows[x.slot].push({temp_c:x.temp_c,temp_f:x.temp_f,dewpoint_c:x.dewpoint_c,dewpoint_f:x.dewpoint_f,humidity:x.humidity,wind_kph:x.wind_kph,condition:x.condition||'',saved_at:x.obs_time,fetched_at:x.fetched_at||''});}
+ const rows={}; for(const x of (wu.results||[])){if(!x.slot)continue; rows[x.slot]=rows[x.slot]||[]; rows[x.slot].push({temp_c:x.temp_c,temp_f:x.temp_f,dewpoint_c:x.dewpoint_c,dewpoint_f:x.dewpoint_f,humidity:x.humidity,wind_kph:x.wind_kph,condition:x.condition||'',saved_at:x.obs_time,fetched_at:x.fetched_at||'',temp_source:'WU_F',converted_source:'C_FROM_F'});}
  return {ok:true,today_ist:day,wu_obs_rows:rows,metar_rows:mt.results||[],forecast_rows:fc.results||[],forecast_snapshot_rows:fs.results||[],meta:{wu_count:(wu.results||[]).length,metar_count:(mt.results||[]).length,forecast_count:(fc.results||[]).length,forecast_snapshot_count:(fs.results||[]).length,latest_wu:(wu.results||[]).at(-1)||null,latest_metar:(mt.results||[]).at(-1)||null,latest_forecast:(fc.results||[]).at(-1)||null}};
 }
 async function forecastSnapshots(env, day){ const rows=await env.DB.prepare('SELECT * FROM forecast_snapshots WHERE target_date=? ORDER BY forecast_date, forecast_issue_time_ist, fetch_time_ist LIMIT 1000').bind(day).all(); return {ok:true,target_date:day,rows:rows.results||[]}; }

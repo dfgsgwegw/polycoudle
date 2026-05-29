@@ -111,33 +111,36 @@ const state={unit:'c',x:'peak',y:'tight',data:null,points:[]};
 const $=id=>document.getElementById(id);
 function todayIST(){return new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});}
 function nowIST(){return new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Kolkata'}));}
-function cToF(c){const n=Number(c); return Number.isFinite(n)?+(n*9/5+32).toFixed(1):null;}
+function cToF(c){const n=Number(c); return Number.isFinite(n)?+(n*9/5+32).toFixed(3):null;}
 function temp(c,f){return state.unit==='f'?Number(f ?? cToF(c)):Number(c);}
-function tf(c,f,dec=1){
+function tf(c,f,dec=3){
   if(state.unit==='f'){
-    const raw = fmtRawF(f,c);
-    return raw ? raw+'°F' : '—';
+    if(f!==null && f!==undefined && f!=='' && Number.isFinite(Number(f))) return Number(f).toFixed(3)+'°F';
+    const v=cToF(c); return Number.isFinite(v)?Number(v).toFixed(3)+'°F':'—';
   }
-  const v=Number(c);
-  if(!Number.isFinite(v))return '—';
-  return v.toFixed(dec)+'°C';
+  if(c!==null && c!==undefined && c!=='' && Number.isFinite(Number(c))) return Number(c).toFixed(3)+'°C';
+  const v=fToC(f); return Number.isFinite(v)?Number(v).toFixed(3)+'°C':'—';
 }
-function fmtRawF(f,c){
-  if(f!==null && f!==undefined && f!==''){
-    const s=String(f);
-    // Preserve raw source Fahrenheit exactly, including decimals.
-    return s;
+function fToC(f){const n=Number(f); return Number.isFinite(n)?+((n-32)*5/9).toFixed(3):null;}
+function n3(v){const n=Number(v); return Number.isFinite(n)?n.toFixed(3):'';}
+function sourceTemp(c,f,src='WU'){
+  const hasC=c!==null&&c!==undefined&&c!==''&&Number.isFinite(Number(c));
+  const hasF=f!==null&&f!==undefined&&f!==''&&Number.isFinite(Number(f));
+  if(src==='METAR'){
+    if(!hasC) return '—';
+    return `<b>${n3(c)}°C</b> <small style="color:#8bb4d6">(source METAR → ${n3(cToF(c))}°F converted)</small>`;
   }
-  const v=cToF(c);
-  return Number.isFinite(v) ? v.toFixed(1) : '';
+  if(src==='FORECAST'){
+    if(hasF) return `<b>${n3(f)}°F</b> <small style="color:#8bb4d6">(source forecast → ${n3(fToC(f))}°C converted)</small>`;
+    if(hasC) return `<b>${n3(c)}°C</b> <small style="color:#8bb4d6">(source forecast → ${n3(cToF(c))}°F converted)</small>`;
+    return '—';
+  }
+  // WU/weather.com current observation source is units=e Fahrenheit in worker.
+  if(hasF) return `<b>${n3(f)}°F</b> <small style="color:#8bb4d6">(source WU → ${n3(fToC(f))}°C converted)</small>`;
+  if(hasC) return `<b>${n3(c)}°C</b> <small style="color:#8bb4d6">(source WU → ${n3(cToF(c))}°F converted)</small>`;
+  return '—';
 }
-function cf(c,f){
-  if(c==null) return '—';
-  const cc = Number(c);
-  const cText = Number.isFinite(cc) ? cc.toFixed(1) : String(c);
-  const fText = fmtRawF(f,c);
-  return `${cText}°C (${fText}°F)`;
-}
+function cf(c,f,src='WU'){return sourceTemp(c,f,src);}°C (${Number.isInteger(fv)?fv:fv.toFixed(1)}°F)`; }
 function timeHour(s){s=String(s||'');let m=s.match(/T(\d{1,2}):(\d{2})/)||s.match(/(\d{1,2}):(\d{2})/);return m?Number(m[1])+Number(m[2])/60:null}
 function fmtTime(h){let hh=Math.floor(h), mm=Math.round((h-hh)*60); if(mm===60){hh++;mm=0} const am=hh>=12?'p':'a'; let h12=hh%12||12; return `${h12}:${String(mm).padStart(2,'0')}${am}`;}
 function slotFromObsTime(t){
@@ -189,8 +192,8 @@ function updateCards(wu,metar,fc){
   const peak=wu.length?wu.reduce((a,b)=>b.y>a.y?b:a,wu[0]):null;
   const nowH=nowIST().getHours()+nowIST().getMinutes()/60;
   const fcNear=fc.latest.length?fc.latest.reduce((a,b)=>Math.abs(b.hour-nowH)<Math.abs(a.hour-nowH)?b:a,fc.latest[0]):null;
-  $('curWu').textContent=last?cf(last.c,last.f):'—'; $('curWuSub').textContent=last?`At ${last.raw.obs_time||fmtTime(last.hour)} · ${last.raw.condition||''}`:'—';
-  $('curMetar').textContent=mlast?cf(mlast.c,mlast.f):'—'; $('curMetarSub').textContent=mlast?`At ${mlast.raw.slot||fmtTime(mlast.hour)} · WX ${mlast.raw.wx||'-'}`:'—';
+  $('curWu').textContent=last?cf(last.c,last.f,'WU'):'—'; $('curWuSub').textContent=last?`At ${last.raw.obs_time||fmtTime(last.hour)} · ${last.raw.condition||''}`:'—';
+  $('curMetar').textContent=mlast?cf(mlast.c,mlast.f,'METAR'):'—'; $('curMetarSub').textContent=mlast?`At ${mlast.raw.slot||fmtTime(mlast.hour)} · WX ${mlast.raw.wx||'-'}`:'—';
   $('peakSoFar').textContent=peak?tf(peak.c,peak.f):'—'; $('dropFromPeak').textContent=(last&&peak)?`Current ${((last.y-peak.y).toFixed(1))}° from peak`:'—';
   $('fcNow').textContent=fcNear?tf(fcNear.c,fcNear.f):'—';
   $('fcBias').textContent=(last&&fcNear)?`Running ${(last.y-fcNear.y>=0?'+':'')+(last.y-fcNear.y).toFixed(1)}° ${last.y>=fcNear.y?'HOT':'COLD'}`:'—';
@@ -227,8 +230,8 @@ function renderTable(wu,metar){
   const slots=[...new Set([...metar.map(m=>m.raw.slot||slotFromObsTime(m.raw.valid_ist)),...wu.map(w=>rowSlot(w))].filter(Boolean))].sort();
   const rows=slots.map(slot=>{
     const m=metar.find(x=>(x.raw.slot||slotFromObsTime(x.raw.valid_ist))===slot), list=wu.filter(x=>rowSlot(x)===slot);
-    const wuhtml=list.map(x=>`<div class="wu">↳ WU ${x.raw.obs_time||fmtTime(x.hour)} &nbsp; ${cf(x.c,x.f)} · 💧${x.raw.humidity??'-'}% &nbsp; ${x.raw.condition||''}</div>`).join('');
-    return `<tr><td>${slot}</td><td class="metar">${m?cf(m.c,m.f):'⏳ METAR'}</td><td>${wuhtml||'<span class="muted">– waiting for WU</span>'}</td><td>${m?.raw.dewpoint_c??'—'}°C</td><td>${m?.raw.wind_kph??'—'}km/h</td><td>${m?.raw.wx||'—'}</td><td>${m?.raw.nosig?'✅ YES':'—'}</td><td>${m?.raw.delta??'—'}</td></tr>`;
+    const wuhtml=list.map(x=>`<div class="wu">↳ WU ${x.raw.obs_time||fmtTime(x.hour)} &nbsp; ${cf(x.c,x.f,'WU')} · 💧${x.raw.humidity??'-'}% &nbsp; ${x.raw.condition||''}</div>`).join('');
+    return `<tr><td>${slot}</td><td class="metar">${m?cf(m.c,m.f,'METAR'):'⏳ METAR'}</td><td>${wuhtml||'<span class="muted">– waiting for WU</span>'}</td><td>${m?.raw.dewpoint_c??'—'}°C</td><td>${m?.raw.wind_kph??'—'}km/h</td><td>${m?.raw.wx||'—'}</td><td>${m?.raw.nosig?'✅ YES':'—'}</td><td>${m?.raw.delta??'—'}</td></tr>`;
   }).join('');
   $('rows').innerHTML=rows||'<tr><td colspan="8">No rows yet</td></tr>';
 }
@@ -239,7 +242,7 @@ function render(){
   $('curveSummary').innerHTML=last?`Current WU: <b>${tf(last.c,last.f)}</b> · Peak so far: <b>${tf(wu.reduce((a,b)=>b.y>a.y?b:a,wu[0]).c,wu.reduce((a,b)=>b.y>a.y?b:a,wu[0]).f)}</b>${fcNear?` · vs forecast: <b style="color:${last.y>=fcNear.y?'#ef4444':'#3b82f6'}">${(last.y-fcNear.y>=0?'+':'')+(last.y-fcNear.y).toFixed(1)}° ${last.y>=fcNear.y?'HOT':'COLD'}</b>`:''} · Forecast snapshots: ${fc.rows.length}`:'Waiting for WU';
 }
 document.querySelectorAll('.toolbar button').forEach(b=>b.onclick=()=>{if(b.dataset.y){state.y=b.dataset.y;document.querySelectorAll('[data-y]').forEach(x=>x.classList.toggle('active',x.dataset.y===state.y))}if(b.dataset.x){state.x=b.dataset.x;document.querySelectorAll('[data-x]').forEach(x=>x.classList.toggle('active',x.dataset.x===state.x))}if(b.dataset.u){state.unit=b.dataset.u;document.querySelectorAll('[data-u]').forEach(x=>x.classList.toggle('active',x.dataset.u===state.unit))}render();});
-$('chart').addEventListener('mousemove',e=>{const r=e.target.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;let best=null,bd=1e9;state.points.forEach(p=>{const yy=Number.isFinite(p.sy)?p.sy:p.y;const d=Math.hypot(p.x-x,yy-y);if(d<bd){bd=d;best=p}});const tt=$('tooltip');if(best&&bd<18){tt.style.display='block';tt.style.left=e.clientX+14+'px';tt.style.top=e.clientY+14+'px';tt.innerHTML=`${best.type||best.raw?.source||'Point'}<br>${fmtTime(best.hour)}<br>${state.unit==='f' ? tf(best.c,best.f) : tf(best.c,best.f)}`;}else tt.style.display='none';});
+$('chart').addEventListener('mousemove',e=>{const r=e.target.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;let best=null,bd=1e9;state.points.forEach(p=>{const yy=Number.isFinite(p.sy)?p.sy:p.y;const d=Math.hypot(p.x-x,yy-y);if(d<bd){bd=d;best=p}});const tt=$('tooltip');if(best&&bd<18){tt.style.display='block';tt.style.left=e.clientX+14+'px';tt.style.top=e.clientY+14+'px';tt.innerHTML=`${best.type||best.raw?.source||'Point'}<br>${fmtTime(best.hour)}<br>${best.type==='METAR'?cf(best.c,best.f,'METAR'):(best.type==='Forecast'||best.type==='FC'?cf(best.c,best.f,'FORECAST'):cf(best.c,best.f,'WU'))}`;}else tt.style.display='none';});
 $('chart').addEventListener('mouseleave',()=>{$('tooltip').style.display='none'});
 $('refreshBtn').onclick=loadAll; loadAll(); setInterval(loadAll,30000);
 </script>
