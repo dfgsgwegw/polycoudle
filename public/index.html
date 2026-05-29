@@ -405,12 +405,34 @@ section:has(table){
 @media(max-width:700px){#temp-chart{min-height:500px!important}.pro-curve-shell{min-width:980px;padding:14px}.pro-curve-head{font-size:12px}.pro-curve-summary{font-size:12px}}
 
 
-/* FORCE ONLY CURVE CHART, NO BAR CHART OVERWRITE */
-#temp-chart, [id*="chart" i], .chart {
-  min-height: 520px !important;
+/* ===== SAFE STANDALONE CURVE CHART ===== */
+#vilk-curve-card{
+  border:1px solid rgba(0,212,255,.28);
+  background:linear-gradient(180deg,rgba(10,28,46,.96),rgba(5,16,28,.98));
+  border-radius:18px;
+  padding:18px;
+  margin:18px 0;
+  overflow-x:auto;
 }
-.pro-curve-wrap, #pro-curve, canvas#pro-curve {
-  min-height: 480px !important;
+#vilk-curve-toolbar{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 14px}
+#vilk-curve-toolbar button{
+  border:0;border-radius:999px;padding:8px 12px;font-weight:800;
+  background:#0f2a42;color:#9ad9ff;cursor:pointer;width:auto!important;min-height:auto!important;
+}
+#vilk-curve-toolbar button.active{background:#00d4ff;color:#00111a}
+#vilkCurveCanvas{
+  width:1180px;
+  max-width:none;
+  height:520px;
+  display:block;
+  border-radius:14px;
+  background:#fafafa;
+}
+#vilkCurveSummary{color:#9bc9ea;font-family:monospace;margin-top:12px;white-space:normal}
+#signal-breakdown,#sigs,#signal-list{min-height:1px}
+@media(max-width:700px){
+  #vilk-curve-card{padding:12px}
+  #vilkCurveCanvas{width:1050px;height:500px}
 }
 
 </style>
@@ -2546,75 +2568,242 @@ window.fetchAll = fetchAll;
 </script>
 
 
-<script id="force-curve-only-fix">
-(function(){
-  function killOldBarChart(){
-    // Old renderer names from previous patches. Disable them so they cannot overwrite curve.
-    const noop = function(){ return false; };
-    [
-      'renderHTMLChart',
-      'loadHTMLChart',
-      'drawHTMLChart',
-      'loadChart',
-      'drawChart',
-      'drawTempChart',
-      'renderTempChart'
-    ].forEach(name=>{
-      try{
-        if(typeof window[name] === 'function') window[name] = noop;
-        if(typeof eval(name) === 'function') eval(name + ' = window["'+name+'"];');
-      }catch(e){}
-    });
+<section id="vilk-curve-card">
+  <div class="ch">📈 TEMP CURVE — FORECAST VS OBSERVED</div>
+  <div id="vilk-curve-toolbar">
+    <button type="button" data-zoom="tight" class="active">Tight zoom</button>
+    <button type="button" data-zoom="wide">Wide</button>
+    <button type="button" data-hours="day" class="active">9–18h</button>
+    <button type="button" data-hours="full">24h</button>
+    <button type="button" data-unit="c" class="active">°C</button>
+    <button type="button" data-unit="f">°F</button>
+  </div>
+  <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
+    <canvas id="vilkCurveCanvas" width="1180" height="520"></canvas>
+  </div>
+  <div id="vilkCurveSummary">Loading curve...</div>
+</section>
 
-    // Remove old chart scroll-control shells that duplicate wrappers.
-    document.querySelectorAll('.chart-scroll-top').forEach(x=>{
-      if(!x.textContent.includes('Curve')) x.remove();
-    });
+
+<script id="vilk-safe-curve-and-null-fix">
+(function(){
+  function ensureNode(id){
+    let el=document.getElementById(id);
+    if(!el){
+      el=document.createElement('div');
+      el.id=id;
+      el.style.display='none';
+      document.body.appendChild(el);
+    }
+    return el;
+  }
+  function ensureLegacyNodes(){
+    [
+      'signal-breakdown','sigs','signal-list','score','scoreVal','strengthScore',
+      'predPeak','maxPossible','signalTitle','signalSub','currentMetarTemp',
+      'currentMetarSub','wuLatest','wuObsTime','wuFetchTime','wuSaveStatus',
+      'wuCurrentTemp','humidityVal','windVal','latestMetar','supa-sync-status',
+      'forecastToday','expectedPeak','todayDate','lastUpdated'
+    ].forEach(ensureNode);
   }
 
-  async function forceCurve(){
+  // Wrap old renderers so missing optional UI never kills whole page.
+  function wrapSafe(name){
     try{
-      killOldBarChart();
+      const fn=window[name] || (typeof eval(name)!=='undefined' ? eval(name) : null);
+      if(typeof fn==='function' && !fn.__safeWrapped){
+        const wrapped=function(){
+          try{ ensureLegacyNodes(); return fn.apply(this, arguments); }
+          catch(e){ console.warn(name+' skipped missing optional UI:', e.message); return null; }
+        };
+        wrapped.__safeWrapped=true;
+        window[name]=wrapped;
+        try{ eval(name+' = window["'+name+'"]'); }catch(e){}
+      }
+    }catch(e){}
+  }
 
-      // Prefer pro curve function if available.
-      if(typeof window.loadProCurve === 'function'){
-        await window.loadProCurve();
-        return;
-      }
-      if(typeof loadProCurve === 'function'){
-        await loadProCurve();
-        return;
-      }
-      if(typeof window.drawProCurve === 'function'){
-        await window.drawProCurve();
-        return;
-      }
-      if(typeof drawProCurve === 'function'){
-        await drawProCurve();
-        return;
-      }
-    }catch(e){
-      console.warn('force curve failed', e.message);
+  function todayIST(){return new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});}
+  function nowIST(){return new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Kolkata'}));}
+  function cToF(c){const n=Number(c); return Number.isFinite(n)? n*9/5+32 : null;}
+  const state={zoom:'tight',hours:'day',unit:'c'};
+  function useTemp(c,f){return state.unit==='f' ? Number(f ?? cToF(c)) : Number(c);}
+  function timeHour(s){
+    s=String(s||'');
+    let m=s.match(/T(\d{1,2}):(\d{2})/) || s.match(/(\d{1,2}):(\d{2})/);
+    return m ? Number(m[1])+Number(m[2])/60 : null;
+  }
+  function drawLine(ctx, pts, color, width, dash){
+    pts=pts.filter(p=>Number.isFinite(p.x)&&Number.isFinite(p.y)).sort((a,b)=>a.x-b.x);
+    if(pts.length<2) return;
+    ctx.save(); ctx.strokeStyle=color; ctx.lineWidth=width||3; ctx.setLineDash(dash||[]); ctx.lineCap='round'; ctx.lineJoin='round';
+    ctx.beginPath(); ctx.moveTo(pts[0].x,pts[0].y);
+    for(let i=1;i<pts.length;i++){
+      const mx=(pts[i-1].x+pts[i].x)/2, my=(pts[i-1].y+pts[i].y)/2;
+      ctx.quadraticCurveTo(pts[i-1].x,pts[i-1].y,mx,my);
+    }
+    ctx.lineTo(pts[pts.length-1].x,pts[pts.length-1].y);
+    ctx.stroke(); ctx.restore();
+  }
+  function drawPts(ctx, pts, color, r){
+    ctx.save(); ctx.fillStyle=color; ctx.strokeStyle='#fff'; ctx.lineWidth=1.5;
+    pts.forEach(p=>{if(!Number.isFinite(p.x)||!Number.isFinite(p.y))return; ctx.beginPath(); ctx.arc(p.x,p.y,r||4,0,Math.PI*2); ctx.fill(); ctx.stroke();});
+    ctx.restore();
+  }
+  function hourlyFromSnapshot(row){
+    if(!row || !row.hourly_json) return [];
+    try{
+      return JSON.parse(row.hourly_json).map(h=>({
+        hour:timeHour(h.time),
+        c:Number(h.temp_c),
+        f:Number(h.temp_f)
+      })).filter(x=>Number.isFinite(x.hour));
+    }catch(e){return []}
+  }
+
+  async function renderVilkCurve(){
+    ensureLegacyNodes();
+    const canvas=document.getElementById('vilkCurveCanvas');
+    const summary=document.getElementById('vilkCurveSummary');
+    if(!canvas) return;
+    const ctx=canvas.getContext('2d');
+    const date=todayIST();
+
+    let hist={wu_obs_rows:{},metar_rows:[]}, snaps={rows:[]};
+    try{hist=await (await fetch('/api/history?date='+date+'&t='+Date.now(),{cache:'no-store'})).json();}catch(e){}
+    try{snaps=await (await fetch('/api/forecast-snapshots?date='+date+'&t='+Date.now(),{cache:'no-store'})).json();}catch(e){}
+
+    const wu=[];
+    Object.values(hist.wu_obs_rows||{}).forEach(list=>(Array.isArray(list)?list:[]).forEach(x=>{
+      const h=timeHour(x.saved_at||x.obs_time);
+      const y=useTemp(x.temp_c,x.temp_f);
+      if(Number.isFinite(h)&&Number.isFinite(y)) wu.push({hour:h,y,raw:x});
+    }));
+    const metar=(hist.metar_rows||[]).map(m=>{
+      const h=timeHour(m.slot||m.valid_ist);
+      const y=useTemp(m.temp_c,cToF(m.temp_c));
+      return {hour:h,y,raw:m};
+    }).filter(p=>Number.isFinite(p.hour)&&Number.isFinite(p.y));
+
+    const targetRows=(snaps.rows||[]).filter(r=>r.target_date===date || Number(r.horizon_days)===0);
+    const latestRow=targetRows[targetRows.length-1] || null;
+    const oldRow=targetRows.length>1 ? targetRows[0] : null;
+    const latestFc=hourlyFromSnapshot(latestRow).map(p=>({hour:p.hour,y:useTemp(p.c,p.f)})).filter(p=>Number.isFinite(p.y));
+    const oldFc=hourlyFromSnapshot(oldRow).map(p=>({hour:p.hour,y:useTemp(p.c,p.f)})).filter(p=>Number.isFinite(p.y));
+
+    const xMin=state.hours==='day'?9:0, xMax=state.hours==='day'?18:24;
+    const all=[...wu,...metar,...latestFc,...oldFc].filter(p=>p.hour>=xMin&&p.hour<=xMax);
+    let vals=(all.length?all:[...wu,...metar,...latestFc,...oldFc]).map(p=>p.y).filter(Number.isFinite);
+    if(!vals.length) vals=state.unit==='c'?[20,45]:[68,113];
+
+    let yMin=Math.min(...vals), yMax=Math.max(...vals);
+    if(state.zoom==='tight'){ yMin=Math.floor(yMin-1); yMax=Math.ceil(yMax+1); }
+    else { yMin=state.unit==='c'?15:55; yMax=state.unit==='c'?48:120; }
+    if(yMax-yMin<4){yMin-=2;yMax+=2;}
+
+    const W=canvas.width,H=canvas.height,L=68,R=28,T=48,B=60;
+    const pw=W-L-R, ph=H-T-B;
+    const X=h=>L+(h-xMin)/(xMax-xMin)*pw;
+    const Y=v=>T+(yMax-v)/(yMax-yMin)*ph;
+
+    ctx.clearRect(0,0,W,H);
+    ctx.fillStyle='#fafafa'; ctx.fillRect(0,0,W,H);
+
+    // peak window
+    if(xMax>=14 && xMin<=16){
+      ctx.fillStyle='rgba(250,204,21,.18)';
+      ctx.fillRect(Math.max(L,X(14)),T,Math.min(X(16),L+pw)-Math.max(L,X(14)),ph);
+      ctx.fillStyle='#92400e'; ctx.font='bold 15px sans-serif';
+      ctx.fillText('peak 14–16h', Math.max(L+5,X(14)+8), T+22);
+    }
+
+    // forecast bracket
+    if(latestFc.length){
+      const max=Math.max(...latestFc.map(p=>p.y));
+      const top=Y(max+0.6), bot=Y(max-0.6);
+      ctx.fillStyle='rgba(239,68,68,.12)';
+      ctx.fillRect(L,top,pw,bot-top);
+      ctx.fillStyle='#991b1b'; ctx.font='bold 15px sans-serif';
+      ctx.fillText(`${(max-0.6).toFixed(1)}–${(max+0.6).toFixed(1)}°${state.unit.toUpperCase()}`,L+10,top+23);
+    }
+
+    // grid
+    ctx.strokeStyle='#e5e7eb'; ctx.lineWidth=1; ctx.font='14px sans-serif'; ctx.fillStyle='#6b7280';
+    for(let h=Math.ceil(xMin); h<=xMax; h+=2){
+      const x=X(h); ctx.beginPath(); ctx.moveTo(x,T); ctx.lineTo(x,T+ph); ctx.stroke();
+      ctx.fillText(String(h).padStart(2,'0')+'h',x-13,H-28);
+    }
+    const step=(yMax-yMin)>18?3:1;
+    for(let v=Math.ceil(yMin); v<=yMax; v+=step){
+      const y=Y(v); ctx.beginPath(); ctx.moveTo(L,y); ctx.lineTo(L+pw,y); ctx.stroke();
+      ctx.fillText(v+'°',20,y+5);
+    }
+    ctx.strokeStyle='#9ca3af'; ctx.strokeRect(L,T,pw,ph);
+
+    const mapLine=arr=>arr.filter(p=>p.hour>=xMin&&p.hour<=xMax).map(p=>({x:X(p.hour),y:Y(p.y)}));
+
+    // bias corrected dotted
+    let bias=0;
+    const lastWU=wu.filter(p=>p.hour>=xMin&&p.hour<=xMax).slice(-1)[0];
+    if(lastWU && latestFc.length){
+      const near=latestFc.reduce((a,b)=>Math.abs(b.hour-lastWU.hour)<Math.abs(a.hour-lastWU.hour)?b:a, latestFc[0]);
+      bias=lastWU.y-near.y;
+    }
+
+    drawLine(ctx,mapLine(oldFc),'#93c5fd',2,[6,6]);
+    drawLine(ctx,mapLine(latestFc),'#111827',4,[]);
+    drawLine(ctx,mapLine(latestFc.map(p=>({hour:p.hour,y:p.y+bias}))),'#111827',3,[2,6]);
+    drawLine(ctx,mapLine(wu),'#dc2626',3,[]);
+    drawPts(ctx,mapLine(wu),'#ef4444',3.2);
+    drawPts(ctx,mapLine(metar),'#10b981',6);
+
+    const now=nowIST(), nh=now.getHours()+now.getMinutes()/60;
+    if(nh>=xMin&&nh<=xMax){
+      const x=X(nh); ctx.strokeStyle='#6b7280'; ctx.lineWidth=2; ctx.setLineDash([5,6]);
+      ctx.beginPath(); ctx.moveTo(x,T-10); ctx.lineTo(x,T+ph); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle='#374151'; ctx.font='bold 15px sans-serif'; ctx.fillText('now',x+8,T-14);
+    }
+
+    // legend
+    const ly=H-18; ctx.font='15px sans-serif';
+    const legend=[
+      ['#111827','latest forecast'],['#111827','bias corrected'],['#93c5fd','old forecast'],
+      ['#dc2626','WU observed'],['#10b981','METAR official']
+    ];
+    let lx=L;
+    legend.forEach((it,i)=>{
+      ctx.strokeStyle=it[0]; ctx.lineWidth=4; ctx.setLineDash(i===1?[2,5]:i===2?[6,6]:[]);
+      ctx.beginPath(); ctx.moveTo(lx,ly-5); ctx.lineTo(lx+28,ly-5); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle='#374151'; ctx.fillText(it[1],lx+36,ly); lx+=185;
+    });
+
+    const wuLast=wu.slice(-1)[0], fcNear=wuLast&&latestFc.length?latestFc.reduce((a,b)=>Math.abs(b.hour-wuLast.hour)<Math.abs(a.hour-wuLast.hour)?b:a, latestFc[0]):null;
+    const diff=wuLast&&fcNear ? +(wuLast.y-fcNear.y).toFixed(1) : null;
+    if(summary){
+      summary.innerHTML = wuLast
+        ? `Current WU: <b>${wuLast.y.toFixed(1)}°${state.unit.toUpperCase()}</b>${diff!=null?` · vs forecast: <b style="color:${diff>=0?'#ef4444':'#3b82f6'}">${diff>=0?'+':''}${diff}° ${diff>=0?'HOT':'COLD'}</b>`:''} · Forecast snapshots: ${targetRows.length}`
+        : `Waiting for WU observations · Forecast snapshots: ${targetRows.length}`;
     }
   }
 
-  // Patch fetchAll: old fetchAll can update tables/stats, then curve immediately redraws after it.
-  const oldFetchAll = window.fetchAll || (typeof fetchAll !== 'undefined' ? fetchAll : null);
-  if(oldFetchAll && !window.__curveOnlyFetchPatched){
-    window.__curveOnlyFetchPatched = true;
-    window.fetchAll = async function(){
-      let ret = null;
-      try{ ret = await oldFetchAll.apply(this, arguments); }
-      catch(e){ console.warn('fetchAll non-critical error:', e.message); }
-      setTimeout(forceCurve, 80);
-      return ret;
-    };
-    try{ fetchAll = window.fetchAll; }catch(e){}
+  function bindButtons(){
+    document.querySelectorAll('#vilk-curve-toolbar button').forEach(btn=>{
+      if(btn.dataset.bound) return;
+      btn.dataset.bound='1';
+      btn.addEventListener('click',()=>{
+        if(btn.dataset.zoom){state.zoom=btn.dataset.zoom; document.querySelectorAll('[data-zoom]').forEach(b=>b.classList.toggle('active',b.dataset.zoom===state.zoom));}
+        if(btn.dataset.hours){state.hours=btn.dataset.hours; document.querySelectorAll('[data-hours]').forEach(b=>b.classList.toggle('active',b.dataset.hours===state.hours));}
+        if(btn.dataset.unit){state.unit=btn.dataset.unit; document.querySelectorAll('[data-unit]').forEach(b=>b.classList.toggle('active',b.dataset.unit===state.unit));}
+        renderVilkCurve();
+      });
+    });
   }
 
-  killOldBarChart();
-  window.addEventListener('load',()=>setTimeout(forceCurve,700));
-  setInterval(forceCurve,30000);
+  ensureLegacyNodes();
+  ['renderStats','renderSigs'].forEach(wrapSafe);
+  window.renderVilkCurve=renderVilkCurve;
+  window.addEventListener('load',()=>{ensureLegacyNodes();bindButtons();setTimeout(renderVilkCurve,900);});
+  setInterval(()=>{ensureLegacyNodes();bindButtons();renderVilkCurve();},30000);
 })();
 </script>
 
