@@ -625,7 +625,7 @@ td{
       <div class="sub" id="fhLatestSub">Loading...</div>
     </div>
     <div class="forecastHighMini">
-      <h4>FIRST SAVED HIGH</h4>
+      <h4>START OF DAY FORECAST</h4>
       <div class="val" id="fhFirst">—</div>
       <div class="sub" id="fhFirstSub">—</div>
     </div>
@@ -1331,7 +1331,7 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
     set('fhLatest',`${fmt(latest.highC)}°C`);
     set('fhLatestSub',`${prettyDate(date)} · peak ${latest.peakHour!=null?fmtTime(latest.peakHour):'daily max'}<br>${fmt(latest.highF)}°F · snapshot ${fmtTime(latest.snapshotHour)}<br>${badge}`);
     set('fhFirst',`${fmt(first.highC)}°C`);
-    set('fhFirstSub',`first saved snapshot ${fmtTime(first.snapshotHour)}<br>source: ${first.source==='hourly'?'hourly':'daily'}`);
+    set('fhFirstSub',`start snapshot ${fmtTime(first.snapshotHour)}<br>source: ${first.source==='hourly'?'hourly':'daily'}`);
     set('fhChange',`${diff>=0?'+':''}${fmt(diff)}°C`);
     set('fhChangeSub',diff>0?'forecast high increased 🔴':(diff<0?'forecast high decreased 🟢':'no change'));
     set('fhBin',`${marketBin(latest.highC)}°C`);
@@ -1368,20 +1368,42 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
     const ax=chartAxis();
     const yVal=unit()==='f'?cToF(latest.highC):latest.highC;
     if(yVal<ax.yMin||yVal>ax.yMax)return;
-    const X=x=>L+(x-ax.xMin)/(ax.xMax-ax.xMin)*(W-L-R);
     const Y=y=>T+(ax.yMax-y)/(ax.yMax-ax.yMin)*(H-T-B);
-    const y=Y(yVal), x1=Math.max(L,X(ax.xMin)), x2=Math.min(W-R,X(ax.xMax));
+    const y=Y(yVal);
+
     ctx.save();
-    ctx.strokeStyle='#f97316';
-    ctx.lineWidth=4;
-    ctx.setLineDash([10,8]);
-    ctx.beginPath();ctx.moveTo(x1,y);ctx.lineTo(x2,y);ctx.stroke();
+
+    // Clean small right-side marker only. No thick full-width band.
+    const label=`WU forecast max ${fmt(latest.highC)}°C`;
+    ctx.font='bold 15px ui-monospace,Consolas,monospace';
+    const padX=10, boxH=30;
+    const textW=ctx.measureText(label).width;
+    let boxW=textW+padX*2;
+    let x=W-R-boxW-10;
+    let yy=Math.max(T+6,Math.min(H-B-boxH-6,y-boxH/2));
+
+    // tiny dashed guide near the right edge only
+    ctx.strokeStyle='rgba(249,115,22,.9)';
+    ctx.lineWidth=2;
+    ctx.setLineDash([7,6]);
+    ctx.beginPath();
+    ctx.moveTo(Math.max(L,W-R-190),y);
+    ctx.lineTo(W-R-8,y);
+    ctx.stroke();
     ctx.setLineDash([]);
-    ctx.fillStyle='rgba(249,115,22,.14)';
-    ctx.fillRect(x1,y-10,x2-x1,20);
+
+    ctx.fillStyle='rgba(249,115,22,.16)';
+    ctx.strokeStyle='rgba(249,115,22,.85)';
+    ctx.lineWidth=1.5;
+    if(ctx.roundRect){
+      ctx.beginPath();ctx.roundRect(x,yy,boxW,boxH,10);ctx.fill();ctx.stroke();
+    }else{
+      ctx.fillRect(x,yy,boxW,boxH);ctx.strokeRect(x,yy,boxW,boxH);
+    }
+
     ctx.fillStyle='#c2410c';
-    ctx.font='bold 16px ui-monospace,Consolas,monospace';
-    ctx.fillText(`latest WU forecast max ${fmt(latest.highC)}°C (${latest.source})`,x1+10,y-14);
+    ctx.fillText(label,x+padX,yy+20);
+
     ctx.restore();
   }
   function wrapRender(){
@@ -1408,6 +1430,30 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
   }
   window.addEventListener('load',()=>setTimeout(runAll,900));
   setInterval(runAll,60000);
+})();
+</script>
+
+
+<script id="clean-forecast-max-badge-label-patch">
+(function(){
+  function fixLabels(){
+    document.querySelectorAll('h4,h3,div').forEach(el=>{
+      if((el.textContent||'').trim()==='FIRST SAVED HIGH') el.textContent='START OF DAY FORECAST';
+    });
+    const hint=document.getElementById('forecastMaxCleanHint');
+    if(!hint){
+      const sec=document.getElementById('currentDayForecastHighTrend');
+      if(sec){
+        const d=document.createElement('div');
+        d.id='forecastMaxCleanHint';
+        d.className='forecastHighExplain';
+        d.innerHTML='<b>Note:</b> Start of Day Forecast means first WU forecast max saved after date changed. Latest Forecast High is the current WU forecast max. Change Today = latest minus start.';
+        sec.appendChild(d);
+      }
+    }
+  }
+  window.addEventListener('load',fixLabels);
+  setInterval(fixLabels,2000);
 })();
 </script>
 
