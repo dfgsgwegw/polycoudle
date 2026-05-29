@@ -401,6 +401,25 @@ td{
 }
 .mobileZoomBar button:hover{background:#00d4ff!important;color:#00131c!important}
 
+
+/* ===== AXIS AREA ZOOM + RAW/CONVERTED COLOR PATCH ===== */
+#chart{cursor:crosshair!important;touch-action:none!important}
+#chart.axisY{cursor:ns-resize!important}
+#chart.axisX{cursor:ew-resize!important}
+#chart.dragging{cursor:grabbing!important}
+.axisZoomHint{
+  font-family:ui-monospace,Consolas,monospace;
+  color:#ffd433;
+  font-size:14px;
+  font-weight:900;
+  margin:10px 0;
+  line-height:1.5;
+}
+.rawColor{color:#ef4444;font-weight:1000}
+.convColor{color:#f97316;font-weight:1000}
+.metRawColor{color:#10b981;font-weight:1000}
+.metConvColor{color:#34d399;font-weight:1000}
+
 </style></head><body>
 <div class="wrap">
   <div class="header"><div><h1>VILK <span class="cyan">Live Signal</span></h1><div class="sub">● UI refresh 30 sec · cron save 1 min · Lucknow Airport (VILK) · D1 archive</div></div><div><button class="btn" id="refreshBtn">↻ Refresh Now</button><div class="updated" id="updated">Updated --</div></div></div>
@@ -465,6 +484,7 @@ td{
   <b>How to read lines:</b> Red solid = WU Raw, Red dashed = WU Converted, Green dots = METAR Raw, Green dashed = METAR Converted, Black = latest forecast, Light-blue dashed = older forecast, Cyan dashed = bias-corrected, Purple dashed = peak/ceiling.
 </div>
 
+<div class="axisZoomHint" id="axisZoomHint">Axis zoom: mouse wheel on Y-axis labels = temp/Y zoom only. Mouse wheel on X-axis labels = time/X zoom only. Wheel inside chart = X+Y zoom. Raw = solid red/green, Converted = dashed orange/light-green.</div>
 <div class="chartScroll"><canvas id="chart" width="1180" height="560"></canvas></div>
     <div class="legend"><span><i class="dot" style="background:#ef4444"></i>WU observed</span><span><i class="dot" style="background:#10b981"></i>METAR official</span><span><i class="dot" style="background:#111827"></i>latest WU forecast</span><span><i class="dot" style="background:#60a5fa"></i>older forecast runs</span><span><i class="dot" style="background:#111827;border-top:2px dotted #111827"></i>bias corrected forecast</span><span><i class="dot" style="background:#a855f7"></i>historical 95% ceiling</span><span><i class="dot" style="background:#7f1d1d"></i>99% extreme</span><span><i class="dot" style="background:#6b7280"></i>closest analog day</span></div>
     <div id="curveSummary" class="summary">Loading curve...</div>
@@ -766,7 +786,10 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
 
 
 
-<script id="restore-zoom-drag-pan-range-final">
+
+
+
+<script id="axis-area-zoom-raw-converted-color-final">
 (function(){
   const $=id=>document.getElementById(id);
   const N=v=>{const x=Number(v);return Number.isFinite(x)?x:null};
@@ -780,9 +803,9 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
   }
   function lim(){return isF()?{min:14,max:158}:{min:-10,max:70}}
   function info(){
-    const c=$('chart');if(!c)return null;
+    const c=$('chart'); if(!c)return null;
     const r=c.getBoundingClientRect();
-    return {c,r,W:c.width||1180,H:c.height||560,L:70,R:28,T:48,B:60};
+    return {c,r,W:c.width||1180,H:c.height||560,L:78,R:30,T:48,B:68};
   }
   function ax(){
     if(!window.__axisState)window.__axisState={xMin:null,xMax:null,yMin:null,yMax:null};
@@ -809,7 +832,7 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
     if(r.xMin<0){r.xMax-=r.xMin;r.xMin=0}
     if(r.xMax>24){r.xMin-=r.xMax-24;r.xMax=24}
     r.xMin=Math.max(0,r.xMin);r.xMax=Math.min(24,r.xMax);
-    if(r.xMax-r.xMin<0.2){const m=(r.xMin+r.xMax)/2;r.xMin=m-.1;r.xMax=m+.1}
+    if(r.xMax-r.xMin<0.25){const m=(r.xMin+r.xMax)/2;r.xMin=Math.max(0,m-.125);r.xMax=Math.min(24,m+.125)}
     r.yMin=Math.max(L.min,Math.min(L.max,r.yMin));
     r.yMax=Math.max(L.min,Math.min(L.max,r.yMax));
     if(r.yMax<=r.yMin){r.yMin=L.min;r.yMax=L.max}
@@ -825,28 +848,29 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
       else if(typeof window.fetchAll==='function')window.fetchAll();
     }catch(e){console.warn('render failed',e)}
   }
-  function zoom(kind,dir,anchorX=.5,anchorY=.5){
+  function zoomX(r,factor,anchor){
+    const cur=r.xMin+anchor*(r.xMax-r.xMin);
+    const span=(r.xMax-r.xMin)*factor;
+    r.xMin=cur-(cur-r.xMin)*factor;
+    r.xMax=r.xMin+span;
+  }
+  function zoomY(r,factor,anchor){
+    const cur=r.yMax-anchor*(r.yMax-r.yMin);
+    const span=(r.yMax-r.yMin)*factor;
+    r.yMin=cur-(cur-r.yMin)*factor;
+    r.yMax=r.yMin+span;
+  }
+  function doZoom(kind,dir,anchorX=.5,anchorY=.5){
     const r=read();
     const factor=dir==='in'?0.82:1.22;
-    if(kind==='x'||kind==='both'){
-      const cur=r.xMin+anchorX*(r.xMax-r.xMin);
-      const span=(r.xMax-r.xMin)*factor;
-      r.xMin=cur-(cur-r.xMin)*factor;
-      r.xMax=r.xMin+span;
-    }
-    if(kind==='y'||kind==='both'){
-      const cur=r.yMax-anchorY*(r.yMax-r.yMin);
-      const span=(r.yMax-r.yMin)*factor;
-      r.yMin=cur-(cur-r.yMin)*factor;
-      r.yMax=r.yMin+span;
-    }
+    if(kind==='x'||kind==='both')zoomX(r,factor,anchorX);
+    if(kind==='y'||kind==='both')zoomY(r,factor,anchorY);
     write(r);render();
   }
   function pan(dxFrac,dyFrac=0){
     const r=read();
     const xs=(r.xMax-r.xMin)*dxFrac, ys=(r.yMax-r.yMin)*dyFrac;
-    r.xMin+=xs;r.xMax+=xs;
-    r.yMin+=ys;r.yMax+=ys;
+    r.xMin+=xs;r.xMax+=xs;r.yMin+=ys;r.yMax+=ys;
     write(r);render();
   }
   function reset(){
@@ -854,38 +878,52 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
     window.__axisState={xMin:null,xMax:null,yMin:null,yMax:null};
     render();
   }
+  function areaFromMouse(e){
+    const inf=info();if(!inf)return {area:'body',ax:.5,ay:.5};
+    const px=(e.clientX-inf.r.left)/inf.r.width*inf.W;
+    const py=(e.clientY-inf.r.top)/inf.r.height*inf.H;
+    const plotW=inf.W-inf.L-inf.R, plotH=inf.H-inf.T-inf.B;
+    const axx=Math.max(0,Math.min(1,(px-inf.L)/plotW));
+    const ayy=Math.max(0,Math.min(1,(py-inf.T)/plotH));
+    // left side labels / y-axis strip
+    if(px < inf.L+10 && py>=inf.T-20 && py<=inf.H-inf.B+20)return {area:'y',ax:axx,ay:ayy};
+    // bottom time labels / x-axis strip
+    if(py > inf.H-inf.B-5 && px>=inf.L-20 && px<=inf.W-inf.R+20)return {area:'x',ax:axx,ay:ayy};
+    // plot body
+    if(px>=inf.L && px<=inf.W-inf.R && py>=inf.T && py<=inf.H-inf.B)return {area:'body',ax:axx,ay:ayy};
+    return {area:'outside',ax:axx,ay:ayy};
+  }
   let drag=null,last=0;
   function bind(){
     const c=$('chart');
-    if(c&&!c.dataset.restoreControlsBound){
-      c.dataset.restoreControlsBound='1';
+    if(c&&!c.dataset.axisAreaZoomBound){
+      c.dataset.axisAreaZoomBound='1';
+      c.addEventListener('mousemove',e=>{
+        const ar=areaFromMouse(e).area;
+        c.classList.toggle('axisY',ar==='y');
+        c.classList.toggle('axisX',ar==='x');
+      });
       c.addEventListener('wheel',e=>{
-        const inf=info();if(!inf)return;
-        const px=(e.clientX-inf.r.left)/inf.r.width*inf.W;
-        const py=(e.clientY-inf.r.top)/inf.r.height*inf.H;
-        if(px<inf.L||px>inf.W-inf.R||py<inf.T||py>inf.H-inf.B)return;
+        const ar=areaFromMouse(e);
+        if(ar.area==='outside')return;
         e.preventDefault();
-        const axx=(px-inf.L)/(inf.W-inf.L-inf.R);
-        const ayy=(py-inf.T)/(inf.H-inf.T-inf.B);
         const dir=e.deltaY<0?'in':'out';
-        const kind=e.shiftKey?'y':(e.altKey?'x':'both');
-        zoom(kind,dir,axx,ayy);
+        // exact requested behavior:
+        // Y labels = y zoom only, X labels = x zoom only, chart body = both.
+        const kind=ar.area==='y'?'y':(ar.area==='x'?'x':'both');
+        doZoom(kind,dir,ar.ax,ar.ay);
       },{passive:false});
       c.addEventListener('mousedown',e=>{
-        const inf=info();if(!inf)return;
-        const px=(e.clientX-inf.r.left)/inf.r.width*inf.W;
-        const py=(e.clientY-inf.r.top)/inf.r.height*inf.H;
-        let mode='both';
-        if(px<inf.L+35)mode='y';
-        else if(py>inf.H-inf.B-25)mode='x';
-        drag={mode,x:e.clientX,y:e.clientY};
+        const ar=areaFromMouse(e);
+        if(ar.area==='outside')return;
+        drag={mode:ar.area==='y'?'y':(ar.area==='x'?'x':'both'),x:e.clientX,y:e.clientY};
         c.classList.add('dragging');
         e.preventDefault();
       });
       window.addEventListener('mouseup',()=>{drag=null;c.classList.remove('dragging')});
       window.addEventListener('mousemove',e=>{
         if(!drag)return;
-        const now=Date.now(); if(now-last<16)return; last=now;
+        const now=Date.now();if(now-last<16)return;last=now;
         const inf=info();if(!inf)return;
         const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
         drag.x=e.clientX;drag.y=e.clientY;
@@ -902,28 +940,34 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
         if(e.touches.length===2){e.preventDefault();const dx=e.touches[0].clientX-e.touches[1].clientX,dy=e.touches[0].clientY-e.touches[1].clientY;lastDist=Math.hypot(dx,dy)}
       },{passive:false});
       c.addEventListener('touchmove',e=>{
-        if(e.touches.length===2&&lastDist){e.preventDefault();const dx=e.touches[0].clientX-e.touches[1].clientX,dy=e.touches[0].clientY-e.touches[1].clientY;const d=Math.hypot(dx,dy);zoom('both',d>lastDist?'in':'out');lastDist=d}
+        if(e.touches.length===2&&lastDist){e.preventDefault();const dx=e.touches[0].clientX-e.touches[1].clientX,dy=e.touches[0].clientY-e.touches[1].clientY;const d=Math.hypot(dx,dy);doZoom('both',d>lastDist?'in':'out');lastDist=d}
       },{passive:false});
       c.addEventListener('touchend',()=>{lastDist=null});
     }
     const map={
-      zoomInBoth:()=>zoom('both','in'),zoomOutBoth:()=>zoom('both','out'),
-      zoomInY:()=>zoom('y','in'),zoomOutY:()=>zoom('y','out'),
-      zoomInX:()=>zoom('x','in'),zoomOutX:()=>zoom('x','out'),
+      zoomInBoth:()=>doZoom('both','in'),zoomOutBoth:()=>doZoom('both','out'),
+      zoomInY:()=>doZoom('y','in'),zoomOutY:()=>doZoom('y','out'),
+      zoomInX:()=>doZoom('x','in'),zoomOutX:()=>doZoom('x','out'),
       panLeft:()=>pan(-.25,0),panRight:()=>pan(.25,0),resetZoom2D:reset
     };
-    Object.entries(map).forEach(([id,fn])=>{const b=$(id);if(b&&!b.dataset.restoreControlsBound){b.dataset.restoreControlsBound='1';b.onclick=fn}});
-    // Unit switch keeps axis in locked range
-    document.querySelectorAll('[data-unit],[data-u],button').forEach(btn=>{
-      const t=(btn.textContent||'').trim();
-      if((btn.dataset.unit||btn.dataset.u||t==='°C'||t==='°F')&&!btn.dataset.rangeUnitBound){
-        btn.dataset.rangeUnitBound='1';
-        btn.addEventListener('click',()=>setTimeout(()=>{const L=lim();const r=read();r.yMin=Math.max(L.min,r.yMin);r.yMax=Math.min(L.max,r.yMax);if(r.yMax<=r.yMin){r.yMin=L.min;r.yMax=L.max}write(r);render();},120));
-      }
+    Object.entries(map).forEach(([id,fn])=>{const b=$(id);if(b&&!b.dataset.axisAreaZoomBound){b.dataset.axisAreaZoomBound='1';b.onclick=fn}});
+  }
+  function recolorLegendText(){
+    // Make wording clear without deleting anything
+    document.querySelectorAll('.legend,.forecastExplain,.note,.hint').forEach(el=>{
+      if(el.dataset.rawConvColored)return;
+      el.dataset.rawConvColored='1';
+      el.innerHTML=el.innerHTML
+        .replace(/WU raw/gi,'<span class="rawColor">WU raw</span>')
+        .replace(/WU observed/gi,'<span class="rawColor">WU observed/raw</span>')
+        .replace(/WU Converted/gi,'<span class="convColor">WU Converted</span>')
+        .replace(/METAR raw/gi,'<span class="metRawColor">METAR raw</span>')
+        .replace(/METAR official/gi,'<span class="metRawColor">METAR official/raw</span>')
+        .replace(/METAR Converted/gi,'<span class="metConvColor">METAR Converted</span>');
     });
   }
-  window.addEventListener('load',bind);
-  setInterval(bind,1000);
+  window.addEventListener('load',()=>{bind();recolorLegendText()});
+  setInterval(()=>{bind();recolorLegendText()},1200);
 })();
 </script>
 
