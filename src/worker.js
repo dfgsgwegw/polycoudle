@@ -41,12 +41,56 @@ async function collect(env){
     `https://api.weather.com/v3/wx/observations/current?geocode=${GEO}&apiKey=${WU_KEY}&units=e&language=en-US&format=json`
   ]){try{data=await getJson(u);break;}catch(e){}}
   const o=parseWU(data||{});
-  const ex=await env.DB.prepare("SELECT id FROM wu_obs WHERE obs_date=? AND obs_time=? AND temp_c=? LIMIT 1").bind(o.obs_date,o.obs_time,o.temp_c).first();
-  if(ex) out.wu={ok:true,saved:false,duplicate:true,temp:o.temp_c,obsTime:o.obs_time,slot:o.slot};
-  else{
-    await env.DB.prepare(`INSERT INTO wu_obs (obs_date,obs_time,slot,temp_c,dewpoint_c,peak_since_7am_c,humidity,wind_kph,condition,source,fetched_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`).bind(o.obs_date,o.obs_time,o.slot,o.temp_c,o.dewpoint_c,o.peak_since_7am_c,o.humidity,o.wind_kph,o.condition,o.source,timeIST()).run();
-    out.wu={ok:true,saved:true,duplicate:false,temp:o.temp_c,obsTime:o.obs_time,slot:o.slot};
-  }
+ // WU obs_time is the real Weather.com observation timestamp.
+// Same obs_time = cached/repeated observation -> skip.
+// New obs_time = save, even if temp is exactly the same.
+
+const ex = await env.DB.prepare(
+  "SELECT id FROM wu_obs WHERE obs_date=? AND obs_time=? LIMIT 1"
+).bind(
+  o.obs_date,
+  o.obs_time
+).first();
+
+if(ex){
+  out.wu = {
+    ok:true,
+    saved:false,
+    duplicate:true,
+    reason:"same WU obs_time cached/repeated",
+    temp:o.temp_c,
+    obsTime:o.obs_time,
+    slot:o.slot
+  };
+}else{
+  await env.DB.prepare(
+    `INSERT INTO wu_obs
+    (obs_date,obs_time,slot,temp_c,dewpoint_c,peak_since_7am_c,humidity,wind_kph,condition,source,fetched_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?)`
+  ).bind(
+    o.obs_date,
+    o.obs_time,
+    o.slot,
+    o.temp_c,
+    o.dewpoint_c,
+    o.peak_since_7am_c,
+    o.humidity,
+    o.wind_kph,
+    o.condition,
+    o.source,
+    timeIST()
+  ).run();
+
+  out.wu = {
+    ok:true,
+    saved:true,
+    duplicate:false,
+    reason:"new WU obs_time",
+    temp:o.temp_c,
+    obsTime:o.obs_time,
+    slot:o.slot
+  };
+}
  }catch(e){out.wu={ok:false,error:e.message};}
 
  try{
