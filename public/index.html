@@ -42,6 +42,26 @@
 }
 .forecastExplain b{color:#fff}
 
+
+/* ===== RAW/CONVERTED + PAN ZOOM FIX ===== */
+.rawConv{
+  display:block;
+  margin-top:3px;
+  color:#8bb4d6;
+  font-size:.72em;
+  line-height:1.25;
+  font-weight:800;
+}
+.rawConv b{color:#fff}
+.chartScroll.grabMode{cursor:grab}
+.chartScroll.grabMode.dragging{cursor:grabbing}
+.panHint{
+  font-family:ui-monospace,Consolas,monospace;
+  color:#9bd4ff;
+  font-size:12px;
+  margin-top:6px;
+}
+
 </style></head><body>
 <div class="wrap">
   <div class="header"><div><h1>VILK <span class="cyan">Live Signal</span></h1><div class="sub">● UI refresh 30 sec · cron save 1 min · Lucknow Airport (VILK) · D1 archive</div></div><div><button class="btn" id="refreshBtn">↻ Refresh Now</button><div class="updated" id="updated">Updated --</div></div></div>
@@ -68,10 +88,11 @@
   <button type="button" id="autoAxisBtn">Auto Axis</button>
 </div>
 <div class="axisHint">Tip: Time accepts 14, 14.5, 9-18 style. Temp axis auto-fits visible data. Manual Temp min/max uses selected unit (°C/°F). This changes chart range, not browser zoom.</div>
+<div class="panHint">Mouse: drag chart left/right to pan. Wheel over chart = zoom time range. Shift+wheel = zoom temperature axis.</div>
 
     
 <div class="forecastExplain" id="forecastExplain">
-  <b>How to read lines:</b>
+  <b>How to read lines: Chart uses WU raw C in °C mode and WU raw F in °F mode. </b>
   Red = WU observed, Green = METAR official, Black = latest forecast, Light-blue dashed = older forecast runs, Cyan dashed = bias-corrected forecast, Purple dashed = historical 95% ceiling, Grey = closest analog day.
 </div>
 
@@ -391,6 +412,204 @@ document.querySelectorAll('.toolbar button').forEach(b=>b.onclick=()=>{if(b.data
   }
   window.addEventListener('load',()=>{patchRenderChart();patchUnitButtons();setTimeout(()=>{try{if(typeof render==='function')render();}catch(e){}},500);});
   setInterval(()=>{patchRenderChart();patchUnitButtons();},1000);
+})();
+</script>
+
+
+<script id="raw-converted-panzoom-fix">
+(function(){
+  function n3(v){
+    const n=Number(v);
+    return Number.isFinite(n) ? n.toFixed(3) : '—';
+  }
+  function fToC(f){
+    const n=Number(f);
+    return Number.isFinite(n) ? ((n-32)*5/9) : null;
+  }
+  function cToF(c){
+    const n=Number(c);
+    return Number.isFinite(n) ? (n*9/5+32) : null;
+  }
+  function fmtWU(cRaw, fRaw){
+    const c = Number(cRaw), f = Number(fRaw);
+    const cFromF = Number.isFinite(f) ? fToC(f) : null;
+    const fFromC = Number.isFinite(c) ? cToF(c) : null;
+    const main = (typeof state!=='undefined' && state.unit==='f')
+      ? `<b>${Number.isFinite(f)?n3(f):'—'}°F</b>`
+      : `<b>${Number.isFinite(c)?n3(c):'—'}°C</b>`;
+    return `${main}<span class="rawConv">WU raw: ${Number.isFinite(f)?n3(f):'—'}°F + ${Number.isFinite(c)?n3(c):'—'}°C<br>converted check: ${Number.isFinite(cFromF)?n3(cFromF):'—'}°C from F · ${Number.isFinite(fFromC)?n3(fFromC):'—'}°F from C</span>`;
+  }
+  function fmtMETAR(cRaw){
+    const c=Number(cRaw), f=Number.isFinite(c)?cToF(c):null;
+    const main=(typeof state!=='undefined' && state.unit==='f')
+      ? `<b>${Number.isFinite(f)?n3(f):'—'}°F</b>`
+      : `<b>${Number.isFinite(c)?n3(c):'—'}°C</b>`;
+    return `${main}<span class="rawConv">METAR raw: ${Number.isFinite(c)?n3(c):'—'}°C<br>converted: ${Number.isFinite(f)?n3(f):'—'}°F</span>`;
+  }
+  function fmtFC(cRaw,fRaw){
+    const c=Number(cRaw), f=Number(fRaw);
+    const main=(typeof state!=='undefined' && state.unit==='f')
+      ? `<b>${Number.isFinite(f)?n3(f):'—'}°F</b>`
+      : `<b>${Number.isFinite(c)?n3(c):'—'}°C</b>`;
+    return `${main}<span class="rawConv">Forecast raw: ${Number.isFinite(f)?n3(f):'—'}°F${Number.isFinite(c)?' + '+n3(c)+'°C':''}</span>`;
+  }
+
+  // Override common formatter names used by this UI.
+  window.fmtWU = fmtWU; window.fmtMETAR = fmtMETAR; window.fmtFC = fmtFC;
+  try{
+    cf = function(c,f,src='WU'){
+      if(src==='METAR') return fmtMETAR(c);
+      if(src==='FORECAST' || src==='FC') return fmtFC(c,f);
+      return fmtWU(c,f);
+    };
+  }catch(e){}
+
+  function patchCardsFromState(){
+    try{
+      if(!window.state || !state.data) return;
+      const hist=state.data.hist||{};
+      const wu=[];
+      Object.values(hist.wu_obs_rows||{}).forEach(list=>(Array.isArray(list)?list:[]).forEach(x=>wu.push(x)));
+      wu.sort((a,b)=>String(a.saved_at||a.obs_time).localeCompare(String(b.saved_at||b.obs_time)));
+      const last=wu.at(-1);
+      const m=(hist.metar_rows||[]).at(-1);
+      const curWu=document.getElementById('curWu');
+      const curMetar=document.getElementById('curMetar');
+      if(curWu && last) curWu.innerHTML=fmtWU(last.temp_c,last.temp_f);
+      if(curMetar && m) curMetar.innerHTML=fmtMETAR(m.temp_c);
+    }catch(e){}
+  }
+
+  // Pan + wheel zoom.
+  function ensureAxis(){
+    if(!window.__axisState) window.__axisState={xMin:null,xMax:null,yMin:null,yMax:null};
+    return window.__axisState;
+  }
+  function currentXRange(){
+    const st=ensureAxis();
+    if(st.xMin!=null && st.xMax!=null) return [Number(st.xMin),Number(st.xMax)];
+    try{
+      if(state.x==='peak') return [9,18];
+      if(state.x==='last3'){
+        const d=new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Kolkata'}));
+        const h=d.getHours()+d.getMinutes()/60;
+        return [Math.max(0,h-3),Math.min(24,h+0.5)];
+      }
+    }catch(e){}
+    return [0,24];
+  }
+  function currentYRange(){
+    const st=ensureAxis();
+    return [st.yMin,st.yMax];
+  }
+  function setInputs(st){
+    const xm=document.getElementById('xMinManual'), xx=document.getElementById('xMaxManual');
+    const ym=document.getElementById('yMinManual'), yx=document.getElementById('yMaxManual');
+    if(xm) xm.value = st.xMin!=null ? String(+Number(st.xMin).toFixed(2)) : '';
+    if(xx) xx.value = st.xMax!=null ? String(+Number(st.xMax).toFixed(2)) : '';
+    if(ym) ym.value = st.yMin!=null ? String(+Number(st.yMin).toFixed(2)) : '';
+    if(yx) yx.value = st.yMax!=null ? String(+Number(st.yMax).toFixed(2)) : '';
+  }
+  function rerender(){
+    try{ if(typeof render==='function') render(); else if(window.render) window.render(); }catch(e){}
+    setTimeout(patchCardsFromState,150);
+  }
+  function bindPanZoom(){
+    const canvas=document.getElementById('chart');
+    const scroller=canvas?.closest('.chartScroll') || canvas?.parentElement;
+    if(!canvas || !scroller || canvas.dataset.panZoomBound) return;
+    canvas.dataset.panZoomBound='1';
+    scroller.classList.add('grabMode');
+
+    let dragging=false, lastX=0;
+    canvas.addEventListener('mousedown',e=>{dragging=true;lastX=e.clientX;scroller.classList.add('dragging');});
+    window.addEventListener('mouseup',()=>{dragging=false;scroller.classList.remove('dragging');});
+    window.addEventListener('mousemove',e=>{
+      if(!dragging) return;
+      const st=ensureAxis();
+      let [xMin,xMax]=currentXRange();
+      const dx=e.clientX-lastX; lastX=e.clientX;
+      const hoursPerPx=(xMax-xMin)/(canvas.getBoundingClientRect().width||1);
+      let shift=-dx*hoursPerPx;
+      xMin+=shift; xMax+=shift;
+      if(xMin<0){xMax-=xMin;xMin=0;}
+      if(xMax>24){xMin-=xMax-24;xMax=24;}
+      st.xMin=Math.max(0,xMin); st.xMax=Math.min(24,xMax);
+      setInputs(st); rerender();
+    });
+    canvas.addEventListener('wheel',e=>{
+      e.preventDefault();
+      const st=ensureAxis();
+      const rect=canvas.getBoundingClientRect();
+      const mx=(e.clientX-rect.left)/rect.width;
+      if(e.shiftKey){
+        // zoom Y axis
+        let yMin=Number(st.yMin), yMax=Number(st.yMax);
+        if(!Number.isFinite(yMin)||!Number.isFinite(yMax)){
+          // create sensible default around visible data by letting current auto run first
+          return;
+        }
+        const center=yMin+(1-mx)*(yMax-yMin); // approximate
+        const factor=e.deltaY>0?1.18:0.84;
+        const half=(yMax-yMin)*factor/2;
+        st.yMin=center-half; st.yMax=center+half;
+      }else{
+        let [xMin,xMax]=currentXRange();
+        const cursor=xMin+mx*(xMax-xMin);
+        const factor=e.deltaY>0?1.18:0.84;
+        let newSpan=(xMax-xMin)*factor;
+        newSpan=Math.max(0.5,Math.min(24,newSpan));
+        xMin=cursor-(cursor-xMin)*factor;
+        xMax=xMin+newSpan;
+        if(xMin<0){xMax-=xMin;xMin=0;}
+        if(xMax>24){xMin-=xMax-24;xMax=24;}
+        st.xMin=Math.max(0,xMin); st.xMax=Math.min(24,xMax);
+      }
+      setInputs(st); rerender();
+    },{passive:false});
+  }
+
+  // Make chart use RAW value based on selected unit:
+  // C mode uses temp_c (WU metric raw); F mode uses temp_f (WU imperial raw).
+  function patchFlatteners(){
+    try{
+      if(window.__rawFlattenPatched) return;
+      window.__rawFlattenPatched=true;
+      if(typeof temp==='function'){
+        const oldTemp=temp;
+        temp=function(c,f){
+          if(typeof state!=='undefined' && state.unit==='f'){
+            const nf=Number(f);
+            if(Number.isFinite(nf)) return nf;
+            const nc=Number(c); return Number.isFinite(nc)?cToF(nc):NaN;
+          }else{
+            const nc=Number(c);
+            if(Number.isFinite(nc)) return nc;
+            const nf=Number(f); return Number.isFinite(nf)?fToC(nf):NaN;
+          }
+        };
+        window.temp=temp;
+      }
+    }catch(e){}
+  }
+
+  function patchRender(){
+    if(window.__rawConvRenderPatched) return;
+    const old=(typeof render==='function')?render:window.render;
+    if(typeof old==='function'){
+      window.__rawConvRenderPatched=true;
+      const wrapped=function(){
+        patchFlatteners();
+        const r=old.apply(this,arguments);
+        setTimeout(()=>{patchCardsFromState();bindPanZoom();},80);
+        return r;
+      };
+      window.render=wrapped; try{render=wrapped;}catch(e){}
+    }
+  }
+
+  window.addEventListener('load',()=>{patchFlatteners();patchRender();bindPanZoom();setTimeout(patchCardsFromState,1000);});
+  setInterval(()=>{patchFlatteners();patchRender();bindPanZoom();patchCardsFromState();},2000);
 })();
 </script>
 
