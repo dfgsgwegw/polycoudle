@@ -383,7 +383,7 @@ section:has(table){
 <div class="top">
   <div>
     <h1>VILK <em>Live Signal</em></h1>
-    <div class="sub"><span class="live-dot"></span>Auto-refresh every 30 sec · Lucknow Airport (VILK) · 1,327 days database</div>
+    <div class="sub"><span class="live-dot"></span>UI refresh 30 sec · cron save 1 min · Lucknow Airport (VILK) · 1,327 days database</div>
   </div>
   <div style="text-align:right">
     <button class="refresh-btn" id="rbtn" onclick="fetchAll()">↻ Refresh Now</button>
@@ -1714,20 +1714,7 @@ startAuto();
 window.fetchAll = fetchAll;
 </script>
 
-<script>
-(function(){
-  // browser collect every 30 sec: calls server /api/collect, D1 dedupes rows
-  async function browserCollect(){
-    try{
-      const r = await fetch('/api/collect?source=browser&t=' + Date.now(), {cache:'no-store'});
-      const j = await r.json();
-      console.log('browser collect', j);
-    }catch(e){ console.warn('browser collect failed', e.message); }
-  }
-  setTimeout(browserCollect, 3000);
-  setInterval(browserCollect, 30000);
-})();
-</script>
+
 
 
 
