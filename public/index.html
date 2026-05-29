@@ -2432,5 +2432,109 @@ window.fetchAll = fetchAll;
 })();
 </script>
 
+
+<script id="cf-display-table-patch">
+(function(){
+  function cToF(c){
+    const n=Number(c);
+    return Number.isFinite(n) ? Math.round(n*9/5+32) : null;
+  }
+  function fmtTempCF(c, f){
+    const cn=Number(c);
+    const fn=Number(f ?? cToF(c));
+    if(!Number.isFinite(cn)) return '—';
+    return `${cn.toFixed(1)}°C <small style="color:#8bb4d6">(${Math.round(fn)}°F)</small>`;
+  }
+  function fmtMetarCF(c){
+    const cn=Number(c);
+    if(!Number.isFinite(cn)) return '—';
+    return `${Math.round(cn)}°C <small style="color:#8bb4d6">(${Math.round(cn*9/5+32)}°F)</small>`;
+  }
+  function todayIST(){
+    return new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});
+  }
+  function slotLabel(slot){
+    const m=String(slot||'').match(/(\d{1,2}):(\d{2})/);
+    if(!m) return '';
+    const d=new Date(2000,0,1,Number(m[1]),Number(m[2]));
+    return d.toLocaleTimeString('en-IN',{hour:'numeric',minute:'2-digit',hour12:true}).replace(' ','').toLowerCase();
+  }
+  function ceilWU(t){
+    const m=String(t||'').match(/(\d{1,2}):(\d{2})/);
+    if(!m) return null;
+    let h=+m[1], mm=+m[2];
+    if(mm===0) return String(h).padStart(2,'0')+':00';
+    if(mm<=30) return String(h).padStart(2,'0')+':30';
+    return String((h+1)%24).padStart(2,'0')+':00';
+  }
+  async function patchCFDisplay(){
+    try{
+      const r=await fetch('/api/history?date='+todayIST()+'&t='+Date.now(),{cache:'no-store'});
+      const hist=await r.json();
+      const wuByTime={};
+      Object.values(hist.wu_obs_rows||{}).forEach(list=>{
+        (Array.isArray(list)?list:[]).forEach(x=>{
+          wuByTime[String(x.saved_at||x.obs_time||'').slice(0,5)] = x;
+        });
+      });
+      const metarBySlot={};
+      (Array.isArray(hist.metar_rows)?hist.metar_rows:[]).forEach(m=>{
+        if(m.slot) metarBySlot[slotLabel(m.slot)] = m;
+      });
+
+      // Patch WU text lines: "WU 16:21 31.7°C" -> "WU 16:21 31.7°C (89°F)"
+      document.querySelectorAll('td,div,span').forEach(el=>{
+        const txt=el.textContent||'';
+        if(!/WU\s+\d{1,2}:\d{2}/.test(txt) || !/°C/.test(txt)) return;
+        const tm=(txt.match(/WU\s+(\d{1,2}:\d{2})/)||[])[1];
+        if(!tm) return;
+        const x=wuByTime[tm];
+        if(!x || x.temp_c==null) return;
+        const html=el.innerHTML;
+        // Replace only first temp in this WU line.
+        el.innerHTML = html.replace(/(-?\d+(?:\.\d+)?)°C(?!\s*<small)/, fmtTempCF(x.temp_c, x.temp_f));
+      });
+
+      // Patch METAR temp column by row slot label.
+      document.querySelectorAll('tr').forEach(tr=>{
+        const cells=[...tr.children];
+        if(cells.length<2) return;
+        const first=(cells[0].textContent||'').trim().toLowerCase();
+        const m=metarBySlot[first];
+        if(!m || m.temp_c==null) return;
+        const tempCell=cells.find(td=>/^\s*\d+°C\s*$/.test(td.textContent||'') || /^\s*\d+°C/.test(td.textContent||''));
+        if(tempCell) tempCell.innerHTML = `<b>${fmtMetarCF(m.temp_c)}</b>`;
+      });
+
+      // Patch top current METAR/WU cards too.
+      document.querySelectorAll('.card,.panel,.box,section,div').forEach(card=>{
+        const t=card.textContent||'';
+        if(/CURRENT\s+METAR\s+TEMP/i.test(t)){
+          const latest=(hist.metar_rows||[]).slice(-1)[0];
+          if(latest?.temp_c!=null){
+            const node=[...card.querySelectorAll('h1,h2,h3,b,div,span')].find(x=>/^\s*\d+°C\s*$/.test(x.textContent||''));
+            if(node) node.innerHTML=fmtMetarCF(latest.temp_c);
+          }
+        }
+        if(/WU\s+OBS/i.test(t) && /CURRENT\s+TEMP/i.test(t)){
+          const all=[];
+          Object.values(hist.wu_obs_rows||{}).forEach(list=>(Array.isArray(list)?list:[]).forEach(x=>all.push(x)));
+          const latest=all.sort((a,b)=>String(a.saved_at).localeCompare(String(b.saved_at))).slice(-1)[0];
+          if(latest?.temp_c!=null){
+            const node=[...card.querySelectorAll('h1,h2,h3,b,div,span')].find(x=>/-?\d+(?:\.\d+)?°C/.test(x.textContent||''));
+            if(node) node.innerHTML=fmtTempCF(latest.temp_c, latest.temp_f);
+          }
+        }
+      });
+    }catch(e){
+      console.warn('C/F display patch failed', e.message);
+    }
+  }
+  window.patchCFDisplay=patchCFDisplay;
+  window.addEventListener('load',()=>setTimeout(patchCFDisplay,1200));
+  setInterval(patchCFDisplay,30000);
+})();
+</script>
+
 </body>
 </html>
