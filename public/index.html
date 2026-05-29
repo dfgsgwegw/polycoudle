@@ -658,4 +658,65 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
 })();
 </script>
 
+
+<script id="axis-drag-zoom-patch">
+(function(){
+ let drag=null;
+ function bind(){
+   const c=document.getElementById('chart');
+   if(!c || c.dataset.axisdrag) return;
+   c.dataset.axisdrag='1';
+
+   c.addEventListener('mousedown',e=>{
+     const r=c.getBoundingClientRect();
+     const x=e.clientX-r.left;
+     const y=e.clientY-r.top;
+
+     if(x<80) drag={type:'y',sy:e.clientY};
+     else if(y>r.height-60) drag={type:'x',sx:e.clientX};
+     else drag={type:'pan',sx:e.clientX,sy:e.clientY};
+   });
+
+   window.addEventListener('mouseup',()=>drag=null);
+
+   window.addEventListener('mousemove',e=>{
+     if(!drag) return;
+
+     if(drag.type==='y'){
+       const dy=e.clientY-drag.sy;
+       drag.sy=e.clientY;
+       const zin=document.getElementById('zoomInY');
+       const zout=document.getElementById('zoomOutY');
+       if(dy<0 && zin) zin.click();
+       if(dy>0 && zout) zout.click();
+     }
+
+     if(drag.type==='x'){
+       const dx=e.clientX-drag.sx;
+       drag.sx=e.clientX;
+       const zin=document.getElementById('zoomInX');
+       const zout=document.getElementById('zoomOutX');
+       if(dx<0 && zin) zin.click();
+       if(dx>0 && zout) zout.click();
+     }
+
+     if(drag.type==='pan'){
+       const dx=e.clientX-drag.sx;
+       drag.sx=e.clientX;
+       const left=document.getElementById('panLeft');
+       const right=document.getElementById('panRight');
+       if(dx>15 && left) left.click();
+       if(dx<-15 && right) right.click();
+     }
+   });
+
+   c.addEventListener('dblclick',()=>{
+     const r=document.getElementById('resetZoom2D');
+     if(r) r.click();
+   });
+ }
+ setInterval(bind,1000);
+})();
+</script>
+
 </body></html>
