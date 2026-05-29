@@ -441,4 +441,150 @@ document.querySelectorAll('.toolbar button').forEach(b=>b.onclick=()=>{if(b.data
 })();
 </script>
 
+
+<script id="safe-status-table-renderer-fixed">
+(function(){
+  const $ = id => document.getElementById(id);
+  const N = v => { const x=Number(v); return Number.isFinite(x)?x:null; };
+  const cToF = c => N(c)==null?null:N(c)*9/5+32;
+  const fToC = f => N(f)==null?null:(N(f)-32)*5/9;
+  const fmt = v => { const x=N(v); if(x==null)return '—'; return x.toFixed(3).replace(/\.?0+$/,''); };
+  const todayIST = () => new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});
+  function parseHour(s){
+    s=String(s||'').trim(); if(!s)return null;
+    let m=s.match(/T(\d{1,2}):(\d{2})/) || s.match(/\b(\d{1,2}):(\d{2})(?::\d{2})?\b/);
+    if(!m)return null;
+    let h=Number(m[1]), min=Number(m[2]);
+    const low=s.toLowerCase();
+    if((low.includes('pm') || /\bp\b/.test(low)) && h<12) h+=12;
+    if((low.includes('am') || /\ba\b/.test(low)) && h===12) h=0;
+    return Number.isFinite(h)&&Number.isFinite(min)?h+min/60:null;
+  }
+  function fmtTime24(h){
+    if(h==null)return '—';
+    let hh=Math.floor(h), mm=Math.round((h-hh)*60);
+    if(mm===60){hh++;mm=0;}
+    return String(hh).padStart(2,'0')+':'+String(mm).padStart(2,'0');
+  }
+  function slotList(){
+    const out=[];
+    for(let h=0;h<24;h++){out.push(String(h).padStart(2,'0')+':00');out.push(String(h).padStart(2,'0')+':30');}
+    return out;
+  }
+  async function getHist(){
+    const date=todayIST();
+    try{
+      const hist=await fetch('/api/history?date='+date+'&t='+Date.now(),{cache:'no-store'}).then(r=>r.json());
+      window.__goodHist=hist;
+      return hist;
+    }catch(e){
+      return window.__goodHist || {};
+    }
+  }
+  function flattenWU(hist){
+    const rows=[];
+    Object.entries(hist.wu_obs_rows||{}).forEach(([slot,list])=>{
+      (Array.isArray(list)?list:[]).forEach(x=>{
+        rows.push({...x, slot:x.slot||slot, hour:parseHour(x.saved_at||x.obs_time||x.fetched_at)});
+      });
+    });
+    return rows.sort((a,b)=>(a.hour??0)-(b.hour??0));
+  }
+  function flattenMETAR(hist){
+    return (hist.metar_rows||[]).map(x=>({...x,hour:parseHour(x.slot||x.valid_ist||x.fetched_at)})).sort((a,b)=>(a.hour??0)-(b.hour??0));
+  }
+  function wuLine(x){
+    if(!x)return '— waiting for WU';
+    const rawF=fmt(x.temp_f), rawC=fmt(x.temp_c);
+    const convC=fmt(fToC(x.temp_f)), convF=fmt(cToF(x.temp_c));
+    const hum=x.humidity!=null?` · 💧${x.humidity}%`:'';
+    const cond=x.condition?` · ${x.condition}`:'';
+    return `<span style="color:#ff8a3d">↳ WU ${x.saved_at||x.obs_time||''} &nbsp; <b>${rawF}°F</b> raw + <b>${rawC}°C</b> raw <small>(conv ${convC}°C / ${convF}°F)</small>${hum}${cond}</span>`;
+  }
+  function metarText(m){
+    if(!m)return '⏳ METAR';
+    const c=fmt(m.temp_c), f=fmt(cToF(m.temp_c));
+    return `<b style="color:#20f59a">${c}°C</b> <small style="color:#7fb8d8">(METAR raw → ${f}°F converted)</small>`;
+  }
+  function renderStatus(hist){
+    const wu=flattenWU(hist), mt=flattenMETAR(hist);
+    const lastWu=wu.at(-1), lastMetar=mt.at(-1);
+    const now=new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Kolkata'}));
+    let status='WATCH', score=25, msg='Reading latest WU/METAR trend...';
+    if(now.getHours()>=18){
+      status='DAY ENDED — PEAK REVIEW MODE';
+      score=0;
+      msg='After 6PM IST. Review chart and table; no fresh entry signal.';
+    }else if(lastWu && wu.length>=3){
+      const a=wu.at(-3), b=wu.at(-2), c=wu.at(-1);
+      const falling=N(c.temp_c)!=null&&N(b.temp_c)!=null&&N(a.temp_c)!=null&&N(c.temp_c)<N(b.temp_c)&&N(b.temp_c)<=N(a.temp_c);
+      if(falling){status='PEAK LIKELY DONE';score=80;msg='WU raw C falling in recent readings.';}
+      else {status='WATCH';score=35;msg='Wait for clear drop or METAR confirmation.';}
+    }
+    const boxes=[...document.querySelectorAll('div,section')].filter(el=>/Loading|WATCH|DAY ENDED|PEAK/i.test(el.textContent||''));
+    const box=boxes.find(el=>el.textContent.includes('Reading latest WU/METAR trend') || el.textContent.includes('Loading'));
+    if(box){
+      box.innerHTML=`<div style="text-align:center;padding:24px">
+        <div style="font-size:34px">👀</div>
+        <h2>${status} (${score}/100)</h2>
+        <p>${msg}</p>
+        <p style="font-family:ui-monospace,Consolas,monospace;color:#9bd4ff">Latest WU: ${lastWu?fmt(lastWu.temp_f)+'°F raw / '+fmt(lastWu.temp_c)+'°C raw':'—'} · Latest METAR: ${lastMetar?fmt(lastMetar.temp_c)+'°C':'—'}</p>
+      </div>`;
+    }
+  }
+  function renderTable(hist){
+    const wu=flattenWU(hist), mt=flattenMETAR(hist);
+    const bySlot={};
+    wu.forEach(x=>{const sl=x.slot || (x.hour!=null?(String(Math.floor(x.hour)).padStart(2,'0')+(x.hour%1<0.5?':00':':30')):''); if(!sl)return; (bySlot[sl]=bySlot[sl]||[]).push(x);});
+    const metBySlot={};
+    mt.forEach(m=>{if(m.slot)metBySlot[m.slot]=m;});
+    const slots=slotList();
+    const currentH=parseHour(new Date().toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata',hour12:false}));
+    const rows=slots.filter(sl=>{
+      const h=parseHour(sl);
+      return bySlot[sl] || metBySlot[sl] || (h!=null && h>=0 && h<=currentH+1);
+    }).map(sl=>{
+      const m=metBySlot[sl];
+      const list=(bySlot[sl]||[]).slice(-4);
+      return `<tr>
+        <td style="padding:10px 12px;border-top:1px solid rgba(99,179,237,.18);font-weight:900">${sl}</td>
+        <td style="padding:10px 12px;border-top:1px solid rgba(99,179,237,.18)">${metarText(m)}</td>
+        <td style="padding:10px 12px;border-top:1px solid rgba(99,179,237,.18);line-height:1.6">${list.length?list.map(wuLine).join('<br>'):'<span style="color:#8bb4d6">— waiting for WU</span>'}</td>
+        <td style="padding:10px 12px;border-top:1px solid rgba(99,179,237,.18)">${m&&m.dewpoint_c!=null?fmt(m.dewpoint_c)+'°C':'—'}</td>
+        <td style="padding:10px 12px;border-top:1px solid rgba(99,179,237,.18)">${m&&m.wind_kt!=null?fmt(m.wind_kt)+'kt':'—'}</td>
+        <td style="padding:10px 12px;border-top:1px solid rgba(99,179,237,.18)">${m&&m.wx?m.wx:'—'}</td>
+        <td style="padding:10px 12px;border-top:1px solid rgba(99,179,237,.18)">${m&&Number(m.nosig)?'✅ YES':'—'}</td>
+        <td style="padding:10px 12px;border-top:1px solid rgba(99,179,237,.18)">—</td>
+      </tr>`;
+    }).join('');
+    const table=document.querySelector('table');
+    if(table && /TIME IST|METAR SOURCE|WU OBS/i.test(table.textContent||'')){
+      table.innerHTML=`<thead><tr>
+        <th style="padding:10px 12px;text-align:left">TIME IST</th>
+        <th style="padding:10px 12px;text-align:left">METAR SOURCE</th>
+        <th style="padding:10px 12px;text-align:left">WU OBS IN WINDOW</th>
+        <th style="padding:10px 12px;text-align:left">DEWPT</th>
+        <th style="padding:10px 12px;text-align:left">WIND</th>
+        <th style="padding:10px 12px;text-align:left">WX</th>
+        <th style="padding:10px 12px;text-align:left">NOSIG</th>
+        <th style="padding:10px 12px;text-align:left">DELTA</th>
+      </tr></thead><tbody>${rows||'<tr><td colspan="8" style="padding:14px">No rows yet</td></tr>'}</tbody>`;
+    }else{
+      const holder=[...document.querySelectorAll('div,section')].find(el=>/TODAY\s*[—-]\s*METAR ROWS/i.test(el.textContent||''));
+      if(holder){
+        holder.innerHTML=`<h3>TODAY — METAR ROWS + WU WINDOW</h3><div style="overflow:auto;max-height:520px"><table style="width:100%;border-collapse:collapse">${rows}</table></div>`;
+      }
+    }
+  }
+  async function renderSafeBottom(){
+    const hist=await getHist();
+    renderStatus(hist);
+    renderTable(hist);
+  }
+  window.addEventListener('load',()=>setTimeout(renderSafeBottom,800));
+  setTimeout(renderSafeBottom,1800);
+  setInterval(renderSafeBottom,30000);
+})();
+</script>
+
 </body></html>
