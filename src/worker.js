@@ -1,3 +1,4 @@
+// DUAL WU RAW SOURCE PATCH: fetches Weather.com/WU units=e and units=m; temp_f stores imperial raw, temp_c stores metric raw when available. Fallback conversion only if one endpoint is missing.
 // PRECISION SOURCE PATCH: stores WU/forecast source Fahrenheit and converted Celsius to 3 decimals; METAR Celsius remains source.
 function json(data, status=200){
   return new Response(JSON.stringify(data), {status, headers:{'content-type':'application/json','access-control-allow-origin':'*','cache-control':'no-store'}});
@@ -15,12 +16,76 @@ function first(...v){return v.find(x=>x!==undefined&&x!==null&&x!==''&&x!=='M');
 function hash(str){let h=0;str=String(str||'');for(let i=0;i<str.length;i++){h=((h<<5)-h)+str.charCodeAt(i);h|=0;}return String(Math.abs(h));}
 function addDaysIST(dateStr, days){const [y,m,d]=String(dateStr).split('-').map(Number);const dt=new Date(y,m-1,d+Number(days||0),12,0,0);return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;}
 function compactJson(v){try{return JSON.stringify(v??null).slice(0,50000);}catch(e){return null;}}
-async function getJson(url){
-  const r=await fetch(url,{headers:{'user-agent':'VILK-Cloudflare-D1/1.0','accept':'application/json,*/*'}});
-  const t=await r.text();
-  if(!r.ok) throw new Error(r.status+': '+t.slice(0,180));
-  return JSON.parse(t);
+async function getJson(url, retries=2){
+  let lastErr;
+  for(let attempt=0; attempt<=retries; attempt++){
+    try{
+      const r=await fetch(url,{headers:{'user-agent':'VILK-Cloudflare-D1/1.0','accept':'application/json,*/*'}, cf:{cacheTtl:0,cacheEverything:false}});
+      const t=await r.text();
+      if(!r.ok) throw new Error(r.status+': '+t.slice(0,180));
+      return JSON.parse(t);
+    }catch(e){
+      lastErr=e;
+      await new Promise(res=>setTimeout(res, 250*(attempt+1)));
+    }
+  }
+  throw lastErr;
 }
+
+function wuRoot(d){
+  return Array.isArray(d?.observations)?d.observations[0]:(d?.observation||d||{});
+}
+function parseWUPair(impData, metricData){
+  const impRoot=wuRoot(impData), metRoot=wuRoot(metricData);
+  const imp=impRoot.imperial||{}, met=metRoot.metric||{};
+  const root=Object.keys(impRoot||{}).length?impRoot:metRoot;
+
+  const tempF=first(imp.temp, impRoot.temperature, impRoot.temp);
+  const dewF=first(imp.dewpt, impRoot.temperatureDewPoint, impRoot.dewpt);
+  const peakF=first(imp.temperatureMaxSince7Am, impRoot.temperatureMaxSince7Am, impRoot.tempMaxSince7Am, impRoot.temperatureMax24Hour);
+  const windMph=first(imp.windSpeed, impRoot.windSpeed);
+
+  const tempC=first(met.temp, metRoot.temperature, metRoot.temp);
+  const dewC=first(met.dewpt, metRoot.temperatureDewPoint, metRoot.dewpt);
+  const peakC=first(met.temperatureMaxSince7Am, metRoot.temperatureMaxSince7Am, metRoot.tempMaxSince7Am, metRoot.temperatureMax24Hour);
+  const windKphRaw=first(met.windSpeed, metRoot.windSpeed);
+
+  const epoch=first(root.validTimeUtc,root.obsTimeUtc,root.epoch,metRoot.validTimeUtc,metRoot.obsTimeUtc,metRoot.epoch,'');
+  let od=null;
+  if(epoch!==''){const x=Number(epoch);if(!Number.isNaN(x))od=new Date(x>9999999999?x:x*1000);}
+  if(!od) od=new Date();
+
+  const humidity=first(root.relativeHumidity,imp.relativeHumidity,root.humidity,imp.humidity,metRoot.relativeHumidity,metRoot.humidity,null);
+  const condition=first(root.wxPhraseLong,root.wxPhraseShort,root.phrase,root.cloudCoverPhrase,metRoot.wxPhraseLong,metRoot.wxPhraseShort,metRoot.phrase,'');
+  const source=first(root.stationID,root.stationId,root.icaoCode,metRoot.stationID,metRoot.stationId,metRoot.icaoCode,'VILK');
+
+  return {
+    obs_date:dateIST(od),
+    obs_time:timeIST(od),
+    slot:slotFromDate(od),
+
+    // RAW values when available:
+    // temp_f = WU imperial raw, temp_c = WU metric raw.
+    // If one endpoint is missing, fallback conversion is used.
+    temp_f:n(tempF)!=null?n(tempF):cToF(tempC),
+    temp_c:n(tempC)!=null?n(tempC):fToC(tempF),
+
+    dewpoint_f:n(dewF)!=null?n(dewF):cToF(dewC),
+    dewpoint_c:n(dewC)!=null?n(dewC):fToC(dewF),
+
+    peak_since_7am_f:n(peakF)!=null?n(peakF):cToF(peakC),
+    peak_since_7am_c:n(peakC)!=null?n(peakC):fToC(peakF),
+
+    humidity,
+    wind_kph:n(windKphRaw)!=null?n(windKphRaw):(windMph!=null?+(Number(windMph)*1.60934).toFixed(3):null),
+    condition,
+    source,
+    temp_source:(n(tempF)!=null?'WU_F_RAW':'F_FROM_C') + '+' + (n(tempC)!=null?'WU_C_RAW':'C_FROM_F'),
+    raw_imp_temp:tempF,
+    raw_metric_temp:tempC
+  };
+}
+
 function parseWU(d){
  const root=Array.isArray(d?.observations)?d.observations[0]:(d?.observation||d||{}), imp=root.imperial||{}, met=root.metric||{}, metric=!!root.metric&&!root.imperial;
  const temp=first(imp.temp,root.temperature,root.temp,met.temp), dew=first(imp.dewpt,root.temperatureDewPoint,root.dewpt,met.dewpt), wind=first(imp.windSpeed,root.windSpeed,met.windSpeed);
@@ -83,11 +148,21 @@ async function collect(env){
  const out={ok:true,today_ist:dateIST()};
  const WU_KEY=env.WU_KEY||'e1f10a1e78da46f5b10a1e78da96f525', ICAO=env.WU_ICAO||'VILK', IATA=env.WU_IATA||'LKO', GEO=env.WU_GEOCODE||'26.738,80.857';
  try{
-  let data=null; for(const u of [`https://api.weather.com/v3/wx/observations/current?icaoCode=${ICAO}&apiKey=${WU_KEY}&units=e&language=en-US&format=json`,`https://api.weather.com/v3/wx/observations/current?iataCode=${IATA}&apiKey=${WU_KEY}&units=e&language=en-US&format=json`,`https://api.weather.com/v3/wx/observations/current?geocode=${GEO}&apiKey=${WU_KEY}&units=e&language=en-US&format=json`]){try{data=await getJson(u);break;}catch(e){}}
-  const o=parseWU(data||{});
+  let dataE=null, dataM=null;
+  for(const u of [
+    `https://api.weather.com/v3/wx/observations/current?icaoCode=${ICAO}&apiKey=${WU_KEY}&units=e&language=en-US&format=json`,
+    `https://api.weather.com/v3/wx/observations/current?iataCode=${IATA}&apiKey=${WU_KEY}&units=e&language=en-US&format=json`,
+    `https://api.weather.com/v3/wx/observations/current?geocode=${GEO}&apiKey=${WU_KEY}&units=e&language=en-US&format=json`
+  ]){try{dataE=await getJson(u);break;}catch(e){}}
+  for(const u of [
+    `https://api.weather.com/v3/wx/observations/current?icaoCode=${ICAO}&apiKey=${WU_KEY}&units=m&language=en-US&format=json`,
+    `https://api.weather.com/v3/wx/observations/current?iataCode=${IATA}&apiKey=${WU_KEY}&units=m&language=en-US&format=json`,
+    `https://api.weather.com/v3/wx/observations/current?geocode=${GEO}&apiKey=${WU_KEY}&units=m&language=en-US&format=json`
+  ]){try{dataM=await getJson(u);break;}catch(e){}}
+  const o=parseWUPair(dataE||{}, dataM||{});
   const ex=await env.DB.prepare('SELECT id FROM wu_obs WHERE obs_date=? AND obs_time=? LIMIT 1').bind(o.obs_date,o.obs_time).first();
-  if(ex) out.wu={ok:true,saved:false,duplicate:true,reason:'same WU obs_time cached/repeated',temp:o.temp_c,temp_f:o.temp_f,obsTime:o.obs_time,slot:o.slot};
-  else{ await env.DB.prepare(`INSERT INTO wu_obs (obs_date,obs_time,slot,temp_c,temp_f,dewpoint_c,dewpoint_f,peak_since_7am_c,peak_since_7am_f,humidity,wind_kph,condition,source,fetched_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(o.obs_date,o.obs_time,o.slot,o.temp_c,o.temp_f,o.dewpoint_c,o.dewpoint_f,o.peak_since_7am_c,o.peak_since_7am_f,o.humidity,o.wind_kph,o.condition,o.source,timeIST()).run(); out.wu={ok:true,saved:true,duplicate:false,reason:'new WU obs_time',temp:o.temp_c,temp_f:o.temp_f,obsTime:o.obs_time,slot:o.slot}; }
+  if(ex) out.wu={ok:true,saved:false,duplicate:true,reason:'same WU obs_time cached/repeated',temp:o.temp_c,temp_f:o.temp_f,temp_source:o.temp_source,raw_imp_temp:o.raw_imp_temp,raw_metric_temp:o.raw_metric_temp,obsTime:o.obs_time,slot:o.slot};
+  else{ await env.DB.prepare(`INSERT INTO wu_obs (obs_date,obs_time,slot,temp_c,temp_f,dewpoint_c,dewpoint_f,peak_since_7am_c,peak_since_7am_f,humidity,wind_kph,condition,source,fetched_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(o.obs_date,o.obs_time,o.slot,o.temp_c,o.temp_f,o.dewpoint_c,o.dewpoint_f,o.peak_since_7am_c,o.peak_since_7am_f,o.humidity,o.wind_kph,o.condition,o.source,timeIST()).run(); out.wu={ok:true,saved:true,duplicate:false,reason:'new WU obs_time',temp:o.temp_c,temp_f:o.temp_f,temp_source:o.temp_source,raw_imp_temp:o.raw_imp_temp,raw_metric_temp:o.raw_metric_temp,obsTime:o.obs_time,slot:o.slot}; }
  }catch(e){out.wu={ok:false,error:e.message};}
  try{
   let daily=null, hourly=null;
@@ -111,8 +186,8 @@ async function history(env, day){
  const mt=await env.DB.prepare('SELECT * FROM metar WHERE obs_date=? ORDER BY valid_utc ASC LIMIT 2000').bind(day).all();
  const fc=await env.DB.prepare('SELECT * FROM forecast WHERE forecast_date=? ORDER BY created_at ASC LIMIT 500').bind(day).all();
  let fs={results:[]}; try{fs=await env.DB.prepare('SELECT * FROM forecast_snapshots WHERE target_date=? ORDER BY forecast_date, forecast_issue_time_ist, fetch_time_ist LIMIT 1000').bind(day).all();}catch(e){}
- const rows={}; for(const x of (wu.results||[])){if(!x.slot)continue; rows[x.slot]=rows[x.slot]||[]; rows[x.slot].push({temp_c:x.temp_c,temp_f:x.temp_f,dewpoint_c:x.dewpoint_c,dewpoint_f:x.dewpoint_f,humidity:x.humidity,wind_kph:x.wind_kph,condition:x.condition||'',saved_at:x.obs_time,fetched_at:x.fetched_at||'',temp_source:'WU_F',converted_source:'C_FROM_F'});}
+ const rows={}; for(const x of (wu.results||[])){if(!x.slot)continue; rows[x.slot]=rows[x.slot]||[]; rows[x.slot].push({temp_c:x.temp_c,temp_f:x.temp_f,dewpoint_c:x.dewpoint_c,dewpoint_f:x.dewpoint_f,humidity:x.humidity,wind_kph:x.wind_kph,condition:x.condition||'',saved_at:x.obs_time,fetched_at:x.fetched_at||'',temp_source:(x.temp_f!=null?'WU_F_RAW':'F_MISSING'),converted_source:(x.temp_c!=null?'WU_C_RAW_OR_CONVERTED':'C_MISSING')});}
  return {ok:true,today_ist:day,wu_obs_rows:rows,metar_rows:mt.results||[],forecast_rows:fc.results||[],forecast_snapshot_rows:fs.results||[],meta:{wu_count:(wu.results||[]).length,metar_count:(mt.results||[]).length,forecast_count:(fc.results||[]).length,forecast_snapshot_count:(fs.results||[]).length,latest_wu:(wu.results||[]).at(-1)||null,latest_metar:(mt.results||[]).at(-1)||null,latest_forecast:(fc.results||[]).at(-1)||null}};
 }
 async function forecastSnapshots(env, day){ const rows=await env.DB.prepare('SELECT * FROM forecast_snapshots WHERE target_date=? ORDER BY forecast_date, forecast_issue_time_ist, fetch_time_ist LIMIT 1000').bind(day).all(); return {ok:true,target_date:day,rows:rows.results||[]}; }
-export default { async fetch(request, env){ const url=new URL(request.url); if(url.pathname==='/api/collect') return json(await collect(env)); if(url.pathname==='/api/history') return json(await history(env, url.searchParams.get('date')||dateIST())); if(url.pathname==='/api/forecast-snapshots') return json(await forecastSnapshots(env, url.searchParams.get('date')||dateIST())); return env.ASSETS.fetch(request); }, async scheduled(event, env, ctx){ctx.waitUntil(collect(env));} };
+export default { async fetch(request, env){ const url=new URL(request.url); if(url.pathname==='/api/collect') return json(await collect(env)); if(url.pathname==='/api/history') return json(await history(env, url.searchParams.get('date')||dateIST())); if(url.pathname==='/api/wu-latest') { const day=url.searchParams.get('date')||dateIST(); const row=await env.DB.prepare('SELECT * FROM wu_obs WHERE obs_date=? ORDER BY obs_time DESC LIMIT 1').bind(day).first(); return json({ok:true,row}); } if(url.pathname==='/api/forecast-snapshots') return json(await forecastSnapshots(env, url.searchParams.get('date')||dateIST())); return env.ASSETS.fetch(request); }, async scheduled(event, env, ctx){ctx.waitUntil(collect(env));} };

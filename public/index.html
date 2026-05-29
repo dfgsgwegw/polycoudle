@@ -27,6 +27,21 @@
 .axisBox label{font-size:13px;color:#a9d8ff;font-weight:900}
 .axisHint{font-size:12px;color:#86b8d8;margin-top:6px}
 
+
+/* ===== FORECAST LINE CLARITY FIX ===== */
+.forecastExplain{
+  border:1px solid rgba(0,212,255,.24);
+  background:rgba(7,24,39,.72);
+  border-radius:12px;
+  padding:10px 12px;
+  margin:10px 0;
+  color:#a9d8ff;
+  font-family:ui-monospace,Consolas,monospace;
+  font-size:13px;
+  line-height:1.45;
+}
+.forecastExplain b{color:#fff}
+
 </style></head><body>
 <div class="wrap">
   <div class="header"><div><h1>VILK <span class="cyan">Live Signal</span></h1><div class="sub">● UI refresh 30 sec · cron save 1 min · Lucknow Airport (VILK) · D1 archive</div></div><div><button class="btn" id="refreshBtn">↻ Refresh Now</button><div class="updated" id="updated">Updated --</div></div></div>
@@ -54,8 +69,13 @@
 </div>
 <div class="axisHint">Tip: Time accepts 14, 14.5, 9-18 style. Temp axis uses current selected unit (°C/°F). This changes chart range, not browser zoom.</div>
 
-    <div class="chartScroll"><canvas id="chart" width="1180" height="560"></canvas></div>
-    <div class="legend"><span><i class="dot" style="background:#ef4444"></i>WU observed</span><span><i class="dot" style="background:#10b981"></i>METAR official</span><span><i class="dot" style="background:#111827"></i>latest WU forecast</span><span><i class="dot" style="background:#60a5fa"></i>forecast runs</span><span><i class="dot" style="background:#111827;border-top:2px dotted #111827"></i>bias corrected</span><span><i class="dot" style="background:#a855f7"></i>historical 95% ceiling</span><span><i class="dot" style="background:#7f1d1d"></i>99% extreme</span><span><i class="dot" style="background:#6b7280"></i>closest analog day</span></div>
+    
+<div class="forecastExplain" id="forecastExplain">
+  <b>How to read forecast lines:</b> black solid = latest forecast, light-blue dashed = older forecast runs from earlier today, cyan dashed = bias-corrected forecast, purple dashed = historical 95% ceiling/peak limit. Red/green are real observed values. WU now stores raw F + raw C when both endpoints are available.
+</div>
+
+<div class="chartScroll"><canvas id="chart" width="1180" height="560"></canvas></div>
+    <div class="legend"><span><i class="dot" style="background:#ef4444"></i>WU observed</span><span><i class="dot" style="background:#10b981"></i>METAR official</span><span><i class="dot" style="background:#111827"></i>latest WU forecast</span><span><i class="dot" style="background:#60a5fa"></i>older forecast runs</span><span><i class="dot" style="background:#111827;border-top:2px dotted #111827"></i>bias corrected forecast</span><span><i class="dot" style="background:#a855f7"></i>historical 95% ceiling</span><span><i class="dot" style="background:#7f1d1d"></i>99% extreme</span><span><i class="dot" style="background:#6b7280"></i>closest analog day</span></div>
     <div id="curveSummary" class="summary">Loading curve...</div>
     <div class="help"><b>Chart meaning:</b> Red = live WU source observations. Green = official METAR market readings. Black = latest WU forecast path. Cyan dotted = forecast shifted by current live bias. Forecast runs = old saved WU forecasts across the full day. Purple horizontal line = historical ceiling from 30-year METAR data: from current time onward, 95% of similar month days did not rise above this level. Dark red = 99% rare/extreme ceiling. Grey = closest old day with similar observed path so far.</div>
   </section>
@@ -69,7 +89,7 @@ const HIST=JSON.parse(document.getElementById('histData').textContent);
 const state={unit:'c',x:'peak',y:'tight',data:null,points:[],lines:{wu:true,metar:true,fc:true,fchistory:true,bias:true,ceil95:true,ceil99:false,analog:true,peakWindow:true},custom:null};
 const $=id=>document.getElementById(id); function todayIST(){return new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'})} function nowIST(){return new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Kolkata'}))}
 function n3(v){const n=Number(v);return Number.isFinite(n)?n.toFixed(3):''} function cToF(c){const n=Number(c);return Number.isFinite(n)?+(n*9/5+32).toFixed(3):null} function fToC(f){const n=Number(f);return Number.isFinite(n)?+((n-32)*5/9).toFixed(3):null} function temp(c,f){return state.unit==='f'?Number(f??cToF(c)):Number(c)}
-function cf(c,f,src='WU'){const hasF=f!==null&&f!==undefined&&f!==''&&Number.isFinite(Number(f));const hasC=c!==null&&c!==undefined&&c!==''&&Number.isFinite(Number(c)); if(src==='METAR')return hasC?`<b>${n3(c)}°C</b> <small>(source METAR → ${n3(cToF(c))}°F converted)</small>`:'—'; if(src==='FORECAST'){if(hasF)return `<b>${n3(f)}°F</b> <small>(source Forecast → ${n3(fToC(f))}°C converted)</small>`; if(hasC)return `<b>${n3(c)}°C</b> <small>(source Forecast → ${n3(cToF(c))}°F converted)</small>`; return '—';} if(hasF)return `<b>${n3(f)}°F</b> <small>(source WU → ${n3(fToC(f))}°C converted)</small>`; if(hasC)return `<b>${n3(c)}°C</b> <small>(source WU → ${n3(cToF(c))}°F converted)</small>`; return '—';}
+function cf(c,f,src='WU'){const hasF=f!==null&&f!==undefined&&f!==''&&Number.isFinite(Number(f));const hasC=c!==null&&c!==undefined&&c!==''&&Number.isFinite(Number(c)); if(src==='METAR')return hasC?`<b>${n3(c)}°C</b> <small>(METAR raw → ${n3(cToF(c))}°F converted)</small>`:'—'; if(src==='FORECAST'){if(hasF&&hasC)return `<b>${n3(f)}°F</b> <small>(Forecast raw F) · ${n3(c)}°C (Forecast raw C)</small>`; if(hasF)return `<b>${n3(f)}°F</b> <small>(Forecast raw F → ${n3(fToC(f))}°C converted)</small>`; if(hasC)return `<b>${n3(c)}°C</b> <small>(Forecast raw C → ${n3(cToF(c))}°F converted)</small>`; return '—';} if(hasF&&hasC)return `<b>${n3(f)}°F</b> <small>(WU raw F) · ${n3(c)}°C (WU raw C)</small>`; if(hasF)return `<b>${n3(f)}°F</b> <small>(WU raw F → ${n3(fToC(f))}°C converted)</small>`; if(hasC)return `<b>${n3(c)}°C</b> <small>(WU raw C → ${n3(cToF(c))}°F converted)</small>`; return '—';}
 function tf(c,f){if(state.unit==='f'){const v=Number(f??cToF(c));return Number.isFinite(v)?n3(v)+'°F':'—'} const v=Number(c??fToC(f));return Number.isFinite(v)?n3(v)+'°C':'—'} function timeHour(s){s=String(s||'');let m=s.match(/T(\d{1,2}):(\d{2})/)||s.match(/(\d{1,2}):(\d{2})/);return m?Number(m[1])+Number(m[2])/60:null} function fmtTime(h){let hh=Math.floor(h),mm=Math.round((h-hh)*60);if(mm===60){hh++;mm=0}const am=hh>=12?'p':'a';let h12=hh%12||12;return `${h12}:${String(mm).padStart(2,'0')}${am}`}
 function slotFromObsTime(t){const h=timeHour(t);if(!Number.isFinite(h))return '';let hh=Math.floor(h),mm=Math.round((h-hh)*60);if(mm===0)return String(hh).padStart(2,'0')+':00';if(mm<=30)return String(hh).padStart(2,'0')+':30';hh=(hh+1)%24;return String(hh).padStart(2,'0')+':00'} function rowSlot(x){return x?.raw?.slot||slotFromObsTime(x?.raw?.obs_time||x?.raw?.saved_at||x?.hour)}
 function hourly(row){try{return JSON.parse(row?.hourly_json||'[]').map(x=>({hour:timeHour(x.time),c:Number(x.temp_c),f:Number(x.temp_f),phrase:x.phrase||''})).filter(x=>Number.isFinite(x.hour))}catch(e){return[]}} function flattenWU(hist){const out=[];Object.values(hist.wu_obs_rows||{}).forEach(list=>(Array.isArray(list)?list:[]).forEach(x=>{const h=timeHour(x.saved_at||x.obs_time);const y=temp(x.temp_c,x.temp_f);if(Number.isFinite(h)&&Number.isFinite(y))out.push({hour:h,y,c:Number(x.temp_c),f:Number(x.temp_f),raw:x,type:'WU'})}));return out.sort((a,b)=>a.hour-b.hour)} function flattenMetar(hist){return (hist.metar_rows||[]).map(m=>{const h=timeHour(m.slot||m.valid_ist);const y=temp(m.temp_c,cToF(m.temp_c));return{hour:h,y,c:Number(m.temp_c),f:cToF(m.temp_c),raw:m,type:'METAR'}}).filter(p=>Number.isFinite(p.hour)&&Number.isFinite(p.y)).sort((a,b)=>a.hour-b.hour)} function forecastLines(snaps,date){const rows=(snaps.rows||[]).filter(r=>r.target_date===date||Number(r.horizon_days)===0);const latest=rows.at(-1),old=rows.length>1?rows[0]:null;const toPts=(r,label='FC')=>hourly(r).map(h=>({hour:h.hour,y:temp(h.c,h.f),c:h.c,f:h.f,type:label})).filter(p=>Number.isFinite(p.y));let picks=[];if(rows.length){const idxs=[0,Math.floor(rows.length*.33),Math.floor(rows.length*.66),rows.length-1];[...new Set(idxs)].forEach((i,k)=>{if(rows[i])picks.push({row:rows[i],pts:toPts(rows[i],'Forecast run '+(k+1))})})}return{rows,latest:toPts(latest,'Latest forecast'),old:toPts(old,'Old forecast'),history:picks,latestRow:latest,oldRow:old}}
@@ -251,6 +271,78 @@ document.querySelectorAll('.toolbar button').forEach(b=>b.onclick=()=>{if(b.data
 
   window.addEventListener('load',()=>{bindAxisControls();patchRenderChart();});
   setInterval(()=>{bindAxisControls();patchRenderChart();},1000);
+})();
+</script>
+
+
+<script id="forecast-lines-cleaner-fix">
+(function(){
+  function labelForecastExplain(){
+    const el=document.getElementById('forecastExplain');
+    if(el){
+      el.innerHTML='<b>How to read forecast lines:</b> black solid = latest forecast, light-blue dashed = older older forecast runs from earlier today, cyan dashed = bias-corrected forecast, purple dashed = historical 95% ceiling/peak limit. Red/green are real observed values.';
+    }
+    // Rename legend text if it exists
+    document.querySelectorAll('.legend span, .legend, div, label').forEach(x=>{
+      if(!x || !x.textContent) return;
+      if(x.textContent.trim()==='older forecast runs') x.textContent='older older forecast runs';
+      if(x.textContent.trim()==='bias corrected forecast') x.textContent='bias corrected forecast forecast';
+    });
+  }
+
+  // Draw clearer labels on canvas after existing chart is rendered.
+  function drawForecastLabels(){
+    try{
+      const canvas=document.getElementById('chart');
+      if(!canvas) return;
+      const ctx=canvas.getContext('2d');
+      const W=canvas.width, H=canvas.height;
+      ctx.save();
+      ctx.font='bold 13px sans-serif';
+      ctx.fillStyle='rgba(17,24,39,.85)';
+      ctx.fillText('latest forecast', W-240, 70);
+      ctx.strokeStyle='#111827'; ctx.lineWidth=4;
+      ctx.beginPath(); ctx.moveTo(W-340,66); ctx.lineTo(W-250,66); ctx.stroke();
+
+      ctx.fillStyle='rgba(59,130,246,.85)';
+      ctx.fillText('older older forecast runs', W-240, 92);
+      ctx.strokeStyle='rgba(147,197,253,.95)'; ctx.lineWidth=2; ctx.setLineDash([7,6]);
+      ctx.beginPath(); ctx.moveTo(W-340,88); ctx.lineTo(W-250,88); ctx.stroke();
+
+      ctx.fillStyle='rgba(147,51,234,.85)';
+      ctx.fillText('historical ceiling', W-240, 114);
+      ctx.strokeStyle='rgba(168,85,247,.95)'; ctx.lineWidth=3; ctx.setLineDash([9,6]);
+      ctx.beginPath(); ctx.moveTo(W-340,110); ctx.lineTo(W-250,110); ctx.stroke();
+      ctx.restore();
+    }catch(e){}
+  }
+
+  // If current renderer exposes render(), patch it to add labels after rendering.
+  function patchRender(){
+    if(window.__forecastCleanerPatched) return;
+    const old = (typeof render === 'function') ? render : window.render;
+    if(typeof old === 'function'){
+      window.__forecastCleanerPatched=true;
+      const wrapped=function(){
+        const r=old.apply(this, arguments);
+        setTimeout(()=>{labelForecastExplain();drawForecastLabels();},80);
+        return r;
+      };
+      window.render=wrapped;
+      try{render=wrapped;}catch(e){}
+    }
+  }
+
+  // Toggle blue older forecast lines visibility properly if checkbox exists.
+  function cleanCheckboxLabels(){
+    document.querySelectorAll('button,label').forEach(x=>{
+      if(/Forecast runs/i.test(x.textContent||'')) x.title='Older older forecast runs from earlier fetches. Use this to see if forecast is shifting.';
+      if(/Bias/i.test(x.textContent||'')) x.title='Bias-corrected forecast: forecast adjusted by today’s observed error.';
+    });
+  }
+
+  window.addEventListener('load',()=>{patchRender();labelForecastExplain();cleanCheckboxLabels();setTimeout(drawForecastLabels,1000);});
+  setInterval(()=>{patchRender();labelForecastExplain();cleanCheckboxLabels();},2000);
 })();
 </script>
 
