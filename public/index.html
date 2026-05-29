@@ -435,6 +435,25 @@ section:has(table){
   #vilkCurveCanvas{width:1050px;height:500px}
 }
 
+
+/* ===== FINAL TOP CURVE + END DAY SIGNAL FIX ===== */
+#vilk-curve-card{
+  order:-10 !important;
+  margin:14px 0 18px !important;
+}
+#end-day-status-patch{
+  display:none;
+}
+.end-day-badge{
+  display:inline-block;
+  padding:8px 14px;
+  border-radius:999px;
+  background:rgba(255,91,69,.16);
+  color:#ffb199;
+  font-weight:900;
+  border:1px solid rgba(255,91,69,.45);
+}
+
 </style>
 </head>
 <body>
@@ -1242,7 +1261,7 @@ function computeSignal(metars, wuData){
     conf=`Score: ${strength.score}/100`;
   } else if(strength.score >= 25){
     signal='wait'; emoji='👀'; label=`WATCH (${strength.score}/100)`;
-    reason = `Predicted peak: ${prediction?.p50.toFixed(1) ?? '?'}°C (range ${prediction?.p50.toFixed(1)}-${prediction?.p95.toFixed(1)}°C). Too uncertain. Wait for drop or stability.`;
+    reason = `Predicted peak: ${prediction?.p50.toFixed(1) ?? '?'}°C (range ${prediction?.p50.toFixed(1)}-${prediction?.p95.toFixed(1)}°C). After 6PM IST, review only. Peak/day is done.`;
     conf=`Score: ${strength.score}/100`;
   } else {
     signal='wait'; emoji='🌅'; label='EARLY — Track';
@@ -2856,6 +2875,89 @@ window.fetchAll = fetchAll;
   }
 
   setInterval(refreshAndPatch, 30000);
+})();
+</script>
+
+
+<script id="final-top-chart-endday-fix">
+(function(){
+  function nowISTDate(){
+    return new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Kolkata'}));
+  }
+  function hourIST(){
+    const d=nowISTDate();
+    return d.getHours()+d.getMinutes()/60;
+  }
+  function ensureChartTop(){
+    let card=document.getElementById('vilk-curve-card') || document.getElementById('curve-chart-card');
+    if(!card) return;
+
+    // Put chart right after the first top info/day card if possible, otherwise after header.
+    const allSections=[...document.querySelectorAll('section,.card,.panel,.box')];
+    const dayCard=allSections.find(x=>/Current IST day|DAY\s+1|Cloudflare D1 archive/i.test(x.textContent||''));
+    if(dayCard && dayCard.nextSibling !== card){
+      dayCard.parentNode.insertBefore(card, dayCard.nextSibling);
+    }else{
+      const header=document.querySelector('header,.header,.topbar');
+      if(header && header.nextSibling !== card) header.parentNode.insertBefore(card, header.nextSibling);
+    }
+  }
+  function setEndDaySignal(){
+    const h=hourIST();
+    const afterEnd = h >= 18.0; // after 6PM IST day trading/peak window ended
+    if(!afterEnd) return;
+
+    // Patch main signal card text.
+    const candidates=[...document.querySelectorAll('section,.card,.panel,.box,div')]
+      .filter(el=>/WATCH|BUY|ENTRY|Score:|Predicted peak/i.test(el.textContent||''));
+    const card=candidates.find(el=>/WATCH|BUY|ENTRY/i.test(el.textContent||'') && /Score:/i.test(el.textContent||'')) || candidates[0];
+    if(card){
+      const title=[...card.querySelectorAll('h1,h2,h3,b,div,span')]
+        .find(x=>/WATCH|BUY|ENTRY|NO|EARLY/i.test(x.textContent||'') && (x.textContent||'').length<80);
+      if(title) title.textContent='DAY ENDED — PEAK DONE';
+
+      const sub=[...card.querySelectorAll('p,div,span')]
+        .find(x=>/Predicted peak|Too uncertain|Wait|Buy|entry|stability/i.test(x.textContent||''));
+      if(sub) sub.innerHTML='After 6PM IST. Use chart/table only for review: peak is done, new entries should be disabled.';
+
+      const score=[...card.querySelectorAll('p,div,span')]
+        .find(x=>/Score:\s*\d+/i.test(x.textContent||''));
+      if(score) score.innerHTML='<span class="end-day-badge">Market day closed / review mode</span>';
+
+      card.style.borderColor='rgba(255,91,69,.75)';
+    }
+
+    // Patch any visible text saying WATCH
+    document.querySelectorAll('h1,h2,h3,b,strong').forEach(el=>{
+      if(/WATCH\s*\(/.test(el.textContent||'')) el.textContent='DAY ENDED — PEAK DONE';
+    });
+  }
+
+  function fix(){
+    ensureChartTop();
+    setEndDaySignal();
+    if(typeof window.renderVilkCurve==='function'){
+      try{ window.renderVilkCurve(); }catch(e){}
+    }
+    if(typeof window.forceWUCFPermanent==='function'){
+      try{ window.forceWUCFPermanent(); }catch(e){}
+    }
+  }
+
+  window.addEventListener('load',()=>setTimeout(fix,800));
+  setInterval(fix,10000);
+
+  // Patch after fetchAll rerender.
+  const oldFetchAll = window.fetchAll || (typeof fetchAll !== 'undefined' ? fetchAll : null);
+  if(oldFetchAll && !window.__finalTopEnddayFetchPatched){
+    window.__finalTopEnddayFetchPatched=true;
+    window.fetchAll = async function(){
+      let r = await oldFetchAll.apply(this, arguments);
+      setTimeout(fix,250);
+      return r;
+    };
+    try{ fetchAll = window.fetchAll; }catch(e){}
+  }
 })();
 </script>
 
