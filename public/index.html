@@ -375,6 +375,18 @@ section:has(table){
   }
 }
 
+
+/* ===== FINAL PREDICTION CURVE CHART ===== */
+#temp-chart{min-height:360px!important;overflow-x:auto!important;overflow-y:hidden!important;padding:10px!important}
+.vilk-curve-shell{min-width:920px;background:linear-gradient(180deg,rgba(9,22,36,.95),rgba(5,12,20,.96));border:1px solid rgba(0,212,255,.2);border-radius:16px;padding:12px}
+.vilk-curve-title{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;color:#eaf7ff;font-family:monospace;margin-bottom:8px}
+.vilk-curve-title small{color:#7aa6c7;display:block;margin-top:4px}
+.vilk-legend{display:flex;gap:10px;flex-wrap:wrap;font:12px monospace;color:#9ec8e8;margin:8px 0}
+.vilk-legend span{display:inline-flex;align-items:center;gap:5px}
+.vilk-dot{width:10px;height:10px;border-radius:999px;display:inline-block}
+.vilk-curve-note{font:12px monospace;color:#7aa6c7;margin-top:6px;line-height:1.45}
+@media(max-width:700px){#temp-chart{min-height:330px}.vilk-curve-shell{min-width:860px}.vilk-curve-title{font-size:12px}}
+
 </style>
 </head>
 <body>
@@ -2237,6 +2249,48 @@ window.fetchAll = fetchAll;
   window.fixLatestMetarTimeCard = fixLatestMetarTimeCard;
   window.addEventListener('load',()=>setTimeout(fixLatestMetarTimeCard,1000));
   setInterval(fixLatestMetarTimeCard,30000);
+})();
+</script>
+
+
+<script id="vilk-prediction-curve-chart">
+(function(){
+  function todayIST(){return new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});} 
+  function nowIST(){return new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Kolkata'}));}
+  function minFromTime(t){const m=String(t||'').match(/(\d{1,2}):(\d{2})/);return m?Number(m[1])*60+Number(m[2]):null;}
+  function safeN(v){const n=Number(v);return Number.isFinite(n)?n:null;}
+  function flattenWU(rows){const out=[];Object.values(rows||{}).forEach(list=>(Array.isArray(list)?list:[]).forEach(x=>{const m=minFromTime(x.saved_at);const t=safeN(x.temp_c);if(m!=null&&t!=null)out.push({m,t,type:'WU',label:x.saved_at});}));return out.sort((a,b)=>a.m-b.m);}
+  function flattenMETAR(rows){return (Array.isArray(rows)?rows:[]).map(x=>({m:minFromTime(x.slot),t:safeN(x.temp_c),type:'METAR',label:x.slot})).filter(x=>x.m!=null&&x.t!=null).sort((a,b)=>a.m-b.m);}
+  function snapRows(rows){return (Array.isArray(rows)?rows:[]).filter(r=>Number(r.horizon_days)===0).map(r=>({m:minFromTime(r.fetch_time_ist||r.forecast_time_ist),t:safeN(r.high_c),tf:safeN(r.high_f),issue:r.forecast_issue_time_ist||''})).filter(x=>x.m!=null&&x.t!=null).sort((a,b)=>a.m-b.m);}
+  function poly(points,x,y){return points.map(p=>`${x(p.m).toFixed(1)},${y(p.t).toFixed(1)}`).join(' ')}
+  function renderCurve(hist){
+    const box=document.getElementById('temp-chart'); if(!box||!hist)return;
+    const wu=flattenWU(hist.wu_obs_rows), met=flattenMETAR(hist.metar_rows), snaps=snapRows(hist.forecast_snapshot_rows);
+    const allTemps=[...wu.map(x=>x.t),...met.map(x=>x.t),...snaps.map(x=>x.t)].filter(Number.isFinite);
+    if(!allTemps.length){box.innerHTML='<div class="vilk-curve-shell"><div class="vilk-curve-title">Waiting for WU/METAR curve data...</div></div>';return;}
+    const x0=70,y0=22,w=790,h=245, minM=9*60, maxM=18*60;
+    const minT=Math.floor(Math.min(...allTemps,30))-1, maxT=Math.ceil(Math.max(...allTemps,42))+1;
+    const x=m=>x0+(Math.max(minM,Math.min(maxM,m))-minM)/(maxM-minM)*w;
+    const y=t=>y0+(maxT-t)/(maxT-minT)*h;
+    const now=nowIST(), nowM=now.getHours()*60+now.getMinutes();
+    const cur=wu.length?wu[wu.length-1]:null, latestMet=met.length?met[met.length-1]:null, latestFc=snaps.length?snaps[snaps.length-1]:null;
+    const vals=[cur?.t, latestMet?.t, latestFc?.t].filter(Number.isFinite);
+    const expectedPeak=vals.length?Math.max(...vals):NaN;
+    const status=cur?`Current WU ${cur.t.toFixed(1)}°C at ${cur.label} · Latest METAR ${latestMet?latestMet.t.toFixed(0)+'°C at '+latestMet.label:'—'} · WU forecast high ${latestFc?latestFc.t.toFixed(1)+'°C':''}`:'Waiting';
+    const grid=[];
+    for(let hh=9;hh<=18;hh++){const xx=x(hh*60);grid.push(`<line x1="${xx}" y1="${y0}" x2="${xx}" y2="${y0+h}" stroke="rgba(255,255,255,.07)"/><text x="${xx}" y="${y0+h+18}" fill="#7aa6c7" font-size="11" text-anchor="middle">${hh<=12?hh:hh-12}${hh<12?'a':'p'}</text>`)}
+    for(let tt=minT;tt<=maxT;tt++){const yy=y(tt);grid.push(`<line x1="${x0}" y1="${yy}" x2="${x0+w}" y2="${yy}" stroke="rgba(255,255,255,.06)"/><text x="${x0-10}" y="${yy+4}" fill="#7aa6c7" font-size="11" text-anchor="end">${tt}°</text>`)}
+    const nowLine=(nowM>=minM&&nowM<=maxM)?`<line x1="${x(nowM)}" y1="${y0}" x2="${x(nowM)}" y2="${y0+h}" stroke="#ffd43b" stroke-width="2" stroke-dasharray="5 5"/><text x="${x(nowM)+5}" y="${y0+13}" fill="#ffd43b" font-size="11">now</text>`:'';
+    const wuLine=wu.length>1?`<polyline points="${poly(wu,x,y)}" fill="none" stroke="#ff4d4d" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>`:'';
+    const fcLine=snaps.length>1?`<polyline points="${poly(snaps,x,y)}" fill="none" stroke="#ffb000" stroke-width="2.5" stroke-dasharray="6 4"/>`:'';
+    const metDots=met.map(p=>`<circle cx="${x(p.m)}" cy="${y(p.t)}" r="5" fill="#00f084" stroke="#042" stroke-width="1"><title>METAR ${p.label}: ${p.t}°C</title></circle>`).join('');
+    const wuDots=wu.map(p=>`<circle cx="${x(p.m)}" cy="${y(p.t)}" r="2.8" fill="#ff4d4d"><title>WU ${p.label}: ${p.t}°C</title></circle>`).join('');
+    const fcDots=snaps.map(p=>`<rect x="${x(p.m)-4}" y="${y(p.t)-4}" width="8" height="8" fill="#ffb000" transform="rotate(45 ${x(p.m)} ${y(p.t)})"><title>Forecast high ${p.t}°C / ${p.tf??''}°F issue ${p.issue}</title></rect>`).join('');
+    box.innerHTML=`<div class="vilk-curve-shell"><div class="vilk-curve-title"><div><b>Prediction Curve — WU vs METAR vs WU Forecast</b><small>${status}</small></div><div style="text-align:right"><b>Peak guide: ${Number.isFinite(expectedPeak)?expectedPeak.toFixed(1)+'°C':'—'}</b><small>9AM–6PM IST</small></div></div><div class="vilk-legend"><span><i class="vilk-dot" style="background:#ff4d4d"></i>Today WU obs</span><span><i class="vilk-dot" style="background:#00f084"></i>Official METAR</span><span><i class="vilk-dot" style="background:#ffb000"></i>WU forecast snapshots</span><span><i class="vilk-dot" style="background:#ffd43b"></i>Current time</span></div><svg viewBox="0 0 920 310" style="width:920px;max-width:none;height:310px;display:block">${grid.join('')}<rect x="${x0}" y="${y0}" width="${w}" height="${h}" fill="transparent" stroke="rgba(255,255,255,.15)"/>${nowLine}${fcLine}${wuLine}${metDots}${wuDots}${fcDots}</svg><div class="vilk-curve-note">Red above orange forecast = day running hotter; green METAR dots confirm official bins; orange diamonds show how WU forecast changed through the day.</div></div>`;
+  }
+  async function loadCurve(){try{const day=todayIST();const r=await fetch('/api/history?date='+day+'&t='+Date.now(),{cache:'no-store'});renderCurve(await r.json());}catch(e){console.warn('curve chart failed',e.message)}}
+  window.addEventListener('load',()=>setTimeout(loadCurve,900));
+  setInterval(loadCurve,30000);
 })();
 </script>
 
