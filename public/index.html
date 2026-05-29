@@ -111,36 +111,35 @@ const state={unit:'c',x:'peak',y:'tight',data:null,points:[]};
 const $=id=>document.getElementById(id);
 function todayIST(){return new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});}
 function nowIST(){return new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Kolkata'}));}
-function cToF(c){const n=Number(c); return Number.isFinite(n)?+(n*9/5+32).toFixed(3):null;}
-function temp(c,f){return state.unit==='f'?Number(f ?? cToF(c)):Number(c);}
+function n3(v){const n=Number(v); return Number.isFinite(n)?n.toFixed(3):'';}
+function cToF(c){const n=Number(c); return Number.isFinite(n)?+((n*9/5+32).toFixed(3)):null;}
+function fToC(f){const n=Number(f); return Number.isFinite(n)?+(((n-32)*5/9).toFixed(3)):null;}
+function temp(c,f){return state.unit==='f'?Number(f ?? cToF(c)):Number(c ?? fToC(f));}
 function tf(c,f,dec=3){
   if(state.unit==='f'){
-    if(f!==null && f!==undefined && f!=='' && Number.isFinite(Number(f))) return Number(f).toFixed(3)+'°F';
-    const v=cToF(c); return Number.isFinite(v)?Number(v).toFixed(3)+'°F':'—';
+    if(f!==null && f!==undefined && f!=='' && Number.isFinite(Number(f))) return n3(f)+'°F';
+    const cv=cToF(c); return Number.isFinite(cv)?n3(cv)+'°F':'—';
   }
-  if(c!==null && c!==undefined && c!=='' && Number.isFinite(Number(c))) return Number(c).toFixed(3)+'°C';
-  const v=fToC(f); return Number.isFinite(v)?Number(v).toFixed(3)+'°C':'—';
+  if(c!==null && c!==undefined && c!=='' && Number.isFinite(Number(c))) return n3(c)+'°C';
+  const fv=fToC(f); return Number.isFinite(fv)?n3(fv)+'°C':'—';
 }
-function fToC(f){const n=Number(f); return Number.isFinite(n)?+((n-32)*5/9).toFixed(3):null;}
-function n3(v){const n=Number(v); return Number.isFinite(n)?n.toFixed(3):'';}
-function sourceTemp(c,f,src='WU'){
-  const hasC=c!==null&&c!==undefined&&c!==''&&Number.isFinite(Number(c));
-  const hasF=f!==null&&f!==undefined&&f!==''&&Number.isFinite(Number(f));
+function cf(c,f,src='WU'){
+  const hasC=c!==null && c!==undefined && c!=='' && Number.isFinite(Number(c));
+  const hasF=f!==null && f!==undefined && f!=='' && Number.isFinite(Number(f));
   if(src==='METAR'){
     if(!hasC) return '—';
     return `<b>${n3(c)}°C</b> <small style="color:#8bb4d6">(source METAR → ${n3(cToF(c))}°F converted)</small>`;
   }
   if(src==='FORECAST'){
-    if(hasF) return `<b>${n3(f)}°F</b> <small style="color:#8bb4d6">(source forecast → ${n3(fToC(f))}°C converted)</small>`;
-    if(hasC) return `<b>${n3(c)}°C</b> <small style="color:#8bb4d6">(source forecast → ${n3(cToF(c))}°F converted)</small>`;
+    if(hasF) return `<b>${n3(f)}°F</b> <small style="color:#8bb4d6">(source Forecast → ${n3(fToC(f))}°C converted)</small>`;
+    if(hasC) return `<b>${n3(c)}°C</b> <small style="color:#8bb4d6">(source Forecast → ${n3(cToF(c))}°F converted)</small>`;
     return '—';
   }
-  // WU/weather.com current observation source is units=e Fahrenheit in worker.
+  // WU/weather.com source is Fahrenheit when temp_f exists.
   if(hasF) return `<b>${n3(f)}°F</b> <small style="color:#8bb4d6">(source WU → ${n3(fToC(f))}°C converted)</small>`;
   if(hasC) return `<b>${n3(c)}°C</b> <small style="color:#8bb4d6">(source WU → ${n3(cToF(c))}°F converted)</small>`;
   return '—';
 }
-function cf(c,f,src='WU'){return sourceTemp(c,f,src);}°C (${Number.isInteger(fv)?fv:fv.toFixed(1)}°F)`; }
 function timeHour(s){s=String(s||'');let m=s.match(/T(\d{1,2}):(\d{2})/)||s.match(/(\d{1,2}):(\d{2})/);return m?Number(m[1])+Number(m[2])/60:null}
 function fmtTime(h){let hh=Math.floor(h), mm=Math.round((h-hh)*60); if(mm===60){hh++;mm=0} const am=hh>=12?'p':'a'; let h12=hh%12||12; return `${h12}:${String(mm).padStart(2,'0')}${am}`;}
 function slotFromObsTime(t){
@@ -242,7 +241,7 @@ function render(){
   $('curveSummary').innerHTML=last?`Current WU: <b>${tf(last.c,last.f)}</b> · Peak so far: <b>${tf(wu.reduce((a,b)=>b.y>a.y?b:a,wu[0]).c,wu.reduce((a,b)=>b.y>a.y?b:a,wu[0]).f)}</b>${fcNear?` · vs forecast: <b style="color:${last.y>=fcNear.y?'#ef4444':'#3b82f6'}">${(last.y-fcNear.y>=0?'+':'')+(last.y-fcNear.y).toFixed(1)}° ${last.y>=fcNear.y?'HOT':'COLD'}</b>`:''} · Forecast snapshots: ${fc.rows.length}`:'Waiting for WU';
 }
 document.querySelectorAll('.toolbar button').forEach(b=>b.onclick=()=>{if(b.dataset.y){state.y=b.dataset.y;document.querySelectorAll('[data-y]').forEach(x=>x.classList.toggle('active',x.dataset.y===state.y))}if(b.dataset.x){state.x=b.dataset.x;document.querySelectorAll('[data-x]').forEach(x=>x.classList.toggle('active',x.dataset.x===state.x))}if(b.dataset.u){state.unit=b.dataset.u;document.querySelectorAll('[data-u]').forEach(x=>x.classList.toggle('active',x.dataset.u===state.unit))}render();});
-$('chart').addEventListener('mousemove',e=>{const r=e.target.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;let best=null,bd=1e9;state.points.forEach(p=>{const yy=Number.isFinite(p.sy)?p.sy:p.y;const d=Math.hypot(p.x-x,yy-y);if(d<bd){bd=d;best=p}});const tt=$('tooltip');if(best&&bd<18){tt.style.display='block';tt.style.left=e.clientX+14+'px';tt.style.top=e.clientY+14+'px';tt.innerHTML=`${best.type||best.raw?.source||'Point'}<br>${fmtTime(best.hour)}<br>${best.type==='METAR'?cf(best.c,best.f,'METAR'):(best.type==='Forecast'||best.type==='FC'?cf(best.c,best.f,'FORECAST'):cf(best.c,best.f,'WU'))}`;}else tt.style.display='none';});
+$('chart').addEventListener('mousemove',e=>{const r=e.target.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;let best=null,bd=1e9;state.points.forEach(p=>{const yy=Number.isFinite(p.sy)?p.sy:p.y;const d=Math.hypot(p.x-x,yy-y);if(d<bd){bd=d;best=p}});const tt=$('tooltip');if(best&&bd<18){tt.style.display='block';tt.style.left=e.clientX+14+'px';tt.style.top=e.clientY+14+'px';tt.innerHTML=`${best.type||best.raw?.source||'Point'}<br>${fmtTime(best.hour)}<br>${best.type==='METAR'?cf(best.c,best.f,'METAR'):(best.type==='FC'||best.type==='Forecast'?cf(best.c,best.f,'FORECAST'):cf(best.c,best.f,'WU'))}`;}else tt.style.display='none';});
 $('chart').addEventListener('mouseleave',()=>{$('tooltip').style.display='none'});
 $('refreshBtn').onclick=loadAll; loadAll(); setInterval(loadAll,30000);
 </script>
