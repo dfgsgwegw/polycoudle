@@ -83,6 +83,47 @@
 .rawConv{display:block;margin-top:3px;color:#8bb4d6;font-size:.70em;line-height:1.28;font-weight:800}
 .rawConv b{color:#fff}
 
+
+/* ===== FINAL UX PATCH: Y-AXIS ZOOM + BIG TOOLTIP ===== */
+#tooltip{
+  font-size:16px !important;
+  line-height:1.45 !important;
+  padding:14px 16px !important;
+  max-width:460px !important;
+  min-width:260px !important;
+  border:2px solid #00d4ff !important;
+  border-radius:14px !important;
+  background:#020b13 !important;
+  box-shadow:0 12px 38px rgba(0,0,0,.65) !important;
+  z-index:99999 !important;
+}
+#tooltip b{font-size:18px;color:#fff}
+#tooltip .ttTitle{font-size:18px;font-weight:1000;color:#00d4ff;margin-bottom:6px}
+#tooltip .ttLine{margin:3px 0}
+#tooltip .ttRaw{color:#ffb36c}
+#tooltip .ttMetar{color:#20f59a}
+#tooltip .ttFc{color:#111827;background:#e5e7eb;padding:2px 6px;border-radius:6px}
+#chart{cursor:crosshair}
+.axisHint::after{
+  content:"  |  Y-axis zoom: mouse wheel on left axis area OR Shift+wheel.";
+  color:#ffd433;
+  font-weight:900;
+}
+
+
+/* ===== FINAL 2D ZOOM + MOBILE CHART CONTROLS ===== */
+.mobileZoomBar{
+  display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0;
+  font-family:ui-monospace,Consolas,monospace;color:#a9d8ff
+}
+.mobileZoomBar button{
+  border:0;border-radius:999px;padding:8px 12px;background:#10304a;color:#a9d8ff;
+  font-weight:900;cursor:pointer
+}
+.mobileZoomBar button:hover{background:#00d4ff;color:#00131c}
+.chartScroll{touch-action:none}
+#chart{touch-action:none}
+
 </style></head><body>
 <div class="wrap">
   <div class="header"><div><h1>VILK <span class="cyan">Live Signal</span></h1><div class="sub">● UI refresh 30 sec · cron save 1 min · Lucknow Airport (VILK) · D1 archive</div></div><div><button class="btn" id="refreshBtn">↻ Refresh Now</button><div class="updated" id="updated">Updated --</div></div></div>
@@ -125,8 +166,22 @@
   <button type="button" id="applyAxisBtn">Apply Axis</button>
   <button type="button" id="autoAxisBtn">Auto Axis</button>
 </div>
+
+<div class="mobileZoomBar" id="mobileZoomBar">
+  <b>Chart zoom:</b>
+  <button type="button" id="zoomInBoth">Zoom +</button>
+  <button type="button" id="zoomOutBoth">Zoom −</button>
+  <button type="button" id="zoomInY">Y +</button>
+  <button type="button" id="zoomOutY">Y −</button>
+  <button type="button" id="zoomInX">Time +</button>
+  <button type="button" id="zoomOutX">Time −</button>
+  <button type="button" id="panLeft">← Pan</button>
+  <button type="button" id="panRight">Pan →</button>
+  <button type="button" id="resetZoom2D">Reset zoom</button>
+</div>
+
 <div class="axisHint">Tip: Time accepts 14, 14.5, 9-18 style. Temp axis auto-fits visible data. Manual Temp min/max uses selected unit (°C/°F). This changes chart range, not browser zoom.</div>
-<div class="panHint">Mouse: drag chart left/right to pan. Wheel over chart = zoom time range. Shift+wheel = zoom temperature axis.</div>
+<div class="panHint">Mouse: wheel on chart = zoom BOTH time + temp. Shift+wheel = only temp/Y. Alt+wheel = only time/X. Mobile: use chart zoom buttons or pinch on chart.</div>
 
     
 <div class="forecastExplain" id="forecastExplain">
@@ -246,4 +301,361 @@ window.addEventListener('mouseup',()=>{__drag=false;$('chart').style.cursor=''})
 window.addEventListener('mousemove',e=>{if(!__drag||!state.chartGeom)return;const g=state.chartGeom;const dx=e.clientX-__lastX;__lastX=e.clientX;let span=g.xMax-g.xMin,shift=-dx/(g.pw||1)*span;let a=g.xMin+shift,b=g.xMax+shift;if(a<0){b-=a;a=0}if(b>24){a-=b-24;b=24}state.custom=[a,b];document.querySelectorAll('[data-x]').forEach(x=>x.classList.remove('active'));render();});
 $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)return;const g=state.chartGeom;const rect=$('chart').getBoundingClientRect();if(e.shiftKey){let y0=g.yMin,y1=g.yMax,center=y0+(1-(e.clientY-rect.top-g.T)/(g.ph||1))*(y1-y0);let factor=e.deltaY>0?1.2:0.82;let span=(y1-y0)*factor;const ymin=$('yMinManual'),ymax=$('yMaxManual');if(ymin&&ymax){ymin.value=(center-span/2).toFixed(state.unit==='f'?1:2);ymax.value=(center+span/2).toFixed(state.unit==='f'?1:2)}}else{let x0=g.xMin,x1=g.xMax,cursor=x0+(e.clientX-rect.left-g.L)/(g.pw||1)*(x1-x0);let factor=e.deltaY>0?1.18:0.84;let a=cursor-(cursor-x0)*factor,b=a+(x1-x0)*factor;if(a<0){b-=a;a=0}if(b>24){a-=b-24;b=24}state.custom=[Math.max(0,a),Math.min(24,b)];document.querySelectorAll('[data-x]').forEach(x=>x.classList.remove('active'));}render();},{passive:false});$('refreshBtn').onclick=loadAll;loadAll();setInterval(loadAll,30000);
 </script>
+
+<script id="final-yzoom-tooltip-ampm-fix">
+(function(){
+  const $ = id => document.getElementById(id);
+  const N = v => { const x=Number(v); return Number.isFinite(x)?x:null; };
+  const cToF = c => N(c)==null ? null : N(c)*9/5+32;
+  const fToC = f => N(f)==null ? null : (N(f)-32)*5/9;
+  const fmt = v => { const x=N(v); if(x==null) return '—'; return x.toFixed(3).replace(/\.?0+$/,''); };
+  function fmtAMPM(h){
+    if(N(h)==null) return '—';
+    let hh=Math.floor(h), mm=Math.round((h-hh)*60);
+    if(mm===60){hh++;mm=0;}
+    const ap = hh>=12 ? 'PM' : 'AM';
+    const h12 = hh%12 || 12;
+    return `${h12}:${String(mm).padStart(2,'0')} ${ap}`;
+  }
+  function parseHour(s){
+    s=String(s||'').trim();
+    let m=s.match(/T(\d{1,2}):(\d{2})/) || s.match(/\b(\d{1,2}):(\d{2})(?::\d{2})?\b/);
+    if(!m) return null;
+    let h=+m[1], mi=+m[2], lo=s.toLowerCase();
+    if((lo.includes('pm') || /\bp\b/.test(lo)) && h<12) h+=12;
+    if((lo.includes('am') || /\ba\b/.test(lo)) && h===12) h=0;
+    return h + mi/60;
+  }
+  function getUnit(){
+    try{
+      if(window.state && state.unit) return String(state.unit).toLowerCase().startsWith('f') ? 'f':'c';
+      if(window.masterChart && masterChart.unit) return String(masterChart.unit).toLowerCase().startsWith('f') ? 'f':'c';
+      if(window.S && S.unit) return String(S.unit).toLowerCase().startsWith('f') ? 'f':'c';
+    }catch(e){}
+    return document.querySelector('[data-u="f"].active,[data-unit="f"].active') ? 'f':'c';
+  }
+  function getChartRect(){
+    const c=$('chart');
+    if(!c) return null;
+    const rect=c.getBoundingClientRect();
+    // Based on canvas draw layout used in all current versions
+    return {canvas:c, rect, L:70, R:28, T:48, B:60, W:c.width||1180, H:c.height||560};
+  }
+  function getAxis(){
+    if(!window.__axisState) window.__axisState={xMin:null,xMax:null,yMin:null,yMax:null};
+    return window.__axisState;
+  }
+  function rerender(){
+    try{
+      if(typeof window.masterRender==='function') window.masterRender();
+      else if(typeof window.render==='function') window.render();
+      else if(typeof window.renderAll==='function') window.renderAll();
+    }catch(e){}
+  }
+  function currentRange(){
+    const ax=getAxis();
+    let xMin=N(ax.xMin), xMax=N(ax.xMax), yMin=N(ax.yMin), yMax=N(ax.yMax);
+    // Try read manual inputs
+    xMin = N($('xMinManual')?.value) ?? xMin;
+    xMax = N($('xMaxManual')?.value) ?? xMax;
+    yMin = N($('yMinManual')?.value) ?? yMin;
+    yMax = N($('yMaxManual')?.value) ?? yMax;
+    if(!(xMin!=null && xMax!=null && xMax>xMin)){
+      if(document.querySelector('[data-x="peak"].active')){xMin=9;xMax=18;}
+      else{xMin=0;xMax=24;}
+    }
+    if(!(yMin!=null && yMax!=null && yMax>yMin)){
+      // fallback sane current visible temp range
+      const unit=getUnit();
+      yMin = unit==='f' ? 70 : 20;
+      yMax = unit==='f' ? 105 : 42;
+    }
+    return {xMin,xMax,yMin,yMax};
+  }
+  function setManualAxis(r){
+    const ax=getAxis();
+    ax.xMin=r.xMin; ax.xMax=r.xMax; ax.yMin=r.yMin; ax.yMax=r.yMax;
+    const ids={xMin:'xMinManual',xMax:'xMaxManual',yMin:'yMinManual',yMax:'yMaxManual'};
+    Object.entries(ids).forEach(([k,id])=>{const el=$(id); if(el && r[k]!=null) el.value=Number(r[k]).toFixed(k.startsWith('y')?2:2).replace(/\.?0+$/,'');});
+  }
+
+  // Strong AM/PM patch for canvas axis labels: replace common formatter if present
+  try{ window.fmtTime = fmtAMPM; }catch(e){}
+  try{ window.fmtTime24 = fmtAMPM; }catch(e){}
+
+  function collectPoints(){
+    const pts=[];
+    const data = window.__lastMasterData || window.S?.data || {};
+    const hist = data.hist || window.__goodHist || window.goodHist || {};
+    function addWU(x){
+      const h=parseHour(x.saved_at||x.obs_time||x.fetched_at||x.slot);
+      if(h==null) return;
+      pts.push({h,type:'WU',raw:x,c:N(x.temp_c),f:N(x.temp_f),y:getUnit()==='f'?(N(x.temp_f)??cToF(x.temp_c)):(N(x.temp_c)??fToC(x.temp_f))});
+    }
+    Object.values(hist.wu_obs_rows||{}).forEach(list=>(Array.isArray(list)?list:[]).forEach(addWU));
+    (hist.metar_rows||[]).forEach(x=>{
+      const h=parseHour(x.slot||x.valid_ist||x.fetched_at);
+      if(h==null) return;
+      pts.push({h,type:'METAR',raw:x,c:N(x.temp_c),f:cToF(x.temp_c),y:getUnit()==='f'?cToF(x.temp_c):N(x.temp_c)});
+    });
+    // if no cached hist visible, try from table rows? no-op.
+    return pts.filter(p=>p.y!=null);
+  }
+  function nearestPoint(hour,temp){
+    const pts=collectPoints();
+    if(!pts.length) return null;
+    let best=null, bd=Infinity;
+    for(const p of pts){
+      const d=Math.abs(p.h-hour)*2 + Math.abs((p.y??0)-temp)*0.25;
+      if(d<bd){bd=d;best=p;}
+    }
+    return bd<2.0 ? best : null;
+  }
+  function showTooltip(e){
+    const info=getChartRect(), tip=$('tooltip');
+    if(!info || !tip) return;
+    const {canvas,rect,L,R,T,B,W,H}=info;
+    const rr=currentRange();
+    const px=(e.clientX-rect.left)/rect.width*W;
+    const py=(e.clientY-rect.top)/rect.height*H;
+    const plotW=W-L-R, plotH=H-T-B;
+    if(px<L || px>W-R || py<T || py>H-B){ tip.style.display='none'; return; }
+    const hour=rr.xMin + (px-L)/plotW*(rr.xMax-rr.xMin);
+    const temp=rr.yMax - (py-T)/plotH*(rr.yMax-rr.yMin);
+    const near=nearestPoint(hour,temp);
+    const unit=getUnit().toUpperCase();
+    let html=`<div class="ttTitle">${fmtAMPM(hour)} · ${fmt(temp)}°${unit}</div>`;
+    if(near){
+      if(near.type==='WU'){
+        html += `<div class="ttLine ttRaw"><b>WU observation</b></div>
+        <div class="ttLine">Time: <b>${fmtAMPM(near.h)}</b></div>
+        <div class="ttLine">Raw F: <b>${fmt(near.f)}°F</b></div>
+        <div class="ttLine">Raw C: <b>${fmt(near.c)}°C</b></div>
+        <div class="ttLine">Converted C from F: <b>${fmt(fToC(near.f))}°C</b></div>
+        <div class="ttLine">Converted F from C: <b>${fmt(cToF(near.c))}°F</b></div>
+        ${near.raw?.humidity!=null?`<div class="ttLine">Humidity: <b>${near.raw.humidity}%</b></div>`:''}
+        ${near.raw?.condition?`<div class="ttLine">Condition: <b>${near.raw.condition}</b></div>`:''}`;
+      }else{
+        html += `<div class="ttLine ttMetar"><b>METAR official</b></div>
+        <div class="ttLine">Time: <b>${fmtAMPM(near.h)}</b></div>
+        <div class="ttLine">Raw C: <b>${fmt(near.c)}°C</b></div>
+        <div class="ttLine">Converted F: <b>${fmt(near.f)}°F</b></div>
+        ${near.raw?.raw_metar?`<div class="ttLine">Raw METAR: <b>${String(near.raw.raw_metar).slice(0,90)}</b></div>`:''}`;
+      }
+    }else{
+      html += `<div class="ttLine muted">Move near a dot/line for exact reading.</div>`;
+    }
+    tip.innerHTML=html;
+    tip.style.display='block';
+    let left=e.clientX+18, top=e.clientY+18;
+    if(left+460>window.innerWidth) left=e.clientX-480;
+    if(top+220>window.innerHeight) top=e.clientY-240;
+    tip.style.left=Math.max(8,left)+'px';
+    tip.style.top=Math.max(8,top)+'px';
+  }
+
+  function bindFinalUX(){
+    const c=$('chart');
+    if(!c || c.dataset.finalUxBound) return;
+    c.dataset.finalUxBound='1';
+
+    c.addEventListener('mousemove', showTooltip);
+    c.addEventListener('mouseleave',()=>{const t=$('tooltip'); if(t)t.style.display='none';});
+
+    c.addEventListener('wheel', e=>{
+      const info=getChartRect();
+      if(!info) return;
+      const {rect,L,W,T,H,B}=info;
+      const px=(e.clientX-rect.left)/rect.width*W;
+      const onYAxis = px < L + 26; // left axis/labels area
+      const rr=currentRange();
+      const factor=e.deltaY>0 ? 1.18 : 0.84;
+
+      if(e.shiftKey || onYAxis){
+        e.preventDefault();
+        const py=(e.clientY-rect.top)/rect.height*H;
+        const plotH=H-T-B;
+        let center;
+        if(py>=T && py<=H-B) center = rr.yMax - (py-T)/plotH*(rr.yMax-rr.yMin);
+        else center=(rr.yMin+rr.yMax)/2;
+        const span=(rr.yMax-rr.yMin)*factor;
+        rr.yMin=center-(center-rr.yMin)*factor;
+        rr.yMax=rr.yMin+span;
+        if(rr.yMax<=rr.yMin){rr.yMax=rr.yMin+1;}
+        setManualAxis(rr);
+        rerender();
+      }
+      // else leave existing x zoom behavior alone
+    }, {passive:false});
+  }
+
+  // Patch text format in table rows after render: " 9:22p " -> "9:22 PM"
+  function fixAMPMText(root=document.body){
+    const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);
+    const nodes=[];
+    while(walker.nextNode()) nodes.push(walker.currentNode);
+    for(const node of nodes){
+      let s=node.nodeValue;
+      const ns=s.replace(/\b(\d{1,2}):(\d{2})([ap])\b/gi,(m,h,mi,ap)=>`${Number(h)}:${mi} ${ap.toLowerCase()==='p'?'PM':'AM'}`);
+      if(ns!==s) node.nodeValue=ns;
+    }
+  }
+  const oldSetTimeout=window.setTimeout;
+  function afterRender(){bindFinalUX(); setTimeout(()=>fixAMPMText(),80);}
+  window.addEventListener('load',()=>{bindFinalUX();afterRender();});
+  setInterval(()=>{bindFinalUX();fixAMPMText();},1500);
+
+  // Wrap known render functions so labels/tooltips update after every redraw.
+  setTimeout(()=>{
+    ['render','masterRender','renderAll','fetchAll','loadAll'].forEach(name=>{
+      try{
+        const fn=window[name];
+        if(typeof fn==='function' && !fn.__finalUxWrapped){
+          const wrapped=function(){ const r=fn.apply(this,arguments); Promise.resolve(r).finally(afterRender); return r; };
+          wrapped.__finalUxWrapped=true;
+          window[name]=wrapped;
+        }
+      }catch(e){}
+    });
+  },500);
+})();
+</script>
+
+
+<script id="final-2d-zoom-mobile-fix">
+(function(){
+  const $=id=>document.getElementById(id);
+  const N=v=>{const x=Number(v);return Number.isFinite(x)?x:null};
+  function getChartInfo(){
+    const c=$('chart'); if(!c) return null;
+    const rect=c.getBoundingClientRect();
+    return {c,rect,W:c.width||1180,H:c.height||560,L:70,R:28,T:48,B:60};
+  }
+  function getAxis(){
+    if(!window.__axisState) window.__axisState={xMin:null,xMax:null,yMin:null,yMax:null};
+    return window.__axisState;
+  }
+  function readCurrent(){
+    const ax=getAxis();
+    let xMin=N($('xMinManual')?.value)??N(ax.xMin);
+    let xMax=N($('xMaxManual')?.value)??N(ax.xMax);
+    let yMin=N($('yMinManual')?.value)??N(ax.yMin);
+    let yMax=N($('yMaxManual')?.value)??N(ax.yMax);
+    if(!(xMin!=null&&xMax!=null&&xMax>xMin)){
+      if(document.querySelector('[data-x="peak"].active,[data-xrange="peak"].active')){xMin=9;xMax=18}
+      else {xMin=0;xMax=24}
+    }
+    if(!(yMin!=null&&yMax!=null&&yMax>yMin)){
+      const isF=document.querySelector('[data-u="f"].active,[data-unit="f"].active');
+      yMin=isF?70:20; yMax=isF?105:42;
+    }
+    return {xMin,xMax,yMin,yMax};
+  }
+  function writeAxis(r){
+    const ax=getAxis();
+    r.xMin=Math.max(0,r.xMin); r.xMax=Math.min(24,r.xMax);
+    if(r.xMax-r.xMin<0.25){const mid=(r.xMin+r.xMax)/2;r.xMin=mid-.125;r.xMax=mid+.125}
+    ax.xMin=r.xMin; ax.xMax=r.xMax; ax.yMin=r.yMin; ax.yMax=r.yMax;
+    const map={xMin:'xMinManual',xMax:'xMaxManual',yMin:'yMinManual',yMax:'yMaxManual'};
+    Object.entries(map).forEach(([k,id])=>{const el=$(id); if(el) el.value=Number(r[k]).toFixed(2).replace(/\.?0+$/,'');});
+  }
+  function rerender(){
+    try{
+      if(typeof window.masterRender==='function') window.masterRender();
+      else if(typeof window.renderAll==='function') window.renderAll();
+      else if(typeof window.render==='function') window.render();
+      else if(typeof window.fetchAll==='function') window.fetchAll();
+    }catch(e){console.warn('rerender failed',e)}
+  }
+  function zoomX(r,factor,anchor){
+    const span=(r.xMax-r.xMin)*factor;
+    const cur=r.xMin+anchor*(r.xMax-r.xMin);
+    r.xMin=cur-(cur-r.xMin)*factor;
+    r.xMax=r.xMin+span;
+    if(r.xMin<0){r.xMax-=r.xMin;r.xMin=0}
+    if(r.xMax>24){r.xMin-=r.xMax-24;r.xMax=24}
+  }
+  function zoomY(r,factor,anchor){
+    const span=(r.yMax-r.yMin)*factor;
+    const cur=r.yMax-anchor*(r.yMax-r.yMin);
+    r.yMin=cur-(cur-r.yMin)*factor;
+    r.yMax=r.yMin+span;
+    if(r.yMax<=r.yMin){r.yMax=r.yMin+1}
+  }
+  function applyZoom(kind, dir, anchorX=.5, anchorY=.5){
+    const r=readCurrent();
+    const factor=dir==='in'?0.82:1.22;
+    if(kind==='both'||kind==='x') zoomX(r,factor,anchorX);
+    if(kind==='both'||kind==='y') zoomY(r,factor,anchorY);
+    writeAxis(r); rerender();
+  }
+  function pan(frac){
+    const r=readCurrent(), span=r.xMax-r.xMin, shift=span*frac;
+    r.xMin+=shift; r.xMax+=shift;
+    if(r.xMin<0){r.xMax-=r.xMin;r.xMin=0}
+    if(r.xMax>24){r.xMin-=r.xMax-24;r.xMax=24}
+    writeAxis(r); rerender();
+  }
+  function reset(){
+    ['xMinManual','xMaxManual','yMinManual','yMaxManual'].forEach(id=>{const el=$(id); if(el) el.value='';});
+    window.__axisState={xMin:null,xMax:null,yMin:null,yMax:null};
+    rerender();
+  }
+  function bind(){
+    const c=$('chart'); if(c&&!c.dataset.zoom2dBound){
+      c.dataset.zoom2dBound='1';
+      c.addEventListener('wheel',e=>{
+        const info=getChartInfo(); if(!info) return;
+        const {rect,W,H,L,R,T,B}=info;
+        const px=(e.clientX-rect.left)/rect.width*W;
+        const py=(e.clientY-rect.top)/rect.height*H;
+        if(px<L||px>W-R||py<T||py>H-B) return;
+        e.preventDefault();
+        const ax=(px-L)/(W-L-R);
+        const ay=(py-T)/(H-T-B);
+        const dir=e.deltaY<0?'in':'out';
+        // Shift = only Y, Alt = only X, normal = both X and Y.
+        const kind=e.shiftKey?'y':(e.altKey?'x':'both');
+        applyZoom(kind,dir,ax,ay);
+      },{passive:false});
+
+      // mobile pinch: two finger pinch zoom both axes, no page zoom
+      let lastDist=null;
+      c.addEventListener('touchstart',e=>{
+        if(e.touches.length===2){
+          e.preventDefault();
+          const dx=e.touches[0].clientX-e.touches[1].clientX, dy=e.touches[0].clientY-e.touches[1].clientY;
+          lastDist=Math.hypot(dx,dy);
+        }
+      },{passive:false});
+      c.addEventListener('touchmove',e=>{
+        if(e.touches.length===2 && lastDist){
+          e.preventDefault();
+          const dx=e.touches[0].clientX-e.touches[1].clientX, dy=e.touches[0].clientY-e.touches[1].clientY;
+          const d=Math.hypot(dx,dy);
+          const dir=d>lastDist?'in':'out';
+          lastDist=d;
+          applyZoom('both',dir,.5,.5);
+        }
+      },{passive:false});
+      c.addEventListener('touchend',()=>{lastDist=null},{passive:false});
+    }
+    const btns={
+      zoomInBoth:['both','in'], zoomOutBoth:['both','out'],
+      zoomInY:['y','in'], zoomOutY:['y','out'],
+      zoomInX:['x','in'], zoomOutX:['x','out']
+    };
+    Object.entries(btns).forEach(([id,args])=>{
+      const b=$(id); if(b&&!b.dataset.zoom2dBound){b.dataset.zoom2dBound='1';b.onclick=()=>applyZoom(args[0],args[1]);}
+    });
+    const pl=$('panLeft'), pr=$('panRight'), rz=$('resetZoom2D');
+    if(pl&&!pl.dataset.zoom2dBound){pl.dataset.zoom2dBound='1';pl.onclick=()=>pan(-0.25);}
+    if(pr&&!pr.dataset.zoom2dBound){pr.dataset.zoom2dBound='1';pr.onclick=()=>pan(0.25);}
+    if(rz&&!rz.dataset.zoom2dBound){rz.dataset.zoom2dBound='1';rz.onclick=reset;}
+  }
+  window.addEventListener('load',bind);
+  setInterval(bind,1200);
+})();
+</script>
+
 </body></html>
