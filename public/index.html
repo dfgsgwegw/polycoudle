@@ -14,6 +14,19 @@
 #tooltip{position:fixed;pointer-events:none;background:#06111e;color:#fff;border:1px solid #2a6b92;border-radius:10px;padding:8px 10px;font:12px ui-monospace,Consolas;display:none;z-index:50;box-shadow:0 8px 24px #0008;max-width:310px}
 .err{background:rgba(255,79,69,.13);border:1px solid rgba(255,79,69,.4);color:#ffd2ce;border-radius:12px;padding:10px;margin:10px 0;font-family:ui-monospace,Consolas,monospace;display:none}
 @media(max-width:760px){.wrap{padding:10px}.header{display:block}h1{font-size:28px}.grid{grid-template-columns:1fr 1fr}.value{font-size:18px}#chart{width:1080px;height:540px}.status h2{font-size:24px}}
+
+/* ===== MANUAL AXIS CONTROLS FIX ===== */
+.axisBox{
+  display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:8px;
+  font-family:ui-monospace,Consolas,monospace;color:#a9d8ff
+}
+.axisBox input{
+  width:82px;border:1px solid rgba(0,212,255,.35);background:#06192a;color:#fff;
+  border-radius:10px;padding:8px 10px;font-weight:800
+}
+.axisBox label{font-size:13px;color:#a9d8ff;font-weight:900}
+.axisHint{font-size:12px;color:#86b8d8;margin-top:6px}
+
 </style></head><body>
 <div class="wrap">
   <div class="header"><div><h1>VILK <span class="cyan">Live Signal</span></h1><div class="sub">● UI refresh 30 sec · cron save 1 min · Lucknow Airport (VILK) · D1 archive</div></div><div><button class="btn" id="refreshBtn">↻ Refresh Now</button><div class="updated" id="updated">Updated --</div></div></div>
@@ -26,6 +39,21 @@
       <button data-u="c" class="active">°C</button><button data-u="f">°F</button>
       <label class="active"><input type="checkbox" data-line="wu" checked> WU</label><label class="active"><input type="checkbox" data-line="metar" checked> METAR</label><label class="active"><input type="checkbox" data-line="fc" checked> Forecast</label><label class="active"><input type="checkbox" data-line="bias" checked> Bias</label><label class="active"><input type="checkbox" data-line="ceil95" checked> 95% ceiling</label><label><input type="checkbox" data-line="ceil99"> 99% extreme</label><label class="active"><input type="checkbox" data-line="analog" checked> Analog</label><label class="active"><input type="checkbox" data-line="peakWindow" checked> Peak window</label>
     </div>
+
+<div class="axisBox" id="axisControls">
+  <label>Time:</label>
+  <input id="xMinManual" placeholder="0" inputmode="decimal">
+  <span>to</span>
+  <input id="xMaxManual" placeholder="24" inputmode="decimal">
+  <label>Temp:</label>
+  <input id="yMinManual" placeholder="auto" inputmode="decimal">
+  <span>to</span>
+  <input id="yMaxManual" placeholder="auto" inputmode="decimal">
+  <button type="button" id="applyAxisBtn">Apply Axis</button>
+  <button type="button" id="autoAxisBtn">Auto Axis</button>
+</div>
+<div class="axisHint">Tip: Time accepts 14, 14.5, 9-18 style. Temp axis uses current selected unit (°C/°F). This changes chart range, not browser zoom.</div>
+
     <div class="chartScroll"><canvas id="chart" width="1180" height="560"></canvas></div>
     <div class="legend"><span><i class="dot" style="background:#ef4444"></i>WU observed</span><span><i class="dot" style="background:#10b981"></i>METAR official</span><span><i class="dot" style="background:#111827"></i>latest WU forecast</span><span><i class="dot" style="background:#60a5fa"></i>forecast runs</span><span><i class="dot" style="background:#111827;border-top:2px dotted #111827"></i>bias corrected</span><span><i class="dot" style="background:#a855f7"></i>historical 95% ceiling</span><span><i class="dot" style="background:#7f1d1d"></i>99% extreme</span><span><i class="dot" style="background:#6b7280"></i>closest analog day</span></div>
     <div id="curveSummary" class="summary">Loading curve...</div>
@@ -74,4 +102,156 @@ function renderChart(wu,metar,fc,analog,ceil){const c=$('chart'),ctx=c.getContex
 function renderTable(wu,metar){const slots=[...new Set([...metar.map(m=>m.raw.slot||slotFromObsTime(m.raw.valid_ist)),...wu.map(w=>rowSlot(w))].filter(Boolean))].sort();$('rows').innerHTML=slots.map(slot=>{const m=metar.find(x=>(x.raw.slot||slotFromObsTime(x.raw.valid_ist))===slot),list=wu.filter(x=>rowSlot(x)===slot);const wuhtml=list.map(x=>`<div class="wu">↳ WU ${x.raw.obs_time||fmtTime(x.hour)} &nbsp; ${cf(x.c,x.f,'WU')} · 💧${x.raw.humidity??'-'}% &nbsp; ${x.raw.condition||''}</div>`).join('');return `<tr><td>${slot}</td><td class="metar">${m?cf(m.c,m.f,'METAR'):'⏳ METAR'}</td><td>${wuhtml||'<span class="muted">– waiting for WU</span>'}</td><td>${m?.raw.dewpoint_c??'—'}°C</td><td>${m?.raw.wind_kph??'—'}km/h</td><td>${m?.raw.wx||'—'}</td><td>${m?.raw.nosig?'✅ YES':'—'}</td><td>${m?.raw.delta??'—'}</td></tr>`}).join('')||'<tr><td colspan="8">No rows yet</td></tr>'}
 function render(){if(!state.data)return;const {hist,snaps,date}=state.data;const wu=flattenWU(hist),metar=flattenMetar(hist),fc=forecastLines(snaps,date);const analog=findAnalog(wu,metar);const peak=wu.length?wu.reduce((a,b)=>b.y>a.y?b:a,wu[0]):null;const last=wu.at(-1);const ceil=ceiling(last,peak,nowIST().getHours());updateCards(wu,metar,fc,analog,ceil);renderChart(wu,metar,fc,analog,ceil);renderTable(wu,metar);const fcNear=last&&fc.latest.length?fc.latest.reduce((a,b)=>Math.abs(b.hour-last.hour)<Math.abs(a.hour-last.hour)?b:a,fc.latest[0]):null;$('curveSummary').innerHTML=last?`Current WU: <b>${tf(last.c,last.f)}</b> · Peak so far: <b>${peak?tf(peak.c,peak.f):'—'}</b>${fcNear?` · vs forecast: <b style="color:${last.y>=fcNear.y?'#ef4444':'#3b82f6'}">${(last.y-fcNear.y>=0?'+':'')+(last.y-fcNear.y).toFixed(1)}° ${last.y>=fcNear.y?'HOT':'COLD'}</b>`:''}${ceil?` · Historical ceiling 95%: <b style="color:#c084fc">${state.unit==='f'?n3(cToF(ceil.c95))+'°F':n3(ceil.c95)+'°C'}</b>`:''}${analog?` · Closest analog: <b>${analog.date}</b> RMSE ${analog.rmse.toFixed(2)}°C`:''} · Forecast snapshots: ${fc.rows.length}`:'Waiting for WU'}
 document.querySelectorAll('.toolbar button').forEach(b=>b.onclick=()=>{if(b.dataset.y){state.y=b.dataset.y;document.querySelectorAll('[data-y]').forEach(x=>x.classList.toggle('active',x.dataset.y===state.y))}if(b.dataset.x){state.custom=null;state.x=b.dataset.x;document.querySelectorAll('[data-x]').forEach(x=>x.classList.toggle('active',x.dataset.x===state.x))}if(b.dataset.u){state.unit=b.dataset.u;document.querySelectorAll('[data-u]').forEach(x=>x.classList.toggle('active',x.dataset.u===state.unit))}render()});document.querySelectorAll('[data-line]').forEach(cb=>cb.onchange=()=>{state.lines[cb.dataset.line]=cb.checked;cb.parentElement.classList.toggle('active',cb.checked);render()});$('applyRange').onclick=()=>{let a=Number($('xStart').value),b=Number($('xEnd').value);if(Number.isFinite(a)&&Number.isFinite(b)&&b>a){state.custom=[a,b];document.querySelectorAll('[data-x]').forEach(x=>x.classList.remove('active'));render()}};$('chart').addEventListener('mousemove',e=>{const r=e.target.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;let best=null,bd=1e9;state.points.forEach(p=>{const yy=Number.isFinite(p.sy)?p.sy:p.y;const d=Math.hypot(p.x-x,yy-y);if(d<bd){bd=d;best=p}});const tt=$('tooltip');if(best&&bd<18){tt.style.display='block';tt.style.left=e.clientX+14+'px';tt.style.top=e.clientY+14+'px';let src=best.type==='METAR'?'METAR':(String(best.type||'').startsWith('Forecast')||String(best.type||'').includes('forecast')?'FORECAST':(String(best.type||'').startsWith('Analog')?'METAR':'WU'));tt.innerHTML=`${best.type||'Point'}<br>${fmtTime(best.hour)}<br>${cf(best.c,best.f,src)}`}else tt.style.display='none'});$('chart').addEventListener('mouseleave',()=>{$('tooltip').style.display='none'});$('refreshBtn').onclick=loadAll;loadAll();setInterval(loadAll,30000);
-</script></body></html>
+</script>
+<script id="manual-axis-fmode-robust-fix">
+(function(){
+  function num(v){ const n=Number(v); return Number.isFinite(n)?n:null; }
+  function parseHour(v){
+    if(v==null) return null;
+    const s=String(v).trim();
+    if(!s) return null;
+    if(s.includes(':')){
+      const [h,m='0']=s.split(':');
+      const n=Number(h)+Number(m)/60;
+      return Number.isFinite(n)?n:null;
+    }
+    const n=Number(s);
+    return Number.isFinite(n)?n:null;
+  }
+  function ensureAxisState(){
+    if(!window.__axisState) window.__axisState={xMin:null,xMax:null,yMin:null,yMax:null};
+    return window.__axisState;
+  }
+  function bindAxisControls(){
+    const apply=document.getElementById('applyAxisBtn');
+    const auto=document.getElementById('autoAxisBtn');
+    if(apply && !apply.dataset.bound){
+      apply.dataset.bound='1';
+      apply.onclick=function(){
+        const st=ensureAxisState();
+        st.xMin=parseHour(document.getElementById('xMinManual')?.value);
+        st.xMax=parseHour(document.getElementById('xMaxManual')?.value);
+        st.yMin=num(document.getElementById('yMinManual')?.value);
+        st.yMax=num(document.getElementById('yMaxManual')?.value);
+        if(st.xMin!=null && st.xMax!=null && st.xMax<=st.xMin){ const t=st.xMin; st.xMin=st.xMax; st.xMax=t; }
+        if(st.yMin!=null && st.yMax!=null && st.yMax<=st.yMin){ const t=st.yMin; st.yMin=st.yMax; st.yMax=t; }
+        if(typeof render==='function') render();
+        else if(typeof loadAll==='function') loadAll();
+      };
+    }
+    if(auto && !auto.dataset.bound){
+      auto.dataset.bound='1';
+      auto.onclick=function(){
+        window.__axisState={xMin:null,xMax:null,yMin:null,yMax:null};
+        ['xMinManual','xMaxManual','yMinManual','yMaxManual'].forEach(id=>{const el=document.getElementById(id); if(el) el.value='';});
+        if(typeof render==='function') render();
+        else if(typeof loadAll==='function') loadAll();
+      };
+    }
+  }
+
+  // Monkey patch canvas drawing context labels that explode due mixed-unit values.
+  // If renderChart source is available, replace it by wrapping state.unit values after draw.
+  function patchRenderChart(){
+    if(window.__axisRenderPatched) return;
+    const old = (typeof renderChart==='function') ? renderChart : window.renderChart;
+    if(typeof old!=='function') return;
+    window.__axisRenderPatched=true;
+    const wrapped=function(wu,metar,fc){
+      // filter impossible mixed-unit points before old renderer decides axis
+      function clean(arr){
+        if(!Array.isArray(arr)) return arr;
+        return arr.filter(p=>{
+          const y=Number(p.y);
+          if(!Number.isFinite(y)) return false;
+          // C mode realistic VILK range; F mode realistic range
+          if(window.state && state.unit==='f') return y>=40 && y<=130;
+          return y>=0 && y<=55;
+        });
+      }
+      wu=clean(wu); metar=clean(metar);
+      if(fc){
+        fc={...fc};
+        fc.latest=clean(fc.latest||[]);
+        fc.old=clean(fc.old||[]);
+        if(Array.isArray(fc.runs)) fc.runs=fc.runs.map(clean);
+      }
+      const ret = old.call(this, wu, metar, fc);
+
+      // If manual axis exists, redraw using a minimal safe renderer if old renderer ignored it.
+      try{
+        const st=ensureAxisState();
+        if(st.xMin!=null || st.xMax!=null || st.yMin!=null || st.yMax!=null){
+          safeRedraw(wu,metar,fc,st);
+        }
+      }catch(e){ console.warn('manual axis redraw failed', e.message); }
+      return ret;
+    };
+    window.renderChart=wrapped;
+    try{ renderChart=wrapped; }catch(e){}
+  }
+
+  function safeRedraw(wu,metar,fc,st){
+    const canvas=document.getElementById('chart');
+    if(!canvas) return;
+    const ctx=canvas.getContext('2d');
+    const W=canvas.width,H=canvas.height,L=72,R=30,T=44,B=62;
+    const xMin=st.xMin ?? 0, xMax=st.xMax ?? 24;
+    let points=[...(wu||[]),...(metar||[]),...((fc&&fc.latest)||[]),...((fc&&fc.old)||[])].filter(p=>p.hour>=xMin&&p.hour<=xMax);
+    if(!points.length) points=[...(wu||[]),...(metar||[])];
+    let vals=points.map(p=>Number(p.y)).filter(Number.isFinite);
+    if(!vals.length) vals=(window.state&&state.unit==='f')?[70,100]:[20,45];
+    let yMin=st.yMin ?? Math.floor((Math.min(...vals)-0.5)*10)/10;
+    let yMax=st.yMax ?? Math.ceil((Math.max(...vals)+0.5)*10)/10;
+    if((window.state&&state.unit==='f') && (yMax>150 || yMin<30)){
+      // safety: mixed value guard
+      vals=vals.filter(v=>v>=40 && v<=130);
+      if(vals.length){ yMin=st.yMin ?? Math.floor((Math.min(...vals)-1)); yMax=st.yMax ?? Math.ceil((Math.max(...vals)+1)); }
+    }
+    const pw=W-L-R, ph=H-T-B;
+    const X=h=>L+(h-xMin)/(xMax-xMin)*pw, Y=v=>T+(yMax-v)/(yMax-yMin)*ph;
+    ctx.clearRect(0,0,W,H);
+    ctx.fillStyle='#fafafa'; ctx.fillRect(0,0,W,H);
+    ctx.strokeStyle='#e5e7eb'; ctx.lineWidth=1; ctx.font='13px sans-serif'; ctx.fillStyle='#6b7280';
+    const xStep=(xMax-xMin)<=4?0.5:2;
+    for(let h=Math.ceil(xMin/xStep)*xStep;h<=xMax+1e-9;h+=xStep){
+      const x=X(h); ctx.beginPath();ctx.moveTo(x,T);ctx.lineTo(x,T+ph);ctx.stroke();
+      const hh=Math.floor(h), mm=Math.round((h-hh)*60); const am=hh>=12?'p':'a'; const h12=hh%12||12;
+      ctx.fillText(`${h12}:${String(mm).padStart(2,'0')}${am}`,x-18,H-26);
+    }
+    const yRange=yMax-yMin;
+    const yStep=(window.state&&state.unit==='f') ? (yRange<=8?0.5:yRange<=20?1:2) : (yRange<=3?0.1:yRange<=8?0.5:1);
+    for(let v=Math.ceil(yMin/yStep)*yStep;v<=yMax+1e-9;v+=yStep){
+      const y=Y(v); ctx.strokeStyle=Math.abs(v-Math.round(v))<0.001?'#d1d5db':'#eef2f7';
+      ctx.beginPath();ctx.moveTo(L,y);ctx.lineTo(L+pw,y);ctx.stroke();
+      if(Math.abs(v/yStep-Math.round(v/yStep))<.01){
+        ctx.fillStyle='#6b7280'; ctx.fillText((yStep<1?v.toFixed(1):Math.round(v))+'°',18,y+4);
+      }
+    }
+    ctx.strokeStyle='#9ca3af'; ctx.strokeRect(L,T,pw,ph);
+    function line(arr,color,w=3,dash=[]){
+      arr=(arr||[]).filter(p=>p.hour>=xMin&&p.hour<=xMax&&Number.isFinite(Number(p.y))).sort((a,b)=>a.hour-b.hour);
+      if(arr.length<2) return;
+      ctx.save();ctx.strokeStyle=color;ctx.lineWidth=w;ctx.setLineDash(dash);ctx.lineCap='round';ctx.lineJoin='round';
+      ctx.beginPath();ctx.moveTo(X(arr[0].hour),Y(arr[0].y));
+      for(let i=1;i<arr.length;i++){ctx.lineTo(X(arr[i].hour),Y(arr[i].y));}
+      ctx.stroke();ctx.restore();
+    }
+    function pts(arr,color,r=5){
+      ctx.save();ctx.fillStyle=color;ctx.strokeStyle='#fff';ctx.lineWidth=1.3;
+      (arr||[]).filter(p=>p.hour>=xMin&&p.hour<=xMax).forEach(p=>{ctx.beginPath();ctx.arc(X(p.hour),Y(p.y),r,0,Math.PI*2);ctx.fill();ctx.stroke();});
+      ctx.restore();
+    }
+    line(fc?.old,'#93c5fd',2,[6,6]);
+    line(fc?.latest,'#111827',4);
+    line(wu,'#ef4444',3);
+    pts(wu,'#ef4444',3);
+    pts(metar,'#10b981',6);
+  }
+
+  window.addEventListener('load',()=>{bindAxisControls();patchRenderChart();});
+  setInterval(()=>{bindAxisControls();patchRenderChart();},1000);
+})();
+</script>
+
+</body></html>
