@@ -2707,8 +2707,15 @@ window.fetchAll = fetchAll;
 </script>
 
 
-<script id="force-wu-cf-display-final">
+
+
+
+<script id="wu-cf-permanent-mutation-fix">
 (function(){
+  let lastHist = null;
+  let patchRunning = false;
+  let observerStarted = false;
+
   function todayIST(){
     return new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});
   }
@@ -2717,96 +2724,138 @@ window.fetchAll = fetchAll;
     return Number.isFinite(n) ? +(n*9/5+32).toFixed(1) : null;
   }
   function fmtF(f, c){
-    let n = f == null ? cToF(c) : Number(f);
-    if(!Number.isFinite(n)) return '';
-    // Preserve decimal if source has decimal, otherwise show integer.
-    const hasDecimal = String(f ?? '').includes('.') || Math.abs(n - Math.round(n)) > 0.05;
+    const n = f == null ? cToF(c) : Number(f);
+    if(!Number.isFinite(n)) return null;
+    const raw = String(f ?? '');
+    const hasDecimal = raw.includes('.') || Math.abs(n - Math.round(n)) > 0.05;
     return hasDecimal ? n.toFixed(1) : String(Math.round(n));
   }
   function fmtC(c){
     const n=Number(c);
-    if(!Number.isFinite(n)) return '';
-    return n.toFixed(1);
+    return Number.isFinite(n) ? n.toFixed(1) : null;
   }
-  function time5(t){
-    return String(t||'').match(/(\d{1,2}:\d{2})/)?.[1] || '';
+  function getTimeKey(v){
+    return String(v||'').match(/(\d{1,2}:\d{2})/)?.[1] || '';
   }
-  async function forceWUCF(){
+  function collectWU(hist){
+    const byTime = {};
+    const all = [];
+    Object.values(hist?.wu_obs_rows || {}).forEach(list=>{
+      (Array.isArray(list)?list:[]).forEach(x=>{
+        const k = getTimeKey(x.saved_at || x.obs_time);
+        if(k){
+          byTime[k] = x;
+          all.push(x);
+        }
+      });
+    });
+    all.sort((a,b)=>String(a.saved_at||a.obs_time).localeCompare(String(b.saved_at||b.obs_time)));
+    return {byTime, all};
+  }
+  async function loadHist(){
     try{
       const r = await fetch('/api/history?date='+todayIST()+'&t='+Date.now(), {cache:'no-store'});
-      const hist = await r.json();
-
-      const byTime = {};
-      Object.values(hist.wu_obs_rows || {}).forEach(list=>{
-        (Array.isArray(list)?list:[]).forEach(x=>{
-          const k = time5(x.saved_at || x.obs_time);
-          if(k) byTime[k] = x;
-        });
-      });
-
-      // Patch every WU line on page.
-      document.querySelectorAll('td,div,span').forEach(el=>{
-        const txt = el.textContent || '';
-        if(!/WU\s+\d{1,2}:\d{2}/.test(txt)) return;
-        const tm = txt.match(/WU\s+(\d{1,2}:\d{2})/)?.[1];
-        const x = byTime[tm];
-        if(!x || x.temp_c == null) return;
-
-        const c = fmtC(x.temp_c);
-        const f = fmtF(x.temp_f, x.temp_c);
-        if(!c || !f) return;
-
-        // If already has F, update it cleanly.
-        let inner = el.innerHTML;
-        inner = inner.replace(/\s*<small[^>]*>\(\s*-?\d+(?:\.\d+)?°F\s*\)<\/small>/g, '');
-        inner = inner.replace(
-          /(-?\d+(?:\.\d+)?)°C/,
-          `${c}°C <small style="color:#8bb4d6">(${f}°F)</small>`
-        );
-        el.innerHTML = inner;
-      });
-
-      // Patch top/latest WU card too, if present.
-      const all=[];
-      Object.values(hist.wu_obs_rows || {}).forEach(list=>(Array.isArray(list)?list:[]).forEach(x=>all.push(x)));
-      all.sort((a,b)=>String(a.saved_at||a.obs_time).localeCompare(String(b.saved_at||b.obs_time)));
-      const latest = all[all.length-1];
-
-      if(latest && latest.temp_c != null){
-        document.querySelectorAll('.card,.panel,.box,section,div').forEach(card=>{
-          const text = card.textContent || '';
-          if(!/WU\s+OBS/i.test(text) || !/CURRENT\s+TEMP/i.test(text)) return;
-          const node = [...card.querySelectorAll('h1,h2,h3,b,div,span')]
-            .find(n => /-?\d+(?:\.\d+)?°C/.test(n.textContent||''));
-          if(node){
-            const c = fmtC(latest.temp_c);
-            const f = fmtF(latest.temp_f, latest.temp_c);
-            node.innerHTML = `${c}°C <small style="color:#8bb4d6">(${f}°F)</small>`;
-          }
-        });
-      }
+      lastHist = await r.json();
     }catch(e){
-      console.warn('WU C/F display final patch failed:', e.message);
+      console.warn('WU C/F history load failed:', e.message);
     }
   }
+  function patchNode(el, byTime){
+    if(!el || !el.textContent) return;
+    const txt = el.textContent;
+    if(!/WU\s+\d{1,2}:\d{2}/.test(txt) || !/°C/.test(txt)) return;
 
-  window.forceWUCF = forceWUCF;
+    const tm = txt.match(/WU\s+(\d{1,2}:\d{2})/)?.[1];
+    const x = byTime[tm];
+    if(!x || x.temp_c == null) return;
 
-  // Run after old table render has finished.
-  window.addEventListener('load',()=>setTimeout(forceWUCF,1500));
-  setInterval(forceWUCF,5000);
+    const c = fmtC(x.temp_c);
+    const f = fmtF(x.temp_f, x.temp_c);
+    if(!c || !f) return;
 
-  // Also patch after fetchAll if it exists and rerenders table.
+    let inner = el.innerHTML;
+
+    // If old patch added F but rerender changed C, normalize once.
+    inner = inner.replace(/\s*<small[^>]*>\(\s*-?\d+(?:\.\d+)?°F\s*\)<\/small>/g, '');
+
+    // Replace only the first temperature in this WU row.
+    if(/-?\d+(?:\.\d+)?°C/.test(inner)){
+      inner = inner.replace(
+        /-?\d+(?:\.\d+)?°C/,
+        `${c}°C <small style="color:#8bb4d6">(${f}°F)</small>`
+      );
+      if(el.innerHTML !== inner) el.innerHTML = inner;
+    }
+  }
+  function patchCards(all){
+    const latest = all[all.length-1];
+    if(!latest || latest.temp_c == null) return;
+    const c = fmtC(latest.temp_c);
+    const f = fmtF(latest.temp_f, latest.temp_c);
+    if(!c || !f) return;
+
+    document.querySelectorAll('.card,.panel,.box,section,div').forEach(card=>{
+      const text = card.textContent || '';
+      if(!/WU\s+OBS/i.test(text) || !/CURRENT\s+TEMP/i.test(text)) return;
+      const node = [...card.querySelectorAll('h1,h2,h3,b,div,span')]
+        .find(n => /-?\d+(?:\.\d+)?°C/.test(n.textContent||''));
+      if(node){
+        node.innerHTML = `${c}°C <small style="color:#8bb4d6">(${f}°F)</small>`;
+      }
+    });
+  }
+  function patchAll(){
+    if(patchRunning || !lastHist) return;
+    patchRunning = true;
+    try{
+      const {byTime, all} = collectWU(lastHist);
+      // Patch only visible table/row level nodes, not whole body, to avoid breaking listeners.
+      document.querySelectorAll('td, tr, .wu-row, div, span').forEach(el=>{
+        const text = el.textContent || '';
+        if(text.length < 160 && /WU\s+\d{1,2}:\d{2}/.test(text)) patchNode(el, byTime);
+      });
+      patchCards(all);
+    }catch(e){
+      console.warn('WU C/F permanent patch failed:', e.message);
+    }
+    patchRunning = false;
+  }
+  async function refreshAndPatch(){
+    await loadHist();
+    patchAll();
+  }
+  function startObserver(){
+    if(observerStarted) return;
+    observerStarted = true;
+    const obs = new MutationObserver(()=>{
+      clearTimeout(window.__wuCfMutationTimer);
+      window.__wuCfMutationTimer = setTimeout(patchAll, 120);
+    });
+    obs.observe(document.body, {childList:true, subtree:true, characterData:true});
+  }
+
+  window.forceWUCFPermanent = refreshAndPatch;
+
+  window.addEventListener('load',()=>{
+    setTimeout(async ()=>{
+      await refreshAndPatch();
+      startObserver();
+    }, 1200);
+  });
+
+  // After old fetchAll rerenders, patch again.
   const oldFetchAll = window.fetchAll || (typeof fetchAll !== 'undefined' ? fetchAll : null);
-  if(oldFetchAll && !window.__wuCfFetchPatched){
-    window.__wuCfFetchPatched = true;
+  if(oldFetchAll && !window.__wuCfPermanentFetchPatched){
+    window.__wuCfPermanentFetchPatched = true;
     window.fetchAll = async function(){
       const ret = await oldFetchAll.apply(this, arguments);
-      setTimeout(forceWUCF,300);
+      setTimeout(refreshAndPatch, 250);
       return ret;
     };
     try{ fetchAll = window.fetchAll; }catch(e){}
   }
+
+  setInterval(refreshAndPatch, 30000);
 })();
 </script>
 
