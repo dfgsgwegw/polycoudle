@@ -117,6 +117,19 @@ function tf(c,f,dec=1){const v=temp(c,f); if(!Number.isFinite(v))return '—'; r
 function cf(c,f){ if(c==null) return '—'; const fv=Number(f ?? cToF(c)); return `${Number(c).toFixed(1)}°C (${Number.isInteger(fv)?fv:fv.toFixed(1)}°F)`; }
 function timeHour(s){s=String(s||'');let m=s.match(/T(\d{1,2}):(\d{2})/)||s.match(/(\d{1,2}):(\d{2})/);return m?Number(m[1])+Number(m[2])/60:null}
 function fmtTime(h){let hh=Math.floor(h), mm=Math.round((h-hh)*60); if(mm===60){hh++;mm=0} const am=hh>=12?'p':'a'; let h12=hh%12||12; return `${h12}:${String(mm).padStart(2,'0')}${am}`;}
+function slotFromObsTime(t){
+  const h=timeHour(t);
+  if(!Number.isFinite(h)) return '';
+  let hh=Math.floor(h), mm=Math.round((h-hh)*60);
+  if(mm===0) return String(hh).padStart(2,'0')+':00';
+  if(mm<=30) return String(hh).padStart(2,'0')+':30';
+  hh=(hh+1)%24;
+  return String(hh).padStart(2,'0')+':00';
+}
+function rowSlot(x){
+  return x?.raw?.slot || slotFromObsTime(x?.raw?.obs_time || x?.raw?.saved_at || x?.hour);
+}
+
 function hourly(row){try{return JSON.parse(row?.hourly_json||'[]').map(x=>({hour:timeHour(x.time),c:Number(x.temp_c),f:Number(x.temp_f),phrase:x.phrase||''})).filter(x=>Number.isFinite(x.hour));}catch(e){return[]}}
 function flattenWU(hist){const out=[];Object.values(hist.wu_obs_rows||{}).forEach(list=>(Array.isArray(list)?list:[]).forEach(x=>{const h=timeHour(x.saved_at||x.obs_time);const y=temp(x.temp_c,x.temp_f);if(Number.isFinite(h)&&Number.isFinite(y))out.push({hour:h,y,c:Number(x.temp_c),f:Number(x.temp_f),raw:x,type:'WU'});}));return out.sort((a,b)=>a.hour-b.hour);}
 function flattenMetar(hist){return (hist.metar_rows||[]).map(m=>{const h=timeHour(m.slot||m.valid_ist);const y=temp(m.temp_c,cToF(m.temp_c));return{hour:h,y,c:Number(m.temp_c),f:cToF(m.temp_c),raw:m,type:'METAR'}}).filter(p=>Number.isFinite(p.hour)&&Number.isFinite(p.y)).sort((a,b)=>a.hour-b.hour);}
@@ -188,9 +201,9 @@ function renderChart(wu,metar,fc){
   state.points=[...map(wu),...map(metar),...map(fc.latest).map(p=>({...p,type:'Forecast'}))];
 }
 function renderTable(wu,metar){
-  const slots=[...new Set([...metar.map(m=>m.raw.slot),...wu.map(w=>w.raw.slot)].filter(Boolean))].sort();
+  const slots=[...new Set([...metar.map(m=>m.raw.slot||slotFromObsTime(m.raw.valid_ist)),...wu.map(w=>rowSlot(w))].filter(Boolean))].sort();
   const rows=slots.map(slot=>{
-    const m=metar.find(x=>x.raw.slot===slot), list=wu.filter(x=>x.raw.slot===slot);
+    const m=metar.find(x=>(x.raw.slot||slotFromObsTime(x.raw.valid_ist))===slot), list=wu.filter(x=>rowSlot(x)===slot);
     const wuhtml=list.map(x=>`<div class="wu">↳ WU ${x.raw.obs_time||fmtTime(x.hour)} &nbsp; ${cf(x.c,x.f)} · 💧${x.raw.humidity??'-'}% &nbsp; ${x.raw.condition||''}</div>`).join('');
     return `<tr><td>${slot}</td><td class="metar">${m?cf(m.c,m.f):'⏳ METAR'}</td><td>${wuhtml||'<span class="muted">– waiting for WU</span>'}</td><td>${m?.raw.dewpoint_c??'—'}°C</td><td>${m?.raw.wind_kph??'—'}km/h</td><td>${m?.raw.wx||'—'}</td><td>${m?.raw.nosig?'✅ YES':'—'}</td><td>${m?.raw.delta??'—'}</td></tr>`;
   }).join('');
