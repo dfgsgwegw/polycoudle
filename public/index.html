@@ -136,6 +136,15 @@
 }
 #tooltip .ttTitle{font-size:20px !important}
 
+
+/* ===== FORCE API-BACKED TOOLTIP FIX ===== */
+#tooltip{font-size:17px!important;line-height:1.5!important;min-width:340px!important;max-width:560px!important}
+#tooltip .ttTitle{font-size:20px!important;font-weight:1000;color:#00d4ff}
+#tooltip .ttLine{margin:4px 0}
+#tooltip .ttRaw{color:#ffb36c}
+#tooltip .ttMetar{color:#20f59a}
+#tooltip .ttFc{color:#dbeafe}
+
 </style></head><body>
 <div class="wrap">
   <div class="header"><div><h1>VILK <span class="cyan">Live Signal</span></h1><div class="sub">● UI refresh 30 sec · cron save 1 min · Lucknow Airport (VILK) · D1 archive</div></div><div><button class="btn" id="refreshBtn">↻ Refresh Now</button><div class="updated" id="updated">Updated --</div></div></div>
@@ -861,6 +870,116 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
   }
   window.addEventListener('load',bind);
   setInterval(bind,1000);
+})();
+</script>
+
+
+<script id="force-api-backed-tooltip-fix">
+(function(){
+  const $=id=>document.getElementById(id);
+  const N=v=>{const x=Number(v);return Number.isFinite(x)?x:null};
+  const cToF=c=>N(c)==null?null:N(c)*9/5+32;
+  const fToC=f=>N(f)==null?null:(N(f)-32)*5/9;
+  const fmt=v=>{const x=N(v);if(x==null)return '—';return x.toFixed(3).replace(/\.?0+$/,'')};
+  const todayIST=()=>new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});
+  function fmtAMPM(h){if(N(h)==null)return '—';let hh=Math.floor(h),mm=Math.round((h-hh)*60);if(mm===60){hh++;mm=0}const ap=hh>=12?'PM':'AM';return `${hh%12||12}:${String(mm).padStart(2,'0')} ${ap}`}
+  function parseHour(s){s=String(s||'').trim();let m=s.match(/T(\d{1,2}):(\d{2})/)||s.match(/\b(\d{1,2}):(\d{2})(?::\d{2})?\b/);if(!m)return null;let h=+m[1],mi=+m[2],lo=s.toLowerCase();if((lo.includes('pm')||/\bp\b/.test(lo))&&h<12)h+=12;if((lo.includes('am')||/\ba\b/.test(lo))&&h===12)h=0;return h+mi/60}
+  function unit(){try{if(window.state&&state.unit)return String(state.unit).toLowerCase().startsWith('f')?'f':'c';if(window.masterChart&&masterChart.unit)return String(masterChart.unit).toLowerCase().startsWith('f')?'f':'c';if(window.S&&S.unit)return String(S.unit).toLowerCase().startsWith('f')?'f':'c'}catch(e){}return document.querySelector('[data-u="f"].active,[data-unit="f"].active')?'f':'c'}
+  function chartInfo(){const c=$('chart');if(!c)return null;const r=c.getBoundingClientRect();return{c,r,W:c.width||1180,H:c.height||560,L:70,R:28,T:48,B:60}}
+  function axis(){if(!window.__axisState)window.__axisState={xMin:null,xMax:null,yMin:null,yMax:null};let ax=window.__axisState;let xMin=N($('xMinManual')?.value)??N(ax.xMin),xMax=N($('xMaxManual')?.value)??N(ax.xMax);let yMin=N($('yMinManual')?.value)??N(ax.yMin),yMax=N($('yMaxManual')?.value)??N(ax.yMax);if(!(xMin!=null&&xMax!=null&&xMax>xMin)){if(document.querySelector('[data-x="peak"].active,[data-xrange="peak"].active')){xMin=9;xMax=18}else{xMin=0;xMax=24}}if(!(yMin!=null&&yMax!=null&&yMax>yMin)){const pts=window.__tooltipPts||[];const vals=pts.map(p=>p.y).filter(v=>N(v)!=null);if(vals.length){yMin=Math.min(...vals)-1.5;yMax=Math.max(...vals)+1.5}else{yMin=unit()==='f'?70:20;yMax=unit()==='f'?105:42}}return{xMin,xMax,yMin,yMax}}
+  function yVal(c,f){return unit()==='f'?(N(f)??cToF(c)):(N(c)??fToC(f))}
+  async function loadTooltipData(){
+    const date=todayIST();let hist=null,snaps=null;
+    try{hist=await fetch('/api/history?date='+date+'&t='+Date.now(),{cache:'no-store'}).then(r=>r.json())}catch(e){hist=window.__goodHist||window.goodHist||(window.__lastMasterData&&window.__lastMasterData.hist)||{}}
+    try{snaps=await fetch('/api/forecast-snapshots?date='+date+'&t='+Date.now(),{cache:'no-store'}).then(r=>r.json())}catch(e){snaps=window.__goodSnaps||window.goodSnaps||(window.__lastMasterData&&window.__lastMasterData.snaps)||{rows:[]}}
+    const pts=[];
+    Object.values((hist&&hist.wu_obs_rows)||{}).forEach(list=>{
+      (Array.isArray(list)?list:[]).forEach(x=>{
+        const h=parseHour(x.saved_at||x.obs_time||x.fetched_at||x.slot);
+        const c=N(x.temp_c),f=N(x.temp_f),y=yVal(c,f);
+        if(h!=null&&y!=null)pts.push({type:'WU',h,y,c,f,raw:x});
+      });
+    });
+    ((hist&&hist.metar_rows)||[]).forEach(x=>{
+      const h=parseHour(x.slot||x.valid_ist||x.fetched_at);
+      const c=N(x.temp_c),f=cToF(c),y=unit()==='f'?f:c;
+      if(h!=null&&y!=null)pts.push({type:'METAR',h,y,c,f,raw:x});
+    });
+    const rows=((snaps&&snaps.rows)||[]).filter(r=>r.target_date===date||+r.horizon_days===0);
+    const latest=rows.at(-1);
+    try{
+      JSON.parse((latest&&latest.hourly_json)||'[]').forEach(x=>{
+        const h=parseHour(x.time);
+        const c=N(x.temp_c),f=N(x.temp_f),y=yVal(c,f);
+        if(h!=null&&y!=null)pts.push({type:'FORECAST',h,y,c,f,raw:x});
+      });
+    }catch(e){}
+    window.__tooltipPts=pts;window.__goodHist=hist;window.__goodSnaps=snaps;return pts;
+  }
+  function pxPoint(p,inf,ax){return{x:inf.L+(p.h-ax.xMin)/(ax.xMax-ax.xMin)*(inf.W-inf.L-inf.R),y:inf.T+(ax.yMax-p.y)/(ax.yMax-ax.yMin)*(inf.H-inf.T-inf.B)}}
+  function nearest(px,py){
+    const pts=window.__tooltipPts||[],inf=chartInfo(),ax=axis();if(!inf||!pts.length)return null;
+    let best=null,bd=Infinity;
+    const hoverH=ax.xMin+(px-inf.L)/(inf.W-inf.L-inf.R)*(ax.xMax-ax.xMin);
+    for(const p of pts){
+      if(p.h<ax.xMin-.25||p.h>ax.xMax+.25)continue;
+      const s=pxPoint(p,inf,ax);
+      const d=Math.hypot(s.x-px,s.y-py);
+      const score=d+Math.abs(p.h-hoverH)*22;
+      if(score<bd){bd=score;best=p}
+    }
+    return bd<160?best:null;
+  }
+  function htmlForPoint(p,hoverHour,hoverTemp){
+    const U=unit().toUpperCase();
+    let out=`<div class="ttTitle">${fmtAMPM(hoverHour)} · ${fmt(hoverTemp)}°${U}</div>`;
+    if(!p)return out+`<div class="ttLine">No source point loaded here yet.</div>`;
+    if(p.type==='WU'){
+      out+=`<div class="ttLine ttRaw"><b>WU observation</b></div>
+      <div class="ttLine">Nearest time: <b>${fmtAMPM(p.h)}</b></div>
+      <div class="ttLine">Raw Fahrenheit: <b>${fmt(p.f)}°F</b></div>
+      <div class="ttLine">Raw Celsius: <b>${fmt(p.c)}°C</b></div>
+      <div class="ttLine">Converted C from F: <b>${fmt(fToC(p.f))}°C</b></div>
+      <div class="ttLine">Converted F from C: <b>${fmt(cToF(p.c))}°F</b></div>
+      ${p.raw&&p.raw.humidity!=null?`<div class="ttLine">Humidity: <b>${p.raw.humidity}%</b></div>`:''}
+      ${p.raw&&p.raw.condition?`<div class="ttLine">Condition: <b>${p.raw.condition}</b></div>`:''}`;
+    }else if(p.type==='METAR'){
+      out+=`<div class="ttLine ttMetar"><b>METAR official</b></div>
+      <div class="ttLine">Nearest time: <b>${fmtAMPM(p.h)}</b></div>
+      <div class="ttLine">Raw Celsius: <b>${fmt(p.c)}°C</b></div>
+      <div class="ttLine">Converted Fahrenheit: <b>${fmt(p.f)}°F</b></div>`;
+    }else{
+      out+=`<div class="ttLine ttFc"><b>Latest forecast</b></div>
+      <div class="ttLine">Forecast time: <b>${fmtAMPM(p.h)}</b></div>
+      <div class="ttLine">Forecast: <b>${fmt(p.y)}°${U}</b></div>
+      <div class="ttLine">C/F: <b>${fmt(p.c)}°C / ${fmt(p.f)}°F</b></div>`;
+    }
+    return out;
+  }
+  async function show(e){
+    const inf=chartInfo(),tip=$('tooltip');if(!inf||!tip)return;
+    if(!window.__tooltipPts)await loadTooltipData();
+    const px=(e.clientX-inf.r.left)/inf.r.width*inf.W;
+    const py=(e.clientY-inf.r.top)/inf.r.height*inf.H;
+    if(px<inf.L||px>inf.W-inf.R||py<inf.T||py>inf.H-inf.B){tip.style.display='none';return}
+    const ax=axis();
+    const hour=ax.xMin+(px-inf.L)/(inf.W-inf.L-inf.R)*(ax.xMax-ax.xMin);
+    const temp=ax.yMax-(py-inf.T)/(inf.H-inf.T-inf.B)*(ax.yMax-ax.yMin);
+    const p=nearest(px,py);
+    tip.innerHTML=htmlForPoint(p,hour,temp);
+    tip.style.display='block';
+    let l=e.clientX+18,t=e.clientY+18;
+    if(l+560>innerWidth)l=e.clientX-580;if(t+300>innerHeight)t=e.clientY-320;
+    tip.style.left=Math.max(8,l)+'px';tip.style.top=Math.max(8,t)+'px';
+  }
+  function bind(){
+    const c=$('chart');if(!c||c.dataset.forceTooltipBound)return;
+    c.dataset.forceTooltipBound='1';
+    c.addEventListener('mousemove',show);
+    c.addEventListener('mouseleave',()=>{const t=$('tooltip');if(t)t.style.display='none'});
+  }
+  window.addEventListener('load',()=>{bind();loadTooltipData()});
+  setInterval(()=>{bind();loadTooltipData()},30000);
 })();
 </script>
 
