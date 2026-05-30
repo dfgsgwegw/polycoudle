@@ -580,6 +580,16 @@ td{
   color:#fecaca!important;
 }
 
+
+/* ===== HARD LAYER TOGGLE FIX ===== */
+.layerToggleNote{
+  color:#ffd433;
+  font-family:ui-monospace,Consolas,monospace;
+  font-size:13px;
+  line-height:1.5;
+  margin:8px 0;
+}
+
 </style></head><body>
 <div class="wrap">
   <div class="header"><div><h1>VILK <span class="cyan">Live Signal</span></h1><div class="sub">● UI refresh 30 sec · cron save 1 min · Lucknow Airport (VILK) · D1 archive</div></div><div><button class="btn" id="refreshBtn">↻ Refresh Now</button><div class="updated" id="updated">Updated --</div></div></div>
@@ -645,6 +655,7 @@ td{
 </div>
 
 <div class="axisZoomHint" id="axisZoomHint">Axis zoom: mouse wheel on Y-axis labels = temp/Y zoom only. Mouse wheel on X-axis labels = time/X zoom only. Wheel inside chart = X+Y zoom. Raw = solid red/green, Converted = dashed orange/light-green.</div>
+<div class="layerToggleNote" id="layerToggleNote">Layer toggles fixed: if Forecast/Bias/95%/Analog are unchecked, their canvas overlays are hidden on redraw.</div>
 <div class="chartScroll"><canvas id="chart" width="1180" height="560"></canvas></div>
     <div class="legend"><span><i class="dot" style="background:#ef4444"></i>WU observed</span><span><i class="dot" style="background:#10b981"></i>METAR official</span><span><i class="dot" style="background:#111827"></i>latest WU forecast</span><span><i class="dot" style="background:#60a5fa"></i>older forecast runs</span><span><i class="dot" style="background:#111827;border-top:2px dotted #111827"></i>bias corrected forecast</span><span><i class="dot" style="background:#a855f7"></i>historical 95% ceiling</span><span><i class="dot" style="background:#7f1d1d"></i>99% extreme</span><span><i class="dot" style="background:#6b7280"></i>closest analog day</span></div>
     <div id="curveSummary" class="summary">Loading curve...</div>
@@ -1422,6 +1433,184 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
   }
   window.addEventListener('load',()=>setTimeout(run,900));
   setInterval(run,120000);
+})();
+</script>
+
+
+<script id="hard-layer-toggle-fix">
+(function(){
+  const $=id=>document.getElementById(id);
+
+  function txt(el){return (el && (el.textContent||el.value||'')).trim().toLowerCase();}
+  function findControls(){
+    const all=[...document.querySelectorAll('button,label,input')];
+    function byText(words){
+      return all.find(el=>{
+        const t=txt(el);
+        return words.every(w=>t.includes(w));
+      });
+    }
+    function checkedFor(el, def=true){
+      if(!el) return def;
+      if(el.tagName==='INPUT') return el.checked;
+      const inp=el.querySelector && el.querySelector('input[type="checkbox"]');
+      if(inp) return inp.checked;
+      if(el.classList && el.classList.contains('active')) return true;
+      if(el.getAttribute && el.getAttribute('aria-pressed')==='true') return true;
+      // pill buttons usually active when cyan / active class; if no active state found, use def
+      return def;
+    }
+    return {
+      forecast: checkedFor(byText(['forecast']), true),
+      bias: checkedFor(byText(['bias']), true),
+      ceiling: checkedFor(byText(['95']), true),
+      extreme: checkedFor(byText(['99']), false),
+      analog: checkedFor(byText(['analog']), true),
+      peakWindow: checkedFor(byText(['peak','window']), true),
+      wu: checkedFor(byText(['wu']), true),
+      metar: checkedFor(byText(['metar']), true)
+    };
+  }
+
+  function hideByRedrawRules(){
+    window.__layerToggles = findControls();
+  }
+
+  // Patch canvas drawing functions at context level:
+  // If a disabled overlay tries to draw after main render, make it transparent/no-op by detecting strokeStyle colors.
+  function patchCanvasContext(){
+    const c=$('chart');
+    if(!c || c.dataset.hardLayerToggleCtx) return;
+    c.dataset.hardLayerToggleCtx='1';
+    const ctx=c.getContext('2d');
+    if(!ctx || ctx.__layerTogglePatched) return;
+    ctx.__layerTogglePatched=true;
+
+    const origStroke=ctx.stroke.bind(ctx);
+    const origFill=ctx.fill.bind(ctx);
+    const origFillText=ctx.fillText.bind(ctx);
+    const origStrokeText=ctx.strokeText ? ctx.strokeText.bind(ctx) : null;
+
+    function styleString(v){return String(v||'').toLowerCase();}
+    function shouldSkip(){
+      const st=styleString(ctx.strokeStyle)+' '+styleString(ctx.fillStyle);
+      const L=window.__layerToggles || findControls();
+
+      // common layer colors:
+      const isOldForecast = st.includes('60a5fa') || st.includes('147,197,253') || st.includes('93,173,226') || st.includes('lightblue');
+      const isLatestForecast = st.includes('111827') || st.includes('0,0,0') || st.includes('black') || st.includes('17,24,39');
+      const isBias = st.includes('06b6d4') || st.includes('cyan') || st.includes('14,165,233');
+      const isCeiling = st.includes('a855f7') || st.includes('purple') || st.includes('168,85,247');
+      const isExtreme = st.includes('991b1b') || st.includes('red') || st.includes('153,27,27');
+      const isAnalog = st.includes('94a3b8') || st.includes('grey') || st.includes('gray') || st.includes('148,163,184');
+
+      if(!L.forecast && (isOldForecast || isLatestForecast)) return true;
+      if(!L.bias && isBias) return true;
+      if(!L.ceiling && isCeiling) return true;
+      if(!L.extreme && isExtreme) return true;
+      if(!L.analog && isAnalog) return true;
+      return false;
+    }
+
+    ctx.stroke=function(){ if(shouldSkip()) return; return origStroke(); };
+    ctx.fill=function(){ if(shouldSkip()) return; return origFill(); };
+    ctx.fillText=function(text,x,y,maxWidth){
+      const s=String(text||'').toLowerCase();
+      const L=window.__layerToggles || findControls();
+      if(!L.forecast && s.includes('forecast')) return;
+      if(!L.bias && s.includes('bias')) return;
+      if(!L.ceiling && (s.includes('ceiling')||s.includes('historical'))) return;
+      if(!L.analog && s.includes('analog')) return;
+      return origFillText(text,x,y,maxWidth);
+    };
+    if(origStrokeText){
+      ctx.strokeText=function(text,x,y,maxWidth){
+        const s=String(text||'').toLowerCase();
+        const L=window.__layerToggles || findControls();
+        if(!L.forecast && s.includes('forecast')) return;
+        if(!L.bias && s.includes('bias')) return;
+        if(!L.ceiling && (s.includes('ceiling')||s.includes('historical'))) return;
+        if(!L.analog && s.includes('analog')) return;
+        return origStrokeText(text,x,y,maxWidth);
+      };
+    }
+  }
+
+  // Stronger fix: before rendering, if forecast controls off, temporarily empty forecast rows in known global data.
+  function patchRender(){
+    ['masterRender','renderAll','render','loadAll','fetchAll'].forEach(name=>{
+      try{
+        const fn=window[name];
+        if(typeof fn==='function' && !fn.__hardLayerToggleWrapped){
+          const wrapped=function(){
+            hideByRedrawRules();
+            patchCanvasContext();
+
+            const L=window.__layerToggles || {};
+            let backups=[];
+            try{
+              const roots=[window.S && window.S.data, window.__goodHist, window.goodHist, window.__lastMasterData && window.__lastMasterData.hist].filter(Boolean);
+              for(const root of roots){
+                if(!L.forecast && root.forecast_snapshot_rows){
+                  backups.push([root,'forecast_snapshot_rows',root.forecast_snapshot_rows]);
+                  root.forecast_snapshot_rows=[];
+                }
+                if(!L.forecast && root.forecast_rows){
+                  backups.push([root,'forecast_rows',root.forecast_rows]);
+                  root.forecast_rows=[];
+                }
+                if(!L.metar && root.metar_rows){
+                  backups.push([root,'metar_rows',root.metar_rows]);
+                  root.metar_rows=[];
+                }
+                if(!L.wu && root.wu_obs_rows){
+                  backups.push([root,'wu_obs_rows',root.wu_obs_rows]);
+                  root.wu_obs_rows={};
+                }
+              }
+            }catch(e){}
+
+            let result;
+            try{ result=fn.apply(this, arguments); }
+            finally{
+              setTimeout(()=>{ for(const [obj,key,val] of backups) obj[key]=val; },0);
+            }
+            return result;
+          };
+          wrapped.__hardLayerToggleWrapped=true;
+          window[name]=wrapped;
+        }
+      }catch(e){}
+    });
+  }
+
+  function bindControls(){
+    document.querySelectorAll('button,label,input').forEach(el=>{
+      if(el.dataset.layerToggleBound) return;
+      const t=txt(el);
+      if(['forecast','bias','95','99','analog','peak window','wu','metar'].some(w=>t.includes(w))){
+        el.dataset.layerToggleBound='1';
+        el.addEventListener('click',()=>setTimeout(()=>{
+          hideByRedrawRules();
+          try{
+            if(typeof window.masterRender==='function') window.masterRender();
+            else if(typeof window.renderAll==='function') window.renderAll();
+            else if(typeof window.render==='function') window.render();
+          }catch(e){}
+        },80));
+      }
+    });
+  }
+
+  function init(){
+    hideByRedrawRules();
+    patchCanvasContext();
+    patchRender();
+    bindControls();
+  }
+
+  window.addEventListener('load',()=>setTimeout(init,500));
+  setInterval(init,1200);
 })();
 </script>
 
