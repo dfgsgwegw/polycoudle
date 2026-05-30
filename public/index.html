@@ -714,11 +714,11 @@ td{
 <section class="card" id="threeDayHighForecastSection">
   <h2 style="margin-top:0;letter-spacing:4px;color:#a9d8ff">🔥 POLYMARKET HIGH — TODAY + NEXT 3 DAYS</h2>
   <div class="note">
-    Source logic: Today uses WU obs current + peak_since_7am. D+1, D+2, D+3 use WU daily 5day forecast temperatureMax. Cards update when new saved value changes.
+    Source logic: Today current uses WU obs, Today high uses WU daily 5day temperatureMax. D+1, D+2, D+3 use WU daily 5day forecast temperatureMax. Cards update when new saved value changes.
   </div>
   <div class="highForecastGrid">
     <div class="highForecastCard">
-      <h3>TODAY OBS HIGH</h3>
+      <h3>TODAY FORECAST HIGH</h3>
       <div class="highForecastValue" id="hfToday">—</div>
       <div class="highForecastMeta" id="hfTodayMeta">Loading...</div>
       <div class="highForecastBin" id="hfTodayBin">Bin —</div>
@@ -1471,7 +1471,7 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
     }
     v.textContent=fmt(item.high_c)+'°C';
     if(type==='today'){
-      m.innerHTML=`${pretty(item.date)}<br>Current WU: <b>${fmt3(item.current_c)}°C / ${fmt(item.current_f)}°F</b><br>Peak since 7am: <b>${fmt3(item.high_c)}°C / ${fmt(item.high_f)}°F</b><br>Obs count: ${item.obs_count||0} · latest ${item.latest_obs_time||'—'}<br><span class="sourceBadge">Source: WU obs current + peak_since_7am</span>`;
+      m.innerHTML=`${pretty(item.date)}<br>Current WU obs: <b>${fmt3(item.current_c)}°C / ${fmt(item.current_f)}°F</b><br>Forecast peak temperatureMax: <b>${fmt3(item.high_c)}°C / ${fmt(item.high_f)}°F</b><br>Obs peak since 7am: ${fmt3(item.obs_peak_c)}°C at ${item.obs_peak_time||'—'}<br>Issue: ${item.issue_time||'—'} · obs ${item.obs_count||0}<br><span class="sourceBadge">Source: WU obs current + WU daily 5day temperatureMax</span>`;
     }else{
       m.innerHTML=`${pretty(item.date)}<br>temperatureMax: <b>${fmt3(item.high_c)}°C / ${fmt(item.high_f)}°F</b><br>Issue: ${item.issue_time||'—'} · rows ${item.forecast_rows_checked||0}<br><span class="sourceBadge forecast">Source: WU daily 5day temperatureMax</span>`;
     }
@@ -1487,13 +1487,13 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
     const today=j.days[d0];
     if(today){
       if($('fhLatest')) $('fhLatest').textContent=fmt(today.high_c)+'°C';
-      if($('fhLatestSub')) $('fhLatestSub').innerHTML='WU obs peak_since_7am<br>latest obs '+(today.latest_obs_time||'—');
+      if($('fhLatestSub')) $('fhLatestSub').innerHTML='WU daily forecast temperatureMax<br>latest obs '+(today.latest_obs_time||'—');
       if($('fhFirst')) $('fhFirst').textContent=fmt(today.current_c)+'°C';
       if($('fhFirstSub')) $('fhFirstSub').innerHTML='current WU obs now';
       if($('fhChange')) $('fhChange').textContent=today.high_c!=null&&today.current_c!=null?((today.current_c-today.high_c)>=0?'+':'')+fmt(today.current_c-today.high_c)+'°C':'—';
-      if($('fhChangeSub')) $('fhChangeSub').textContent='current minus today peak';
+      if($('fhChangeSub')) $('fhChangeSub').textContent='current obs minus forecast high';
       if($('fhBin')) $('fhBin').textContent=today.market_bin!=null?today.market_bin+'°C':'—';
-      if($('fhBinSub')) $('fhBinSub').textContent='market bin from today WU obs peak';
+      if($('fhBinSub')) $('fhBinSub').textContent='market bin from today forecast high';
     }
   }
   async function run(){ const j=await loadHighs(); renderHighs(j); }
