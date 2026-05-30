@@ -317,15 +317,20 @@ async function polymarketDailyHighs(env, day){
 }
 
 
+
+
+
+
 async function polymarketDailyAndHourlyHighsFinal(env, day){
   const d0=day, d1=addDaysIST(day,1), d2=addDaysIST(day,2), d3=addDaysIST(day,3);
+  const targets=[d0,d1,d2,d3];
 
   const wuRows=await env.DB.prepare('SELECT * FROM wu_obs WHERE obs_date=? ORDER BY obs_time ASC, created_at ASC LIMIT 3000').bind(d0).all();
-  const fcRows=await env.DB.prepare('SELECT * FROM forecast WHERE forecast_date=? ORDER BY created_at ASC LIMIT 1500').bind(d0).all();
+  const fcRows=await env.DB.prepare('SELECT * FROM forecast WHERE forecast_date=? ORDER BY created_at ASC LIMIT 2000').bind(d0).all();
 
   let fsRows={results:[]};
   try{
-    fsRows=await env.DB.prepare('SELECT * FROM forecast_snapshots WHERE forecast_date=? AND target_date IN (?,?,?,?) ORDER BY target_date, fetch_time_ist ASC LIMIT 3000').bind(d0,d0,d1,d2,d3).all();
+    fsRows=await env.DB.prepare('SELECT * FROM forecast_snapshots WHERE forecast_date=? AND target_date IN (?,?,?,?) ORDER BY target_date, fetch_time_ist ASC LIMIT 4000').bind(d0,d0,d1,d2,d3).all();
   }catch(e){}
 
   const wu=(wuRows.results||[]);
@@ -340,11 +345,11 @@ async function polymarketDailyAndHourlyHighsFinal(env, day){
   for(const r of wu){
     const pc=n(r.peak_since_7am_c), pf=n(r.peak_since_7am_f);
     const tc=n(r.temp_c), tf=n(r.temp_f);
-    const candidateC=pc!=null?pc:tc;
-    const candidateF=pf!=null?pf:tf;
-    if(candidateC!=null && (obsPeakC==null || candidateC>obsPeakC)){
-      obsPeakC=candidateC;
-      obsPeakF=candidateF!=null?candidateF:cToF(candidateC);
+    const c=pc!=null?pc:tc;
+    const f=pf!=null?pf:tf;
+    if(c!=null && (obsPeakC==null || c>obsPeakC)){
+      obsPeakC=c;
+      obsPeakF=f!=null?f:cToF(c);
       obsPeakTime=r.obs_time||r.fetched_at||null;
     }
   }
@@ -354,25 +359,39 @@ async function polymarketDailyAndHourlyHighsFinal(env, day){
     if(typeof x==='object') return x;
     try{return JSON.parse(String(x));}catch(e){return null;}
   }
-
   function getAny(obj, keys){
-    for(const k of keys){
-      if(obj && obj[k]!=null) return obj[k];
-    }
+    for(const k of keys){ if(obj && obj[k]!=null) return obj[k]; }
     return null;
   }
 
-  function dailyVal(row, idx){
+  function dailyVal(row, idx, targetDate){
     if(!row) return null;
     const rawC=n(row[idx+'_c']);
     const rawF=n(row[idx+'_f']);
     if(rawC==null && rawF==null) return null;
     const cFromF=rawF!=null?fToC(rawF):null;
     const fFromC=rawC!=null?cToF(rawC):null;
-    const mainC=rawF!=null?cFromF:rawC; // match WU Fahrenheit display
+    const mainC=rawF!=null?cFromF:rawC;
     const mainF=rawF!=null?rawF:fFromC;
-    return {c:mainC,f:mainF,raw_c:rawC,raw_f:rawF,converted_c_from_f:cFromF,converted_f_from_c:fFromC,display_source:rawF!=null?'WU_RAW_F_CONVERTED_TO_C':'WU_RAW_C_FALLBACK',issue_time:row.issue_time||row.fetched_at||null,fetched_at:row.fetched_at||null,created_at:row.created_at||null};
+    return {
+      target_date:targetDate,
+      c:mainC, f:mainF,
+      raw_c:rawC, raw_f:rawF,
+      converted_c_from_f:cFromF,
+      converted_f_from_c:fFromC,
+      display_source:rawF!=null?'WU_RAW_F_CONVERTED_TO_C':'WU_RAW_C_FALLBACK',
+      issue_time:row.issue_time||row.fetched_at||null,
+      fetched_at:row.fetched_at||null,
+      created_at:row.created_at||null,
+      source:'DB forecast daily'
+    };
   }
+
+  const dailyIdxByDate={};
+  dailyIdxByDate[d0]='today';
+  dailyIdxByDate[d1]='tmr';
+  dailyIdxByDate[d2]='d2';
+  dailyIdxByDate[d3]='d3';
 
   function pointsFromHourlyObject(obj, targetDate){
     const o=parseJsonMaybe(obj);
@@ -385,50 +404,47 @@ async function polymarketDailyAndHourlyHighsFinal(env, day){
       const f=n(rawF), c0=n(rawC);
       const c=f!=null?fToC(f):c0;
       const ff=f!=null?f:(c0!=null?cToF(c0):null);
-      if(c!=null) out.push({time:t,temp_c:c,temp_f:ff,phrase:phrase||null});
+      if(c!=null) out.push({time:t,temp_c:c,temp_f:ff,phrase:phrase||null,target_date:targetDate});
     }
 
     const times=o.validTimeLocal||o.fcstValidLocal||o.valid_time_local||o.time||[];
     const tempsF=o.temperature||o.temperatureF||o.temp||[];
     const tempsC=o.temperatureC||o.metric?.temperature||[];
     const phrases=o.wxPhraseLong||o.wxPhraseShort||o.phrase||[];
+
     if(Array.isArray(times)){
       for(let i=0;i<times.length;i++){
         pushPoint(times[i], Array.isArray(tempsF)?tempsF[i]:null, Array.isArray(tempsC)?tempsC[i]:null, Array.isArray(phrases)?phrases[i]:null);
       }
     }
 
-    const arrs=[
-      o.hourly,
-      o.data?.hourly,
-      o.forecasts,
-      o.data,
-    ].filter(Array.isArray);
+    const arrs=[o.hourly,o.data?.hourly,o.forecasts,Array.isArray(o.data)?o.data:null].filter(Array.isArray);
     for(const arr of arrs){
       for(const x of arr){
-        const time=getAny(x,['validTimeLocal','fcstValidLocal','valid_time_local','time','date']);
-        const rawF=getAny(x,['temperature','temperatureF','temp']);
-        const rawC=getAny(x,['temperatureC']);
-        const phrase=getAny(x,['wxPhraseLong','wxPhraseShort','phrase','condition']);
-        pushPoint(time, rawF, rawC, phrase);
+        pushPoint(
+          getAny(x,['validTimeLocal','fcstValidLocal','valid_time_local','time','date']),
+          getAny(x,['temperature','temperatureF','temp']),
+          getAny(x,['temperatureC']),
+          getAny(x,['wxPhraseLong','wxPhraseShort','phrase','condition'])
+        );
       }
     }
     return out;
   }
 
-  function bestPoint(points){
+  function bestHourly(points){
     let best=null;
     for(const p of points){
       const c=n(p.temp_c), f=n(p.temp_f);
       if(c!=null && (!best || c>best.c)){
-        best={c,f:f!=null?f:cToF(c),time:p.time||null,phrase:p.phrase||null};
+        best={target_date:p.target_date,c,f:f!=null?f:cToF(c),time:p.time||null,phrase:p.phrase||null};
       }
     }
     if(!best) return null;
     return {...best,count:points.length};
   }
 
-  async function directHourly(){
+  async function fetchDirectHourly(){
     const WU_KEY=env.WU_KEY||env.WEATHER_API_KEY||'e1f10a1e78da46f5b10a1e78da96f525';
     const ICAO=env.WU_ICAO||'VILK';
     const IATA=env.WU_IATA||'LKO';
@@ -450,50 +466,16 @@ async function polymarketDailyAndHourlyHighsFinal(env, day){
     return {obj,used,error};
   }
 
-  const direct=await directHourly();
+  const direct=await fetchDirectHourly();
 
-  function hourlyHistory(targetDate){
-    const vals=[];
-
-    for(const row of fs.filter(r=>r.target_date===targetDate)){
-      const arr=parseJsonMaybe(row.hourly_json);
-      const b=bestPoint(Array.isArray(arr)?arr:[]);
-      if(b) vals.push({...b,source:'DB forecast_snapshots.hourly_json',issue_time:row.forecast_issue_time_ist||row.fetch_time_ist||null,fetch_time_ist:row.fetch_time_ist||null});
-    }
-
-    for(const row of fc){
-      let pts=[];
-      pts=pts.concat(pointsFromHourlyObject(row.raw_hourly,targetDate));
-      const rawJson=parseJsonMaybe(row.raw_json);
-      if(rawJson) pts=pts.concat(pointsFromHourlyObject(rawJson.raw_hourly||rawJson.hourly||rawJson,targetDate));
-      pts=pts.concat(pointsFromHourlyObject(row.raw,targetDate));
-      const b=bestPoint(pts);
-      if(b) vals.push({...b,source:'DB forecast.raw_hourly/raw_json',issue_time:row.issue_time||row.fetched_at||null,fetch_time_ist:row.fetched_at||row.created_at||null});
-    }
-
-    if(direct.obj){
-      const pts=pointsFromHourlyObject(direct.obj,targetDate);
-      const b=bestPoint(pts);
-      if(b) vals.push({...b,source:'DIRECT Weather.com hourly API',issue_time:forecastIssueTime({hourly:direct.obj}),fetch_time_ist:timeIST()});
-    }
-
-    return historyStats(vals);
-  }
-
-  function dailyHistory(idx){
-    const vals=[];
-    for(const row of fc){
-      const v=dailyVal(row,idx);
-      if(v && v.c!=null) vals.push(v);
-    }
-    return historyStats(vals);
-  }
-
-  function historyStats(vals){
+  function stats(vals){
+    const clean=vals.filter(v=>v && v.c!=null);
     const unique=[];
-    for(const v of vals){
+    for(const v of clean){
       const last=unique.at(-1);
-      if(!last || Math.abs((last.c??-999)-(v.c??-999))>0.001 || String(last.source)!==String(v.source) || String(last.fetch_time_ist||last.fetched_at||'')!==String(v.fetch_time_ist||v.fetched_at||'')){
+      const keyTime=String(v.fetch_time_ist||v.fetched_at||v.issue_time||v.created_at||'');
+      const lastTime=last?String(last.fetch_time_ist||last.fetched_at||last.issue_time||last.created_at||''):'';
+      if(!last || Math.abs(last.c-v.c)>0.001 || keyTime!==lastTime || String(v.source)!==String(last.source)){
         unique.push(v);
       }
     }
@@ -501,7 +483,6 @@ async function polymarketDailyAndHourlyHighsFinal(env, day){
     const previous=unique.length>=2?unique.at(-2):null;
     let highest=null, lowest=null;
     for(const v of unique){
-      if(v.c==null) continue;
       if(!highest || v.c>highest.c) highest=v;
       if(!lowest || v.c<lowest.c) lowest=v;
     }
@@ -512,61 +493,135 @@ async function polymarketDailyAndHourlyHighsFinal(env, day){
     return {latest,previous,highest,lowest,count:unique.length,change_from_previous_c:change,drop_from_highest_c:drop,trend};
   }
 
-  function makeDay(date,label,dh,hh){
+  function dailyHistory(targetDate){
+    const idx=dailyIdxByDate[targetDate];
+    const vals=[];
+    for(const row of fc){
+      const v=dailyVal(row,idx,targetDate);
+      if(v) vals.push(v);
+    }
+    return stats(vals);
+  }
+
+  function hourlyHistory(targetDate){
+    const vals=[];
+
+    for(const row of fs.filter(r=>r.target_date===targetDate)){
+      const arr=parseJsonMaybe(row.hourly_json);
+      if(Array.isArray(arr)){
+        const pts=arr.map(x=>({
+          target_date:targetDate,
+          temp_c:n(x.temp_c),
+          temp_f:n(x.temp_f),
+          time:x.time||x.validTimeLocal||x.fcstValidLocal||null,
+          phrase:x.phrase||x.wxPhraseLong||null
+        }));
+        const b=bestHourly(pts);
+        if(b) vals.push({...b,source:'DB forecast_snapshots.hourly_json',issue_time:row.forecast_issue_time_ist||row.fetch_time_ist||null,fetch_time_ist:row.fetch_time_ist||null});
+      }
+    }
+
+    for(const row of fc){
+      let pts=[];
+      pts=pts.concat(pointsFromHourlyObject(row.raw_hourly,targetDate));
+      const rawJson=parseJsonMaybe(row.raw_json);
+      if(rawJson) pts=pts.concat(pointsFromHourlyObject(rawJson.raw_hourly||rawJson.hourly||rawJson,targetDate));
+      pts=pts.concat(pointsFromHourlyObject(row.raw,targetDate));
+      const b=bestHourly(pts);
+      if(b) vals.push({...b,source:'DB forecast.raw_hourly/raw_json',issue_time:row.issue_time||row.fetched_at||null,fetch_time_ist:row.fetched_at||row.created_at||null});
+    }
+
+    if(direct.obj){
+      const pts=pointsFromHourlyObject(direct.obj,targetDate);
+      const b=bestHourly(pts);
+      if(b) vals.push({...b,source:'DIRECT Weather.com hourly API',issue_time:forecastIssueTime({hourly:direct.obj}),fetch_time_ist:timeIST()});
+    }
+    return stats(vals);
+  }
+
+  function makeDay(targetDate,label){
+    const dh=dailyHistory(targetDate);
+    const hh=hourlyHistory(targetDate);
     const d=dh.latest, h=hh.latest;
     const diffC=(d&&h)?+(d.c-h.c).toFixed(3):null;
     const diffF=(d&&h)?+(d.f-h.f).toFixed(3):null;
+
     return {
-      date,label,
+      date:targetDate,label,
       source:'WU daily temperatureMax + WU hourly max',
       high_c:d?d.c:null, high_f:d?d.f:null,
       raw_c:d?d.raw_c:null, raw_f:d?d.raw_f:null,
-      converted_c_from_f:d?d.converted_c_from_f:null, converted_f_from_c:d?d.converted_f_from_c:null,
+      converted_c_from_f:d?d.converted_c_from_f:null,
+      converted_f_from_c:d?d.converted_f_from_c:null,
       display_source:d?d.display_source:null,
+
       hourly_high_c:h?h.c:null, hourly_high_f:h?h.f:null,
-      hourly_peak_time:h?h.time:null, hourly_points:h?h.count:null,
+      hourly_peak_time:h?h.time:null,
+      hourly_points:h?h.count:null,
       hourly_source:h?h.source:null,
       hourly_issue_time:h?h.issue_time:null,
-      daily_minus_hourly_c:diffC, daily_minus_hourly_f:diffF,
+
+      daily_minus_hourly_c:diffC,
+      daily_minus_hourly_f:diffF,
       daily_market_bin:d&&d.c!=null?Math.round(d.c):null,
       hourly_market_bin:h&&h.c!=null?Math.round(h.c):null,
-      previous_c:dh.previous?dh.previous.c:null, previous_f:dh.previous?dh.previous.f:null,
-      highest_seen_c:dh.highest?dh.highest.c:null, highest_seen_f:dh.highest?dh.highest.f:null,
-      lowest_seen_c:dh.lowest?dh.lowest.c:null, lowest_seen_f:dh.lowest?dh.lowest.f:null,
-      change_from_previous_c:dh.change_from_previous_c,
-      drop_from_highest_c:dh.drop_from_highest_c,
-      trend:dh.trend,
-      issue_time:d?(d.issue_time||d.fetched_at||null):null,
-      forecast_rows_checked:dh.count,
-      hourly_rows_checked:hh.count
+
+      daily_previous_c:dh.previous?dh.previous.c:null,
+      daily_previous_f:dh.previous?dh.previous.f:null,
+      daily_highest_seen_c:dh.highest?dh.highest.c:null,
+      daily_highest_seen_f:dh.highest?dh.highest.f:null,
+      daily_lowest_seen_c:dh.lowest?dh.lowest.c:null,
+      daily_lowest_seen_f:dh.lowest?dh.lowest.f:null,
+      daily_change_from_previous_c:dh.change_from_previous_c,
+      daily_drop_from_highest_c:dh.drop_from_highest_c,
+      daily_trend:dh.trend,
+      daily_count:dh.count,
+
+      hourly_previous_c:hh.previous?hh.previous.c:null,
+      hourly_previous_f:hh.previous?hh.previous.f:null,
+      hourly_highest_seen_c:hh.highest?hh.highest.c:null,
+      hourly_highest_seen_f:hh.highest?hh.highest.f:null,
+      hourly_lowest_seen_c:hh.lowest?hh.lowest.c:null,
+      hourly_lowest_seen_f:hh.lowest?hh.lowest.f:null,
+      hourly_change_from_previous_c:hh.change_from_previous_c,
+      hourly_drop_from_highest_c:hh.drop_from_highest_c,
+      hourly_trend:hh.trend,
+      hourly_count:hh.count,
+
+      issue_time:d?(d.issue_time||d.fetched_at||null):null
     };
   }
-
-  const dh0=dailyHistory('today'), dh1=dailyHistory('tmr'), dh2=dailyHistory('d2'), dh3=dailyHistory('d3');
-  const hh0=hourlyHistory(d0), hh1=hourlyHistory(d1), hh2=hourlyHistory(d2), hh3=hourlyHistory(d3);
 
   const out={
     ok:true,
     base_date:d0,
-    note:'FINAL FIX ACTIVE: daily max + hourly max. Hourly max direct-fetches Weather.com hourly API if DB has no hourly snapshots.',
+    note:'FINAL STRICT FIX ACTIVE: Today uses WU obs peak/current; D+ cards show daily + direct hourly, strict per card date, no cross-date mixing.',
     updated_at:timeIST(),
     debug_counts:{wu_rows:wu.length,forecast_rows:fc.length,snapshot_rows:fs.length,direct_hourly_ok:!!direct.obj,direct_hourly_url:direct.used,direct_hourly_error:direct.error},
     days:{}
   };
 
-  out.days[d0]=makeDay(d0,'TODAY',dh0,hh0);
+  out.days[d0]=makeDay(d0,'TODAY');
   out.days[d0]={...out.days[d0],
-    source:'WU obs current + WU daily temperatureMax + WU hourly max',
-    current_c:currentRawC,current_f:currentRawF,
+    source:'WU obs current/peak + WU daily + WU hourly',
+    current_c:currentRawC,
+    current_f:currentRawF,
     current_converted_c_from_f:currentRawF!=null?fToC(currentRawF):null,
     current_converted_f_from_c:currentRawC!=null?cToF(currentRawC):null,
-    obs_peak_c:obsPeakC,obs_peak_f:obsPeakF,obs_peak_time:obsPeakTime,
-    diff_forecast_high_minus_current_c:(currentRawC!=null&&out.days[d0].high_c!=null)?+(out.days[d0].high_c-currentRawC).toFixed(3):null,
-    obs_count:wu.length,latest_obs_time:latestWu?(latestWu.obs_time||latestWu.fetched_at||null):null
+    obs_peak_c:obsPeakC,
+    obs_peak_f:obsPeakF,
+    obs_peak_time:obsPeakTime,
+    today_main_c:obsPeakC!=null?obsPeakC:currentRawC,
+    today_main_f:obsPeakF!=null?obsPeakF:currentRawF,
+    today_main_source:'WU obs peak/current',
+    diff_daily_forecast_minus_current_c:(currentRawC!=null&&out.days[d0].high_c!=null)?+(out.days[d0].high_c-currentRawC).toFixed(3):null,
+    obs_count:wu.length,
+    latest_obs_time:latestWu?(latestWu.obs_time||latestWu.fetched_at||null):null
   };
-  out.days[d1]=makeDay(d1,'D+1',dh1,hh1);
-  out.days[d2]=makeDay(d2,'D+2',dh2,hh2);
-  out.days[d3]=makeDay(d3,'D+3',dh3,hh3);
+  out.days[d1]=makeDay(d1,'D+1');
+  out.days[d2]=makeDay(d2,'D+2');
+  out.days[d3]=makeDay(d3,'D+3');
+
   return out;
 }
 
