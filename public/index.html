@@ -591,38 +591,20 @@ td{
 }
 
 
-/* ===== CLEAN STABLE READABLE BUILD ===== */
-.wrap{max-width:1540px!important;width:96vw!important;padding:22px!important}
-h1{font-size:42px!important;line-height:1.1!important}
-.sub,.updated{font-size:15px!important}
+/* ===== VPS BOT SOURCE LOGIC READABLE PATCH ===== */
+.wrap{max-width:1500px!important;width:96vw!important}
 .panel,.card,.forecastHighTrendBox{padding:24px!important;border-radius:22px!important;margin:22px 0!important}
-.chartTitle{font-size:20px!important;letter-spacing:4px!important;margin-bottom:18px!important}
-.toolbar,.sourceModeBar,.rawDatasetBar,.axisBox,.mobileZoomBar{gap:12px!important;row-gap:12px!important;margin:14px 0!important}
-.toolbar button,.toolbar label,.sourceModeBar button,.rawDatasetBar label,.mobileZoomBar button,.btn{font-size:17px!important;padding:13px 17px!important;min-height:46px!important;border-radius:999px!important}
-.axisBox input,.toolbar input{font-size:18px!important;padding:12px 14px!important;min-height:46px!important;min-width:96px!important}
-.chartScroll{padding:18px!important;border-radius:20px!important;background:#fafafa!important}
-#chart{width:100%!important;height:620px!important;min-height:620px!important}
-.legend{font-size:16px!important;gap:22px!important;line-height:1.6!important;margin-top:14px!important}
-.summary,.help,.forecastExplain,.axisHint,.panHint,.axisZoomHint,.layerToggleNote{font-size:15px!important;line-height:1.65!important;padding:14px 16px!important;border-radius:14px!important}
-.grid{grid-template-columns:repeat(4,minmax(250px,1fr))!important;gap:18px!important}
-.value{font-size:34px!important}.small{font-size:16px!important;line-height:1.55!important}.label{font-size:14px!important}
-.status{padding:34px!important}.status h2{font-size:34px!important}
-.highForecastGrid{grid-template-columns:repeat(3,minmax(280px,1fr))!important;gap:22px!important}
-.highForecastCard{padding:26px!important;border-radius:22px!important;min-height:250px!important}
-.highForecastCard h3{font-size:18px!important;letter-spacing:4px!important}
-.highForecastValue{font-size:52px!important;line-height:1.1!important}
-.highForecastMeta{font-size:17px!important;line-height:1.65!important}
-.highForecastBin{font-size:18px!important;padding:11px 16px!important}
-.forecastHighTrendTop{grid-template-columns:repeat(4,minmax(220px,1fr))!important;gap:16px!important}
-.forecastHighMini{padding:20px!important;border-radius:18px!important}
-.forecastHighMini h4{font-size:15px!important}.forecastHighMini .val{font-size:36px!important}.forecastHighMini .sub{font-size:16px!important}
-#forecastHighTrendCanvas{height:320px!important}
-#tooltip{font-size:20px!important;line-height:1.55!important;min-width:460px!important;max-width:720px!important;padding:22px 24px!important;border:2px solid #00d4ff!important;border-radius:20px!important}
-.forecastSourceBadge.hourly{display:inline-block;background:#064e3b!important;color:#8fffd2!important;border-radius:999px!important;padding:8px 12px!important;font-weight:1000!important}
-.forecastSourceBadge.badrow{display:inline-block;background:#3f1d1d!important;color:#fecaca!important;border-radius:999px!important;padding:8px 12px!important;font-weight:1000!important}
-.syncNote{color:#ffd433;font-family:ui-monospace,Consolas,monospace;font-size:14px;line-height:1.55;margin-top:8px}
-.tradeSummaryBox{border:1px solid #0e6b91;background:#061827;color:#bfeaff;border-radius:14px;padding:12px 14px;margin-top:10px;font-family:ui-monospace,Consolas,monospace;font-size:14px;line-height:1.55}
-@media(max-width:900px){.grid,.forecastHighTrendTop,.highForecastGrid{grid-template-columns:1fr!important}#chart{height:500px!important;min-height:500px!important}.wrap{width:100vw!important;padding:12px!important}}
+.highForecastGrid{grid-template-columns:repeat(4,minmax(250px,1fr))!important;gap:18px!important}
+.highForecastCard{padding:24px!important;border-radius:22px!important;min-height:245px!important}
+.highForecastValue{font-size:48px!important;line-height:1.1!important}
+.highForecastMeta{font-size:16px!important;line-height:1.6!important}
+.highForecastBin{font-size:18px!important;padding:10px 15px!important}
+.sourceBadge{display:inline-block;border-radius:999px;padding:8px 12px;margin-top:8px;font-weight:1000;background:#064e3b;color:#8fffd2}
+.sourceBadge.forecast{background:#17324a;color:#9bd4ff}
+.sourceBadge.wait{background:#3f1d1d;color:#fecaca}
+.changeLine{font-family:ui-monospace,Consolas,monospace;color:#ffd433;font-size:14px;margin-top:8px}
+@media(max-width:1100px){.highForecastGrid{grid-template-columns:repeat(2,minmax(250px,1fr))!important}}
+@media(max-width:720px){.highForecastGrid{grid-template-columns:1fr!important}.highForecastValue{font-size:38px!important}}
 
 </style></head><body>
 <div class="wrap">
@@ -690,7 +672,6 @@ h1{font-size:42px!important;line-height:1.1!important}
 
 <div class="axisZoomHint" id="axisZoomHint">Axis zoom: mouse wheel on Y-axis labels = temp/Y zoom only. Mouse wheel on X-axis labels = time/X zoom only. Wheel inside chart = X+Y zoom. Raw = solid red/green, Converted = dashed orange/light-green.</div>
 <div class="layerToggleNote" id="layerToggleNote">Layer toggles fixed: if Forecast/Bias/95%/Analog are unchecked, their canvas overlays are hidden on redraw.</div>
-<div class="syncNote" id="stableSyncNote">Stable sync: 3-day cards and forecast max use /api/hourly-highs worker result. Daily forecast max ignored.</div>
 <div class="chartScroll"><canvas id="chart" width="1180" height="560"></canvas></div>
     <div class="legend"><span><i class="dot" style="background:#ef4444"></i>WU observed</span><span><i class="dot" style="background:#10b981"></i>METAR official</span><span><i class="dot" style="background:#111827"></i>latest WU forecast</span><span><i class="dot" style="background:#60a5fa"></i>older forecast runs</span><span><i class="dot" style="background:#111827;border-top:2px dotted #111827"></i>bias corrected forecast</span><span><i class="dot" style="background:#a855f7"></i>historical 95% ceiling</span><span><i class="dot" style="background:#7f1d1d"></i>99% extreme</span><span><i class="dot" style="background:#6b7280"></i>closest analog day</span></div>
     <div id="curveSummary" class="summary">Loading curve...</div>
@@ -731,28 +712,35 @@ h1{font-size:42px!important;line-height:1.1!important}
 </section>
 
 <section class="card" id="threeDayHighForecastSection">
-  <h2 style="margin-top:0;letter-spacing:4px;color:#a9d8ff">🔥 POLYMARKET HIGH FORECAST — TODAY + NEXT 2 DAYS</h2>
+  <h2 style="margin-top:0;letter-spacing:4px;color:#a9d8ff">🔥 POLYMARKET HIGH — TODAY + NEXT 3 DAYS</h2>
   <div class="note">
-    Shows highest forecast temperature from saved WU forecast snapshots. Today, tomorrow and day-after use WU hourly forecast max only. Daily forecast max is not used. Useful for markets like “highest temperature in Lucknow on 31 May”.
+    Source logic: Today uses WU obs current + peak_since_7am. D+1, D+2, D+3 use WU daily 5day forecast temperatureMax. Cards update when new saved value changes.
   </div>
   <div class="highForecastGrid">
     <div class="highForecastCard">
-      <h3>TODAY HIGH</h3>
+      <h3>TODAY OBS HIGH</h3>
       <div class="highForecastValue" id="hfToday">—</div>
       <div class="highForecastMeta" id="hfTodayMeta">Loading...</div>
       <div class="highForecastBin" id="hfTodayBin">Bin —</div>
     </div>
     <div class="highForecastCard">
-      <h3>TOMORROW HIGH</h3>
+      <h3>D+1 DAILY FORECAST</h3>
       <div class="highForecastValue" id="hfTomorrow">—</div>
       <div class="highForecastMeta" id="hfTomorrowMeta">Loading...</div>
       <div class="highForecastBin" id="hfTomorrowBin">Bin —</div>
     </div>
     <div class="highForecastCard">
-      <h3>DAY AFTER HIGH</h3>
+      <h3>D+2 DAILY FORECAST</h3>
       <div class="highForecastValue" id="hfDayAfter">—</div>
       <div class="highForecastMeta" id="hfDayAfterMeta">Loading...</div>
       <div class="highForecastBin" id="hfDayAfterBin">Bin —</div>
+    </div>
+  
+    <div class="highForecastCard">
+      <h3>D+3 DAILY FORECAST</h3>
+      <div class="highForecastValue" id="hfD3">—</div>
+      <div class="highForecastMeta" id="hfD3Meta">Loading...</div>
+      <div class="highForecastBin" id="hfD3Bin">Bin —</div>
     </div>
   </div>
 </section>
@@ -1278,10 +1266,185 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
 
 
 
+<script id="hard-layer-toggle-fix">
+(function(){
+  const $=id=>document.getElementById(id);
+
+  function txt(el){return (el && (el.textContent||el.value||'')).trim().toLowerCase();}
+  function findControls(){
+    const all=[...document.querySelectorAll('button,label,input')];
+    function byText(words){
+      return all.find(el=>{
+        const t=txt(el);
+        return words.every(w=>t.includes(w));
+      });
+    }
+    function checkedFor(el, def=true){
+      if(!el) return def;
+      if(el.tagName==='INPUT') return el.checked;
+      const inp=el.querySelector && el.querySelector('input[type="checkbox"]');
+      if(inp) return inp.checked;
+      if(el.classList && el.classList.contains('active')) return true;
+      if(el.getAttribute && el.getAttribute('aria-pressed')==='true') return true;
+      // pill buttons usually active when cyan / active class; if no active state found, use def
+      return def;
+    }
+    return {
+      forecast: checkedFor(byText(['forecast']), true),
+      bias: checkedFor(byText(['bias']), true),
+      ceiling: checkedFor(byText(['95']), true),
+      extreme: checkedFor(byText(['99']), false),
+      analog: checkedFor(byText(['analog']), true),
+      peakWindow: checkedFor(byText(['peak','window']), true),
+      wu: checkedFor(byText(['wu']), true),
+      metar: checkedFor(byText(['metar']), true)
+    };
+  }
+
+  function hideByRedrawRules(){
+    window.__layerToggles = findControls();
+  }
+
+  // Patch canvas drawing functions at context level:
+  // If a disabled overlay tries to draw after main render, make it transparent/no-op by detecting strokeStyle colors.
+  function patchCanvasContext(){
+    const c=$('chart');
+    if(!c || c.dataset.hardLayerToggleCtx) return;
+    c.dataset.hardLayerToggleCtx='1';
+    const ctx=c.getContext('2d');
+    if(!ctx || ctx.__layerTogglePatched) return;
+    ctx.__layerTogglePatched=true;
+
+    const origStroke=ctx.stroke.bind(ctx);
+    const origFill=ctx.fill.bind(ctx);
+    const origFillText=ctx.fillText.bind(ctx);
+    const origStrokeText=ctx.strokeText ? ctx.strokeText.bind(ctx) : null;
+
+    function styleString(v){return String(v||'').toLowerCase();}
+    function shouldSkip(){
+      const st=styleString(ctx.strokeStyle)+' '+styleString(ctx.fillStyle);
+      const L=window.__layerToggles || findControls();
+
+      // common layer colors:
+      const isOldForecast = st.includes('60a5fa') || st.includes('147,197,253') || st.includes('93,173,226') || st.includes('lightblue');
+      const isLatestForecast = st.includes('111827') || st.includes('0,0,0') || st.includes('black') || st.includes('17,24,39');
+      const isBias = st.includes('06b6d4') || st.includes('cyan') || st.includes('14,165,233');
+      const isCeiling = st.includes('a855f7') || st.includes('purple') || st.includes('168,85,247');
+      const isExtreme = st.includes('991b1b') || st.includes('red') || st.includes('153,27,27');
+      const isAnalog = st.includes('94a3b8') || st.includes('grey') || st.includes('gray') || st.includes('148,163,184');
+
+      if(!L.forecast && (isOldForecast || isLatestForecast)) return true;
+      if(!L.bias && isBias) return true;
+      if(!L.ceiling && isCeiling) return true;
+      if(!L.extreme && isExtreme) return true;
+      if(!L.analog && isAnalog) return true;
+      return false;
+    }
+
+    ctx.stroke=function(){ if(shouldSkip()) return; return origStroke(); };
+    ctx.fill=function(){ if(shouldSkip()) return; return origFill(); };
+    ctx.fillText=function(text,x,y,maxWidth){
+      const s=String(text||'').toLowerCase();
+      const L=window.__layerToggles || findControls();
+      if(!L.forecast && s.includes('forecast')) return;
+      if(!L.bias && s.includes('bias')) return;
+      if(!L.ceiling && (s.includes('ceiling')||s.includes('historical'))) return;
+      if(!L.analog && s.includes('analog')) return;
+      return origFillText(text,x,y,maxWidth);
+    };
+    if(origStrokeText){
+      ctx.strokeText=function(text,x,y,maxWidth){
+        const s=String(text||'').toLowerCase();
+        const L=window.__layerToggles || findControls();
+        if(!L.forecast && s.includes('forecast')) return;
+        if(!L.bias && s.includes('bias')) return;
+        if(!L.ceiling && (s.includes('ceiling')||s.includes('historical'))) return;
+        if(!L.analog && s.includes('analog')) return;
+        return origStrokeText(text,x,y,maxWidth);
+      };
+    }
+  }
+
+  // Stronger fix: before rendering, if forecast controls off, temporarily empty forecast rows in known global data.
+  function patchRender(){
+    ['masterRender','renderAll','render','loadAll','fetchAll'].forEach(name=>{
+      try{
+        const fn=window[name];
+        if(typeof fn==='function' && !fn.__hardLayerToggleWrapped){
+          const wrapped=function(){
+            hideByRedrawRules();
+            patchCanvasContext();
+
+            const L=window.__layerToggles || {};
+            let backups=[];
+            try{
+              const roots=[window.S && window.S.data, window.__goodHist, window.goodHist, window.__lastMasterData && window.__lastMasterData.hist].filter(Boolean);
+              for(const root of roots){
+                if(!L.forecast && root.forecast_snapshot_rows){
+                  backups.push([root,'forecast_snapshot_rows',root.forecast_snapshot_rows]);
+                  root.forecast_snapshot_rows=[];
+                }
+                if(!L.forecast && root.forecast_rows){
+                  backups.push([root,'forecast_rows',root.forecast_rows]);
+                  root.forecast_rows=[];
+                }
+                if(!L.metar && root.metar_rows){
+                  backups.push([root,'metar_rows',root.metar_rows]);
+                  root.metar_rows=[];
+                }
+                if(!L.wu && root.wu_obs_rows){
+                  backups.push([root,'wu_obs_rows',root.wu_obs_rows]);
+                  root.wu_obs_rows={};
+                }
+              }
+            }catch(e){}
+
+            let result;
+            try{ result=fn.apply(this, arguments); }
+            finally{
+              setTimeout(()=>{ for(const [obj,key,val] of backups) obj[key]=val; },0);
+            }
+            return result;
+          };
+          wrapped.__hardLayerToggleWrapped=true;
+          window[name]=wrapped;
+        }
+      }catch(e){}
+    });
+  }
+
+  function bindControls(){
+    document.querySelectorAll('button,label,input').forEach(el=>{
+      if(el.dataset.layerToggleBound) return;
+      const t=txt(el);
+      if(['forecast','bias','95','99','analog','peak window','wu','metar'].some(w=>t.includes(w))){
+        el.dataset.layerToggleBound='1';
+        el.addEventListener('click',()=>setTimeout(()=>{
+          hideByRedrawRules();
+          try{
+            if(typeof window.masterRender==='function') window.masterRender();
+            else if(typeof window.renderAll==='function') window.renderAll();
+            else if(typeof window.render==='function') window.render();
+          }catch(e){}
+        },80));
+      }
+    });
+  }
+
+  function init(){
+    hideByRedrawRules();
+    patchCanvasContext();
+    patchRender();
+    bindControls();
+  }
+
+  window.addEventListener('load',()=>setTimeout(init,500));
+  setInterval(init,1200);
+})();
+</script>
 
 
-
-<script id="stable-readable-sync-final">
+<script id="vps-bot-source-polymarket-cards">
 (function(){
   const $=id=>document.getElementById(id);
   const N=v=>{const x=Number(v);return Number.isFinite(x)?x:null};
@@ -1290,105 +1453,50 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
   const todayIST=()=>new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});
   function addDays(d,days){const [y,m,dd]=d.split('-').map(Number);const dt=new Date(y,m-1,dd+days,12);return dt.toLocaleDateString('en-CA')}
   function pretty(d){try{return new Date(d+'T00:00:00').toLocaleDateString('en-IN',{weekday:'short',day:'2-digit',month:'short',year:'numeric'})}catch(e){return d}}
-  function parseHour(s){s=String(s||'');let m=s.match(/T(\d{1,2}):(\d{2})/)||s.match(/\b(\d{1,2}):(\d{2})/);if(!m)return null;let h=+m[1],mi=+m[2],lo=s.toLowerCase();if((lo.includes('pm')||/\bp\b/.test(lo))&&h<12)h+=12;if((lo.includes('am')||/\ba\b/.test(lo))&&h===12)h=0;return h+mi/60}
-  function fmtTime(v){let h=typeof v==='number'?v:parseHour(v);if(N(h)==null)return '—';let hh=Math.floor(h),mm=Math.round((h-hh)*60);if(mm===60){hh++;mm=0}const ap=hh>=12?'PM':'AM';return `${hh%12||12}:${String(mm).padStart(2,'0')} ${ap}`}
-  function unit(){try{if(window.state&&state.unit)return String(state.unit).toLowerCase().startsWith('f')?'f':'c';if(window.masterChart&&masterChart.unit)return String(masterChart.unit).toLowerCase().startsWith('f')?'f':'c';if(window.S&&S.unit)return String(S.unit).toLowerCase().startsWith('f')?'f':'c'}catch(e){}return document.querySelector('[data-u="f"].active,[data-unit="f"].active')?'f':'c'}
-  async function highs(){
+  async function loadHighs(){
     try{
-      const r=await fetch('/api/hourly-highs?date='+todayIST()+'&t='+Date.now(),{cache:'no-store'});
-      if(r.ok){const j=await r.json();window.__hourlyHighs=j;return j}
+      const r=await fetch('/api/polymarket-highs?date='+todayIST()+'&t='+Date.now(),{cache:'no-store'});
+      if(r.ok){const j=await r.json();window.__polyHighs=j;return j;}
     }catch(e){}
-    return window.__hourlyHighs||null;
+    return window.__polyHighs||null;
   }
-  async function hist(){
-    try{
-      const r=await fetch('/api/history?date='+todayIST()+'&t='+Date.now(),{cache:'no-store'});
-      if(r.ok){const j=await r.json();window.__goodHist=j;return j}
-    }catch(e){}
-    return window.__goodHist||window.goodHist||null;
+  function setCard(prefix, item, type){
+    const v=$(prefix), m=$(prefix+'Meta'), b=$(prefix+'Bin');
+    if(!v||!m||!b)return;
+    if(!item || N(item.high_c)==null){
+      v.textContent='—';
+      m.innerHTML='<span class="sourceBadge wait">waiting for new saved value</span>';
+      b.textContent='Bin —';
+      return;
+    }
+    v.textContent=fmt(item.high_c)+'°C';
+    if(type==='today'){
+      m.innerHTML=`${pretty(item.date)}<br>Current WU: <b>${fmt3(item.current_c)}°C / ${fmt(item.current_f)}°F</b><br>Peak since 7am: <b>${fmt3(item.high_c)}°C / ${fmt(item.high_f)}°F</b><br>Obs count: ${item.obs_count||0} · latest ${item.latest_obs_time||'—'}<br><span class="sourceBadge">Source: WU obs current + peak_since_7am</span>`;
+    }else{
+      m.innerHTML=`${pretty(item.date)}<br>temperatureMax: <b>${fmt3(item.high_c)}°C / ${fmt(item.high_f)}°F</b><br>Issue: ${item.issue_time||'—'} · rows ${item.forecast_rows_checked||0}<br><span class="sourceBadge forecast">Source: WU daily 5day temperatureMax</span>`;
+    }
+    b.textContent='Market bin ≈ '+Math.round(item.high_c)+'°C';
   }
-  function renderCards(h){
-    if(!h)return;
-    const dates=[todayIST(),addDays(todayIST(),1),addDays(todayIST(),2)];
-    const ids=[['hfToday','hfTodayMeta','hfTodayBin'],['hfTomorrow','hfTomorrowMeta','hfTomorrowBin'],['hfDayAfter','hfDayAfterMeta','hfDayAfterBin']];
-    dates.forEach((d,i)=>{
-      const item=h.days&&h.days[d]&&h.days[d].latest;
-      const checked=h.days&&h.days[d]?h.days[d].snapshots_checked:0;
-      const [v,m,b]=ids[i].map($); if(!v||!m||!b)return;
-      if(!item){
-        v.textContent='—';
-        m.innerHTML=`${pretty(d)}<br><span class="forecastSourceBadge badrow">No hourly forecast saved for this day yet</span><div class="syncNote">Wait for next /api/collect after 10day hourly worker deploy.</div>`;
-        b.textContent='Bin —';
-        return;
-      }
-      v.textContent=`${fmt(item.high_c)}°C`;
-      m.innerHTML=`${pretty(d)}<br>Peak forecast time: <b>${fmtTime(item.peak_time)}</b><br><b>Hourly max:</b> ${fmt3(item.high_c)}°C / ${fmt(item.high_f)}°F<br>Hourly points: ${item.hourly_count} · snapshots: ${checked}<br><span class="forecastSourceBadge hourly">Source: WU hourly max only</span>`;
-      b.textContent=`Market bin ≈ ${Math.round(item.high_c)}°C`;
-    });
+  function renderHighs(j){
+    if(!j||!j.days)return;
+    const d0=todayIST(), d1=addDays(d0,1), d2=addDays(d0,2), d3=addDays(d0,3);
+    setCard('hfToday', j.days[d0], 'today');
+    setCard('hfTomorrow', j.days[d1], 'future');
+    setCard('hfDayAfter', j.days[d2], 'future');
+    setCard('hfD3', j.days[d3], 'future');
+    const today=j.days[d0];
+    if(today){
+      if($('fhLatest')) $('fhLatest').textContent=fmt(today.high_c)+'°C';
+      if($('fhLatestSub')) $('fhLatestSub').innerHTML='WU obs peak_since_7am<br>latest obs '+(today.latest_obs_time||'—');
+      if($('fhFirst')) $('fhFirst').textContent=fmt(today.current_c)+'°C';
+      if($('fhFirstSub')) $('fhFirstSub').innerHTML='current WU obs now';
+      if($('fhChange')) $('fhChange').textContent=today.high_c!=null&&today.current_c!=null?((today.current_c-today.high_c)>=0?'+':'')+fmt(today.current_c-today.high_c)+'°C':'—';
+      if($('fhChangeSub')) $('fhChangeSub').textContent='current minus today peak';
+      if($('fhBin')) $('fhBin').textContent=today.market_bin!=null?today.market_bin+'°C':'—';
+      if($('fhBinSub')) $('fhBinSub').textContent='market bin from today WU obs peak';
+    }
   }
-  function renderTrend(h){
-    const c=$('forecastHighTrendCanvas'); if(!c||!h)return;
-    const d=todayIST(), pts=(h.days&&h.days[d]&&h.days[d].trend)||[];
-    const ctx=c.getContext('2d'),W=c.width,H=c.height,L=70,R=25,T=28,B=48;
-    ctx.clearRect(0,0,W,H);ctx.fillStyle='#fafafa';ctx.fillRect(0,0,W,H);
-    ctx.font='15px ui-monospace,Consolas,monospace';
-    if(!pts.length){ctx.fillStyle='#6b7280';ctx.fillText('No hourly forecast trend yet',L,T+45);return;}
-    const compact=[];
-    pts.forEach(p=>{const last=compact.at(-1);if(!last||Math.abs(last.high_c-p.high_c)>0.001)compact.push(p)});
-    const yMin=Math.floor((Math.min(...compact.map(p=>p.high_c))-1)*10)/10;
-    const yMax=Math.ceil((Math.max(...compact.map(p=>p.high_c))+1)*10)/10;
-    const X=i=>L+i/Math.max(1,compact.length-1)*(W-L-R),Y=y=>T+(yMax-y)/(yMax-yMin)*(H-T-B);
-    ctx.strokeStyle='#e5e7eb';ctx.lineWidth=1;
-    for(let v=Math.floor(yMin);v<=Math.ceil(yMax);v++){const y=Y(v);ctx.beginPath();ctx.moveTo(L,y);ctx.lineTo(W-R,y);ctx.stroke();ctx.fillStyle='#6b7280';ctx.fillText(fmt(v)+'°',18,y+5)}
-    ctx.strokeStyle='#f97316';ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(X(0),Y(compact[0].high_c));compact.forEach((p,i)=>ctx.lineTo(X(i),Y(p.high_c)));ctx.stroke();
-    compact.forEach((p,i)=>{ctx.fillStyle=i===compact.length-1?'#ef4444':'#f97316';ctx.beginPath();ctx.arc(X(i),Y(p.high_c),6,0,Math.PI*2);ctx.fill()});
-    const diff=compact.at(-1).high_c-compact[0].high_c;
-    ctx.fillStyle=diff>0?'#dc2626':(diff<0?'#059669':'#374151');ctx.font='bold 17px ui-monospace,Consolas,monospace';
-    ctx.fillText(`WU hourly max trend: ${fmt(compact[0].high_c)}°C → ${fmt(compact.at(-1).high_c)}°C (${diff>=0?'+':''}${fmt(diff)}°C)`,L+8,T+24);
-    if($('fhLatest'))$('fhLatest').textContent=fmt(compact.at(-1).high_c)+'°C';
-    if($('fhFirst'))$('fhFirst').textContent=fmt(compact[0].high_c)+'°C';
-    if($('fhChange'))$('fhChange').textContent=(diff>=0?'+':'')+fmt(diff)+'°C';
-    if($('fhBin'))$('fhBin').textContent=Math.round(compact.at(-1).high_c)+'°C';
-  }
-  function chartAxis(){
-    if(!window.__axisState)window.__axisState={};
-    let yMin=N($('yMinManual')?.value)??N(window.__axisState.yMin),yMax=N($('yMaxManual')?.value)??N(window.__axisState.yMax);
-    if(!(yMin!=null&&yMax!=null&&yMax>yMin)){yMin=unit()==='f'?14:-10;yMax=unit()==='f'?158:70}
-    return {yMin,yMax};
-  }
-  function drawBadge(){
-    const h=window.__hourlyHighs,c=$('chart'); if(!h||!c)return;
-    const item=h.days&&h.days[todayIST()]&&h.days[todayIST()].latest; if(!item)return;
-    const ctx=c.getContext('2d'),W=c.width,H=c.height,L=78,R=30,T=48,B=68,ax=chartAxis();
-    const val=unit()==='f'?item.high_f:item.high_c;if(val<ax.yMin||val>ax.yMax)return;
-    const y=T+(ax.yMax-val)/(ax.yMax-ax.yMin)*(H-T-B);
-    ctx.save();const label=`hourly max ${fmt3(item.high_c)}°C`;ctx.font='bold 15px ui-monospace,Consolas,monospace';const tw=ctx.measureText(label).width,boxW=tw+22,boxH=30,x=W-R-boxW-10,yy=Math.max(T+8,Math.min(H-B-boxH-8,y-boxH/2));
-    ctx.strokeStyle='#f97316';ctx.lineWidth=2;ctx.setLineDash([6,6]);ctx.beginPath();ctx.moveTo(Math.max(L,W-R-170),y);ctx.lineTo(W-R-8,y);ctx.stroke();ctx.setLineDash([]);
-    ctx.fillStyle='rgba(249,115,22,.16)';ctx.strokeStyle='#f97316';if(ctx.roundRect){ctx.beginPath();ctx.roundRect(x,yy,boxW,boxH,9);ctx.fill();ctx.stroke()}else{ctx.fillRect(x,yy,boxW,boxH);ctx.strokeRect(x,yy,boxW,boxH)}
-    ctx.fillStyle='#c2410c';ctx.fillText(label,x+11,yy+20);ctx.restore();
-  }
-  function wrapRender(){
-    ['masterRender','renderAll','render','fetchAll','loadAll'].forEach(name=>{try{const fn=window[name];if(typeof fn==='function'&&!fn.__stableSyncWrapped){const w=function(){const r=fn.apply(this,arguments);Promise.resolve(r).finally(()=>setTimeout(drawBadge,150));return r};w.__stableSyncWrapped=true;window[name]=w}}catch(e){}});
-  }
-  function addTooltips(){
-    const tip=$('tooltip'); if(!tip||tip.dataset.stableSync)return; tip.dataset.stableSync='1';
-    const obs=new MutationObserver(()=>{
-      if(tip.style.display==='none')return;
-      if(tip.textContent.includes('HISTORICAL 95%')&&!tip.querySelector('.syncNote')){
-        const v=($('histCeiling')&&$('histCeiling').textContent.trim())||'—';
-        const d=document.createElement('div');d.className='syncNote';d.innerHTML=`Actual ceiling shown by card: <b>${v}</b>`;tip.appendChild(d);
-      }
-      if(tip.textContent.includes('LATEST FORECAST')&&!tip.querySelector('.syncNote')){
-        const h=window.__hourlyHighs, item=h&&h.days&&h.days[todayIST()]&&h.days[todayIST()].latest;
-        if(item){const d=document.createElement('div');d.className='syncNote';d.innerHTML=`Today hourly max: <b>${fmt3(item.high_c)}°C / ${fmt(item.high_f)}°F</b> at <b>${fmtTime(item.peak_time)}</b>`;tip.appendChild(d);}
-      }
-    });
-    obs.observe(tip,{childList:true,subtree:true});
-  }
-  async function run(){
-    const [h,j]=await Promise.all([highs(),hist()]);
-    renderCards(h);renderTrend(h);wrapRender();addTooltips();setTimeout(drawBadge,300);
-  }
+  async function run(){ const j=await loadHighs(); renderHighs(j); }
   window.addEventListener('load',()=>setTimeout(run,900));
   setInterval(run,120000);
 })();
