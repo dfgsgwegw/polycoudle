@@ -544,6 +544,24 @@ td{
   font-weight:1000;
 }
 
+
+/* ===== HOURLY ONLY + TRADE TOOLTIP SUMMARY ===== */
+.forecastSourceBadge.daily,.forecastSourceBadge.unavailable{background:#3f1d1d!important;color:#fecaca!important}
+.tradeSummaryBox{
+  border:1px solid #0e6b91;
+  background:#061827;
+  color:#bfeaff;
+  border-radius:14px;
+  padding:12px 14px;
+  margin-top:10px;
+  font-family:ui-monospace,Consolas,monospace;
+  font-size:14px;
+  line-height:1.55;
+}
+.tradeGood{color:#22c55e;font-weight:1000}
+.tradeBad{color:#ef4444;font-weight:1000}
+.tradeWait{color:#facc15;font-weight:1000}
+
 </style></head><body>
 <div class="wrap">
   <div class="header"><div><h1>VILK <span class="cyan">Live Signal</span></h1><div class="sub">● UI refresh 30 sec · cron save 1 min · Lucknow Airport (VILK) · D1 archive</div></div><div><button class="btn" id="refreshBtn">↻ Refresh Now</button><div class="updated" id="updated">Updated --</div></div></div>
@@ -651,7 +669,7 @@ td{
 <section class="card" id="threeDayHighForecastSection">
   <h2 style="margin-top:0;letter-spacing:4px;color:#a9d8ff">🔥 POLYMARKET HIGH FORECAST — TODAY + NEXT 2 DAYS</h2>
   <div class="note">
-    Shows highest forecast temperature from saved WU forecast snapshots. Today/tomorrow normally use WU hourly forecast; day-after may use WU daily max if hourly data is not available. Useful for markets like “highest temperature in Lucknow on 31 May”.
+    Shows highest forecast temperature from saved WU forecast snapshots. Today, tomorrow and day-after use WU hourly forecast max only. Daily forecast max is not used. Useful for markets like “highest temperature in Lucknow on 31 May”.
   </div>
   <div class="highForecastGrid">
     <div class="highForecastCard">
@@ -1279,8 +1297,8 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
       v.textContent=`${fmt(x.highC)}°C`;
       const badge=x.source==='hourly'
         ? '<span class="forecastSourceBadge hourly">Source: WU hourly forecast</span>'
-        : '<span class="forecastSourceBadge daily">Source: WU daily forecast max</span>';
-      m.innerHTML=`${prettyDate(d.date)}<br>Peak forecast time: <b>${x.peakHour!=null?fmtTime(x.peakHour):'daily max only'}</b><br>Raw/converted: ${fmt(x.highC)}°C / ${fmt(x.highF)}°F<br>Snapshots checked: ${x.snapCount||0}<br>${badge}`;
+        : '<span class="forecastSourceBadge daily">Source: hourly unavailable</span>';
+      m.innerHTML=`${prettyDate(d.date)}<br>Peak forecast time: <b>${x.peakHour!=null?fmtTime(x.peakHour):'hourly unavailable'}</b><br>Raw/converted: ${fmt(x.highC)}°C / ${fmt(x.highF)}°F<br>Snapshots checked: ${x.snapCount||0}<br>${badge}`;
       b.textContent=`Market bin ≈ ${marketBin(x.highC)}°C`;
     });
   }
@@ -1327,9 +1345,9 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
     const set=(id,v)=>{const e=$(id);if(e)e.innerHTML=v};
     if(!latest){set('fhLatest','—');set('fhLatestSub','No WU forecast snapshot found');set('fhFirst','—');set('fhFirstSub','—');set('fhChange','—');set('fhChangeSub','—');set('fhBin','—');set('fhBinSub','—');return;}
     const diff=latest.highC-first.highC;
-    const badge=latest.source==='hourly'?'<span class="forecastSourceBadge hourly">WU hourly forecast</span>':'<span class="forecastSourceBadge daily">WU daily max</span>';
+    const badge=latest.source==='hourly'?'<span class="forecastSourceBadge hourly">WU hourly forecast</span>':'<span class="forecastSourceBadge daily">WU hourly unavailable</span>';
     set('fhLatest',`${fmt(latest.highC)}°C`);
-    set('fhLatestSub',`${prettyDate(date)} · peak ${latest.peakHour!=null?fmtTime(latest.peakHour):'daily max'}<br>${fmt(latest.highF)}°F · snapshot ${fmtTime(latest.snapshotHour)}<br>${badge}`);
+    set('fhLatestSub',`${prettyDate(date)} · peak ${latest.peakHour!=null?fmtTime(latest.peakHour):'hourly unavailable'}<br>${fmt(latest.highF)}°F · snapshot ${fmtTime(latest.snapshotHour)}<br>${badge}`);
     set('fhFirst',`${fmt(first.highC)}°C`);
     set('fhFirstSub',`start snapshot ${fmtTime(first.snapshotHour)}<br>source: ${first.source==='hourly'?'hourly':'daily'}`);
     set('fhChange',`${diff>=0?'+':''}${fmt(diff)}°C`);
@@ -1454,6 +1472,129 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
   }
   window.addEventListener('load',fixLabels);
   setInterval(fixLabels,2000);
+})();
+</script>
+
+
+<script id="hourly-only-cards-tooltip-trade-summary">
+(function(){
+  const $=id=>document.getElementById(id);
+  const N=v=>{const x=Number(v);return Number.isFinite(x)?x:null};
+  const cToF=c=>N(c)==null?null:N(c)*9/5+32;
+  const fToC=f=>N(f)==null?null:(N(f)-32)*5/9;
+  const fmt=v=>{const x=N(v);if(x==null)return '—';return x.toFixed(1).replace(/\.0$/,'')};
+  const fmt3=v=>{const x=N(v);if(x==null)return '—';return x.toFixed(3).replace(/\.?0+$/,'')};
+  const todayIST=()=>new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});
+  function addDays(dateStr,days){const [y,m,d]=String(dateStr).split('-').map(Number);const dt=new Date(y,m-1,d+days,12);return dt.toLocaleDateString('en-CA');}
+  function pretty(d){try{return new Date(d+'T00:00:00').toLocaleDateString('en-IN',{weekday:'short',day:'2-digit',month:'short',year:'numeric'})}catch(e){return d}}
+  function parseHour(s){s=String(s||'');let m=s.match(/T(\d{1,2}):(\d{2})/)||s.match(/\b(\d{1,2}):(\d{2})/);if(!m)return null;return +m[1]+(+m[2]/60)}
+  function fmtTime(h){if(N(h)==null)return '—';let hh=Math.floor(h),mm=Math.round((h-hh)*60);if(mm===60){hh++;mm=0}const ap=hh>=12?'PM':'AM';return `${hh%12||12}:${String(mm).padStart(2,'0')} ${ap}`}
+  function unit(){try{if(window.state&&state.unit)return String(state.unit).toLowerCase().startsWith('f')?'f':'c';if(window.masterChart&&masterChart.unit)return String(masterChart.unit).toLowerCase().startsWith('f')?'f':'c';if(window.S&&S.unit)return String(S.unit).toLowerCase().startsWith('f')?'f':'c'}catch(e){}return document.querySelector('[data-u="f"].active,[data-unit="f"].active')?'f':'c'}
+  function sourceVal(c,f){return unit()==='f'?(N(f)??cToF(c)):(N(c)??fToC(f))}
+  async function hist(){
+    try{
+      const d=todayIST();
+      const r=await fetch('/api/history?date='+d+'&t='+Date.now(),{cache:'no-store'});
+      if(r.ok){const j=await r.json();window.__goodHist=j;return j}
+    }catch(e){}
+    return window.__goodHist||window.goodHist||null;
+  }
+  function hourlyMaxFromRow(r,target){
+    let hourly=[];
+    try{hourly=JSON.parse(r.hourly_json||'[]')}catch(e){}
+    hourly=hourly.filter(x=>!String(x.time||'').includes('-') || String(x.time||'').startsWith(target));
+    if(!hourly.length)return null;
+    let best=null;
+    for(const x of hourly){
+      const c=N(x.temp_c), f=N(x.temp_f);
+      if(c!=null && (!best || c>best.c)) best={c,f:f??cToF(c),time:x.time,hour:parseHour(x.time),count:hourly.length};
+    }
+    return best;
+  }
+  function latestHourlyHigh(rows,target){
+    const rr=(rows||[]).filter(r=>r.target_date===target);
+    for(let i=rr.length-1;i>=0;i--){
+      const h=hourlyMaxFromRow(rr[i],target);
+      if(h)return {...h,row:rr[i],snapshots:rr.length};
+    }
+    return null;
+  }
+  function render3Day(j){
+    if(!j)return;
+    const today=todayIST(), dates=[today,addDays(today,1),addDays(today,2)];
+    const ids=[['hfToday','hfTodayMeta','hfTodayBin'],['hfTomorrow','hfTomorrowMeta','hfTomorrowBin'],['hfDayAfter','hfDayAfterMeta','hfDayAfterBin']];
+    dates.forEach((d,i)=>{
+      const high=latestHourlyHigh(j.forecast_snapshot_rows||[],d);
+      const [v,m,b]=ids[i].map($); if(!v||!m||!b)return;
+      if(!high){
+        v.textContent='—';
+        m.innerHTML=`${pretty(d)}<br><span class="forecastSourceBadge unavailable">Hourly forecast unavailable — no daily fallback</span>`;
+        b.textContent='Bin —';
+        return;
+      }
+      v.textContent=`${fmt(high.c)}°C`;
+      m.innerHTML=`${pretty(d)}<br>Peak forecast time: <b>${fmtTime(high.hour)}</b><br>Hourly max: ${fmt3(high.c)}°C / ${fmt(high.f)}°F<br>Hourly points: ${high.count} · snapshots checked: ${high.snapshots}<br><span class="forecastSourceBadge hourly">Source: WU hourly max only</span>`;
+      b.textContent=`Market bin ≈ ${Math.round(high.c)}°C`;
+    });
+  }
+  function lastWU(j,n=9){
+    const arr=[];
+    Object.values((j&&j.wu_obs_rows)||{}).forEach(list=>(Array.isArray(list)?list:[]).forEach(x=>arr.push(x)));
+    return arr.sort((a,b)=>String(a.saved_at||'').localeCompare(String(b.saved_at||''))).slice(-n);
+  }
+  function lastMETAR(j,n=4){
+    return ((j&&j.metar_rows)||[]).slice(-n);
+  }
+  function tradeStatus(j){
+    const wu=lastWU(j,9), mt=lastMETAR(j,4);
+    const wuTemps=wu.map(x=>N(x.temp_c)).filter(x=>x!=null);
+    const mtTemps=mt.map(x=>N(x.temp_c)).filter(x=>x!=null);
+    const latestWu=wuTemps.at(-1), peakWu=wuTemps.length?Math.max(...wuTemps):null;
+    const latestMet=mtTemps.at(-1), peakMet=mtTemps.length?Math.max(...mtTemps):null;
+    if(wuTemps.length<3 && mtTemps.length<2)return {cls:'tradeWait',txt:'WAIT: not enough latest WU/METAR readings yet'};
+    const falling = wuTemps.length>=3 && wuTemps.at(-1)<wuTemps.at(-2) && wuTemps.at(-2)<=wuTemps.at(-3);
+    const holding = latestWu!=null && peakWu!=null && Math.abs(latestWu-peakWu)<=0.3;
+    if(falling)return {cls:'tradeGood',txt:`COOLING/DROP: latest WU ${fmt3(latestWu)}°C is below recent peak ${fmt3(peakWu)}°C`};
+    if(holding)return {cls:'tradeWait',txt:`HOLDING NEAR PEAK: latest WU ${fmt3(latestWu)}°C near recent peak ${fmt3(peakWu)}°C`};
+    return {cls:'tradeWait',txt:`WATCH: latest WU ${fmt3(latestWu)}°C, last METAR ${fmt3(latestMet)}°C`};
+  }
+  function addSummaryToTooltip(){
+    const tip=$('tooltip'); if(!tip || tip.dataset.tradeSummaryAdded)return;
+    tip.dataset.tradeSummaryAdded='1';
+    const obs=new MutationObserver(()=>{
+      if(tip.style.display==='none')return;
+      const j=window.__goodHist||window.goodHist;
+      if(!j || tip.querySelector('.tradeSummaryBox'))return;
+      const wu=lastWU(j,9), mt=lastMETAR(j,4), tr=tradeStatus(j);
+      const wuLine=wu.map(x=>`${x.saved_at||x.fetched_at||'?'} ${fmt3(x.temp_c)}°C`).join(' · ');
+      const mtLine=mt.map(x=>`${x.slot||'?'} ${fmt3(x.temp_c)}°C`).join(' · ');
+      const box=document.createElement('div');
+      box.className='tradeSummaryBox';
+      box.innerHTML=`<b>Last 9 WU:</b> ${wuLine||'—'}<br><b>Last 4 METAR:</b> ${mtLine||'—'}<br><b>Trade read:</b> <span class="${tr.cls}">${tr.txt}</span>`;
+      tip.appendChild(box);
+    });
+    obs.observe(tip,{childList:true,subtree:true});
+  }
+  function improveCeilingText(){
+    const tip=$('tooltip'); if(!tip)return;
+    const obs=new MutationObserver(()=>{
+      if(!tip.textContent.includes('HISTORICAL 95%'))return;
+      tip.querySelectorAll('.ttLine').forEach(el=>{
+        if(el.textContent.includes('Ceiling level:')){
+          el.innerHTML=el.innerHTML.replace(/Ceiling level:/,'Historical ceiling value:');
+        }
+      });
+    });
+    obs.observe(tip,{childList:true,subtree:true});
+  }
+  async function run(){
+    const j=await hist();
+    render3Day(j);
+    addSummaryToTooltip();
+    improveCeilingText();
+  }
+  window.addEventListener('load',()=>setTimeout(run,900));
+  setInterval(run,120000);
 })();
 </script>
 

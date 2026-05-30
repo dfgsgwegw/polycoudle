@@ -127,20 +127,14 @@ async function saveForecastSnapshots(env, fc){
  const today=dateIST(), fetchTime=timeIST(), issue=fc.issue_time||('fingerprint:'+fc.raw_hash);
  let saved=0, duplicate=0, seen=0;
 
- // IMPORTANT:
- // Polymarket cards must use WU hourly max when hourly data exists.
- // Daily forecast max is only fallback when hourly data for that target day is missing.
+ // HOURLY ONLY:
+ // No daily max fallback. Cards/forecast max must match WU hourly forecast curve.
+ // If hourly for a target day is unavailable, high_c/high_f remain NULL and frontend shows unavailable.
  for(let h=0;h<=2;h++){
    const target=addDaysIST(today,h);
-
-   const dailyHighC=[fc.today_c,fc.tmr_c,fc.d2_c][h];
-   const dailyHighF=[fc.today_f,fc.tmr_f,fc.d2_f][h];
-   const dailyLowC=[fc.today_low_c,null,null][h];
-   const dailyLowF=[fc.today_low_f,null,null][h];
-
    const hourly=hourlyForTarget(fc.raw_hourly,target);
 
-   let high_c=null, high_f=null, low_c=null, low_f=null, source='WU_DAILY_FALLBACK';
+   let high_c=null, high_f=null, low_c=null, low_f=null, source='WU_HOURLY_ONLY';
 
    if(hourly.length){
      const valsC=hourly.map(x=>x.temp_c).filter(Number.isFinite);
@@ -151,23 +145,14 @@ async function saveForecastSnapshots(env, fc){
      if(valsC.length) low_c=Math.min(...valsC);
      if(valsF.length) low_f=Math.min(...valsF);
 
-     source='WU_HOURLY_MAX';
+     if(high_c==null && high_f!=null) high_c=fToC(high_f);
+     if(high_f==null && high_c!=null) high_f=cToF(high_c);
+     if(low_c==null && low_f!=null) low_c=fToC(low_f);
+     if(low_f==null && low_c!=null) low_f=cToF(low_c);
    }
 
-   // fallback only when hourly unavailable/incomplete
-   if(high_c==null) high_c=dailyHighC;
-   if(high_f==null) high_f=dailyHighF;
-   if(low_c==null) low_c=dailyLowC;
-   if(low_f==null) low_f=dailyLowF;
-
-   // keep C/F consistent if one is missing
-   if(high_c==null && high_f!=null) high_c=fToC(high_f);
-   if(high_f==null && high_c!=null) high_f=cToF(high_c);
-   if(low_c==null && low_f!=null) low_c=fToC(low_f);
-   if(low_f==null && low_c!=null) low_f=cToF(low_c);
-
    const payloadHourly=hourly.map(x=>({...x,source}));
-   const rawPayload={daily: h===0?fc.raw_daily:{}, source, dailyHighC, dailyHighF, hourlyCount:hourly.length};
+   const rawPayload={source, hourlyCount:hourly.length, note:'HOURLY_ONLY_NO_DAILY_FALLBACK'};
 
    seen++;
    try{
@@ -175,7 +160,7 @@ async function saveForecastSnapshots(env, fc){
     saved++;
    }catch(e){ if(String(e.message||e).includes('UNIQUE')) duplicate++; else throw e; }
  }
- return {ok:true,saved,duplicate,seen,issue_time:issue};
+ return {ok:true,saved,duplicate,seen,issue_time:issue,note:'hourly-only no daily fallback'};
 }
 async function collect(env){
  const out={ok:true,today_ist:dateIST()};
