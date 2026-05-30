@@ -591,13 +591,38 @@ td{
 }
 
 
-/* ===== FINAL SYNC PATCH: forecast cards/ceiling/toggles ===== */
-.forecastSourceBadge.hourly{background:#064e3b!important;color:#8fffd2!important}
-.forecastSourceBadge.badrow,.forecastSourceBadge.unavailable{background:#3f1d1d!important;color:#fecaca!important}
-.trueHourlyWarn{color:#ffd433;font-family:ui-monospace,Consolas,monospace;font-size:13px;line-height:1.5;margin-top:6px}
+/* ===== CLEAN STABLE READABLE BUILD ===== */
+.wrap{max-width:1540px!important;width:96vw!important;padding:22px!important}
+h1{font-size:42px!important;line-height:1.1!important}
+.sub,.updated{font-size:15px!important}
+.panel,.card,.forecastHighTrendBox{padding:24px!important;border-radius:22px!important;margin:22px 0!important}
+.chartTitle{font-size:20px!important;letter-spacing:4px!important;margin-bottom:18px!important}
+.toolbar,.sourceModeBar,.rawDatasetBar,.axisBox,.mobileZoomBar{gap:12px!important;row-gap:12px!important;margin:14px 0!important}
+.toolbar button,.toolbar label,.sourceModeBar button,.rawDatasetBar label,.mobileZoomBar button,.btn{font-size:17px!important;padding:13px 17px!important;min-height:46px!important;border-radius:999px!important}
+.axisBox input,.toolbar input{font-size:18px!important;padding:12px 14px!important;min-height:46px!important;min-width:96px!important}
+.chartScroll{padding:18px!important;border-radius:20px!important;background:#fafafa!important}
+#chart{width:100%!important;height:620px!important;min-height:620px!important}
+.legend{font-size:16px!important;gap:22px!important;line-height:1.6!important;margin-top:14px!important}
+.summary,.help,.forecastExplain,.axisHint,.panHint,.axisZoomHint,.layerToggleNote{font-size:15px!important;line-height:1.65!important;padding:14px 16px!important;border-radius:14px!important}
+.grid{grid-template-columns:repeat(4,minmax(250px,1fr))!important;gap:18px!important}
+.value{font-size:34px!important}.small{font-size:16px!important;line-height:1.55!important}.label{font-size:14px!important}
+.status{padding:34px!important}.status h2{font-size:34px!important}
+.highForecastGrid{grid-template-columns:repeat(3,minmax(280px,1fr))!important;gap:22px!important}
+.highForecastCard{padding:26px!important;border-radius:22px!important;min-height:250px!important}
+.highForecastCard h3{font-size:18px!important;letter-spacing:4px!important}
+.highForecastValue{font-size:52px!important;line-height:1.1!important}
+.highForecastMeta{font-size:17px!important;line-height:1.65!important}
+.highForecastBin{font-size:18px!important;padding:11px 16px!important}
+.forecastHighTrendTop{grid-template-columns:repeat(4,minmax(220px,1fr))!important;gap:16px!important}
+.forecastHighMini{padding:20px!important;border-radius:18px!important}
+.forecastHighMini h4{font-size:15px!important}.forecastHighMini .val{font-size:36px!important}.forecastHighMini .sub{font-size:16px!important}
+#forecastHighTrendCanvas{height:320px!important}
+#tooltip{font-size:20px!important;line-height:1.55!important;min-width:460px!important;max-width:720px!important;padding:22px 24px!important;border:2px solid #00d4ff!important;border-radius:20px!important}
+.forecastSourceBadge.hourly{display:inline-block;background:#064e3b!important;color:#8fffd2!important;border-radius:999px!important;padding:8px 12px!important;font-weight:1000!important}
+.forecastSourceBadge.badrow{display:inline-block;background:#3f1d1d!important;color:#fecaca!important;border-radius:999px!important;padding:8px 12px!important;font-weight:1000!important}
+.syncNote{color:#ffd433;font-family:ui-monospace,Consolas,monospace;font-size:14px;line-height:1.55;margin-top:8px}
 .tradeSummaryBox{border:1px solid #0e6b91;background:#061827;color:#bfeaff;border-radius:14px;padding:12px 14px;margin-top:10px;font-family:ui-monospace,Consolas,monospace;font-size:14px;line-height:1.55}
-.tradeGood{color:#22c55e;font-weight:1000}.tradeBad{color:#ef4444;font-weight:1000}.tradeWait{color:#facc15;font-weight:1000}
-.layerToggleNote{color:#ffd433;font-family:ui-monospace,Consolas,monospace;font-size:13px;line-height:1.5;margin:8px 0}
+@media(max-width:900px){.grid,.forecastHighTrendTop,.highForecastGrid{grid-template-columns:1fr!important}#chart{height:500px!important;min-height:500px!important}.wrap{width:100vw!important;padding:12px!important}}
 
 </style></head><body>
 <div class="wrap">
@@ -665,6 +690,7 @@ td{
 
 <div class="axisZoomHint" id="axisZoomHint">Axis zoom: mouse wheel on Y-axis labels = temp/Y zoom only. Mouse wheel on X-axis labels = time/X zoom only. Wheel inside chart = X+Y zoom. Raw = solid red/green, Converted = dashed orange/light-green.</div>
 <div class="layerToggleNote" id="layerToggleNote">Layer toggles fixed: if Forecast/Bias/95%/Analog are unchecked, their canvas overlays are hidden on redraw.</div>
+<div class="syncNote" id="stableSyncNote">Stable sync: 3-day cards and forecast max use /api/hourly-highs worker result. Daily forecast max ignored.</div>
 <div class="chartScroll"><canvas id="chart" width="1180" height="560"></canvas></div>
     <div class="legend"><span><i class="dot" style="background:#ef4444"></i>WU observed</span><span><i class="dot" style="background:#10b981"></i>METAR official</span><span><i class="dot" style="background:#111827"></i>latest WU forecast</span><span><i class="dot" style="background:#60a5fa"></i>older forecast runs</span><span><i class="dot" style="background:#111827;border-top:2px dotted #111827"></i>bias corrected forecast</span><span><i class="dot" style="background:#a855f7"></i>historical 95% ceiling</span><span><i class="dot" style="background:#7f1d1d"></i>99% extreme</span><span><i class="dot" style="background:#6b7280"></i>closest analog day</span></div>
     <div id="curveSummary" class="summary">Loading curve...</div>
@@ -1255,193 +1281,116 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
 
 
 
-<script id="final-sync-forecast-ceiling-toggles">
+<script id="stable-readable-sync-final">
 (function(){
   const $=id=>document.getElementById(id);
   const N=v=>{const x=Number(v);return Number.isFinite(x)?x:null};
-  const cToF=c=>N(c)==null?null:N(c)*9/5+32;
-  const fToC=f=>N(f)==null?null:(N(f)-32)*5/9;
-  const fmt=v=>{const x=N(v);if(x==null)return '—';return x.toFixed(1).replace(/\.0$/,'')};
-  const fmt3=v=>{const x=N(v);if(x==null)return '—';return x.toFixed(3).replace(/\.?0+$/,'')};
+  const fmt=v=>{const x=N(v);return x==null?'—':x.toFixed(1).replace(/\.0$/,'')};
+  const fmt3=v=>{const x=N(v);return x==null?'—':x.toFixed(3).replace(/\.?0+$/,'')};
   const todayIST=()=>new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});
-  function addDays(dateStr,days){const [y,m,d]=String(dateStr).split('-').map(Number);const dt=new Date(y,m-1,d+days,12,0,0);return dt.toLocaleDateString('en-CA');}
+  function addDays(d,days){const [y,m,dd]=d.split('-').map(Number);const dt=new Date(y,m-1,dd+days,12);return dt.toLocaleDateString('en-CA')}
   function pretty(d){try{return new Date(d+'T00:00:00').toLocaleDateString('en-IN',{weekday:'short',day:'2-digit',month:'short',year:'numeric'})}catch(e){return d}}
   function parseHour(s){s=String(s||'');let m=s.match(/T(\d{1,2}):(\d{2})/)||s.match(/\b(\d{1,2}):(\d{2})/);if(!m)return null;let h=+m[1],mi=+m[2],lo=s.toLowerCase();if((lo.includes('pm')||/\bp\b/.test(lo))&&h<12)h+=12;if((lo.includes('am')||/\ba\b/.test(lo))&&h===12)h=0;return h+mi/60}
-  function fmtTime(h){if(N(h)==null)return '—';let hh=Math.floor(h),mm=Math.round((h-hh)*60);if(mm===60){hh++;mm=0}const ap=hh>=12?'PM':'AM';return `${hh%12||12}:${String(mm).padStart(2,'0')} ${ap}`}
+  function fmtTime(v){let h=typeof v==='number'?v:parseHour(v);if(N(h)==null)return '—';let hh=Math.floor(h),mm=Math.round((h-hh)*60);if(mm===60){hh++;mm=0}const ap=hh>=12?'PM':'AM';return `${hh%12||12}:${String(mm).padStart(2,'0')} ${ap}`}
   function unit(){try{if(window.state&&state.unit)return String(state.unit).toLowerCase().startsWith('f')?'f':'c';if(window.masterChart&&masterChart.unit)return String(masterChart.unit).toLowerCase().startsWith('f')?'f':'c';if(window.S&&S.unit)return String(S.unit).toLowerCase().startsWith('f')?'f':'c'}catch(e){}return document.querySelector('[data-u="f"].active,[data-unit="f"].active')?'f':'c'}
-  function getHist(){return window.__goodHist||window.goodHist||(window.S&&window.S.data&&window.S.data.hist)||null}
-  async function fetchHist(){
-    const d=todayIST();
-    try{const r=await fetch('/api/history?date='+d+'&t='+Date.now(),{cache:'no-store'});if(r.ok){const j=await r.json();window.__goodHist=j;return j}}catch(e){}
-    return getHist();
+  async function highs(){
+    try{
+      const r=await fetch('/api/hourly-highs?date='+todayIST()+'&t='+Date.now(),{cache:'no-store'});
+      if(r.ok){const j=await r.json();window.__hourlyHighs=j;return j}
+    }catch(e){}
+    return window.__hourlyHighs||null;
   }
-  function rowKey(r){return String(r.forecast_issue_time_ist||'')+' '+String(r.fetch_time_ist||'')+' '+String(r.created_at||'')}
-  function parseHourly(row,target){
-    let arr=[]; try{arr=JSON.parse(row.hourly_json||'[]')}catch(e){}
-    return arr.map(x=>{
-      const c=N(x.temp_c)??fToC(x.temp_f), f=N(x.temp_f)??cToF(c), time=String(x.time||''), h=parseHour(time);
-      return {c,f,time,h,raw:x};
-    }).filter(x=>{
-      if(N(x.c)==null)return false;
-      if(String(x.time||'').includes('-') && !String(x.time||'').startsWith(target))return false;
-      return true;
-    });
+  async function hist(){
+    try{
+      const r=await fetch('/api/history?date='+todayIST()+'&t='+Date.now(),{cache:'no-store'});
+      if(r.ok){const j=await r.json();window.__goodHist=j;return j}
+    }catch(e){}
+    return window.__goodHist||window.goodHist||null;
   }
-  function latestHourlyMax(rows,target){
-    const rr=(rows||[]).filter(r=>r.target_date===target).sort((a,b)=>rowKey(a).localeCompare(rowKey(b)));
-    for(let i=rr.length-1;i>=0;i--){
-      const hourly=parseHourly(rr[i],target);
-      if(!hourly.length)continue;
-      let best=hourly[0];
-      for(const x of hourly) if(x.c>best.c) best=x;
-      return {...best,count:hourly.length,snapshots:rr.length,row:rr[i]};
-    }
-    return null;
-  }
-  function renderCards(j){
-    if(!j)return;
+  function renderCards(h){
+    if(!h)return;
     const dates=[todayIST(),addDays(todayIST(),1),addDays(todayIST(),2)];
     const ids=[['hfToday','hfTodayMeta','hfTodayBin'],['hfTomorrow','hfTomorrowMeta','hfTomorrowBin'],['hfDayAfter','hfDayAfterMeta','hfDayAfterBin']];
     dates.forEach((d,i)=>{
-      const high=latestHourlyMax(j.forecast_snapshot_rows||[],d);
+      const item=h.days&&h.days[d]&&h.days[d].latest;
+      const checked=h.days&&h.days[d]?h.days[d].snapshots_checked:0;
       const [v,m,b]=ids[i].map($); if(!v||!m||!b)return;
-      if(!high){v.textContent='—';m.innerHTML=`${pretty(d)}<br><span class="forecastSourceBadge badrow">No hourly_json for this day — daily max ignored</span>`;b.textContent='Bin —';return;}
-      v.textContent=`${fmt(high.c)}°C`;
-      m.innerHTML=`${pretty(d)}<br>Peak forecast time: <b>${fmtTime(high.h)}</b><br><b>Hourly JSON max:</b> ${fmt3(high.c)}°C / ${fmt(high.f)}°F<br>Hourly points used: ${high.count}<br>Snapshots checked: ${high.snapshots}<br><span class="forecastSourceBadge hourly">Source: hourly_json max only</span><div class="trueHourlyWarn">DB high_c ignored; daily max ignored.</div>`;
-      b.textContent=`Market bin ≈ ${Math.round(high.c)}°C`;
+      if(!item){
+        v.textContent='—';
+        m.innerHTML=`${pretty(d)}<br><span class="forecastSourceBadge badrow">No hourly forecast saved for this day yet</span><div class="syncNote">Wait for next /api/collect after 10day hourly worker deploy.</div>`;
+        b.textContent='Bin —';
+        return;
+      }
+      v.textContent=`${fmt(item.high_c)}°C`;
+      m.innerHTML=`${pretty(d)}<br>Peak forecast time: <b>${fmtTime(item.peak_time)}</b><br><b>Hourly max:</b> ${fmt3(item.high_c)}°C / ${fmt(item.high_f)}°F<br>Hourly points: ${item.hourly_count} · snapshots: ${checked}<br><span class="forecastSourceBadge hourly">Source: WU hourly max only</span>`;
+      b.textContent=`Market bin ≈ ${Math.round(item.high_c)}°C`;
     });
   }
-  function renderTrend(j){
-    const c=$('forecastHighTrendCanvas'); if(!c||!j)return;
-    const rows=(j.forecast_snapshot_rows||[]).filter(r=>r.target_date===todayIST()).sort((a,b)=>rowKey(a).localeCompare(rowKey(b)));
-    const pts=[];
-    rows.forEach((r,i)=>{const h=latestHourlyMax([r],todayIST()); if(h) pts.push({x:i+1,c:h.c,f:h.f,hour:h.h});});
-    const ctx=c.getContext('2d'),W=c.width,H=c.height,L=70,R=25,T=28,B=44;
-    ctx.clearRect(0,0,W,H);ctx.fillStyle='#fafafa';ctx.fillRect(0,0,W,H);ctx.font='14px ui-monospace,Consolas,monospace';
-    if(!pts.length){ctx.fillStyle='#6b7280';ctx.fillText('No hourly forecast snapshots yet',L,T+40);return;}
-    const yMin=Math.min(...pts.map(p=>p.c))-1,yMax=Math.max(...pts.map(p=>p.c))+1;
-    const X=i=>L+(i-1)/Math.max(1,pts.length-1)*(W-L-R),Y=y=>T+(yMax-y)/(yMax-yMin)*(H-T-B);
+  function renderTrend(h){
+    const c=$('forecastHighTrendCanvas'); if(!c||!h)return;
+    const d=todayIST(), pts=(h.days&&h.days[d]&&h.days[d].trend)||[];
+    const ctx=c.getContext('2d'),W=c.width,H=c.height,L=70,R=25,T=28,B=48;
+    ctx.clearRect(0,0,W,H);ctx.fillStyle='#fafafa';ctx.fillRect(0,0,W,H);
+    ctx.font='15px ui-monospace,Consolas,monospace';
+    if(!pts.length){ctx.fillStyle='#6b7280';ctx.fillText('No hourly forecast trend yet',L,T+45);return;}
+    const compact=[];
+    pts.forEach(p=>{const last=compact.at(-1);if(!last||Math.abs(last.high_c-p.high_c)>0.001)compact.push(p)});
+    const yMin=Math.floor((Math.min(...compact.map(p=>p.high_c))-1)*10)/10;
+    const yMax=Math.ceil((Math.max(...compact.map(p=>p.high_c))+1)*10)/10;
+    const X=i=>L+i/Math.max(1,compact.length-1)*(W-L-R),Y=y=>T+(yMax-y)/(yMax-yMin)*(H-T-B);
     ctx.strokeStyle='#e5e7eb';ctx.lineWidth=1;
-    for(let v=Math.floor(yMin);v<=Math.ceil(yMax);v++){const y=Y(v);ctx.beginPath();ctx.moveTo(L,y);ctx.lineTo(W-R,y);ctx.stroke();ctx.fillStyle='#6b7280';ctx.fillText(fmt(v)+'°',18,y+4);}
-    ctx.strokeStyle='#f97316';ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(X(1),Y(pts[0].c));pts.forEach((p,i)=>ctx.lineTo(X(i+1),Y(p.c)));ctx.stroke();
-    pts.forEach((p,i)=>{ctx.fillStyle=i===pts.length-1?'#ef4444':'#f97316';ctx.beginPath();ctx.arc(X(i+1),Y(p.c),5,0,Math.PI*2);ctx.fill();});
-    const diff=pts.at(-1).c-pts[0].c;
-    ctx.fillStyle=diff>0?'#dc2626':(diff<0?'#059669':'#374151');ctx.font='bold 16px ui-monospace,Consolas,monospace';
-    ctx.fillText(`WU hourly max trend: ${fmt(pts[0].c)}°C → ${fmt(pts.at(-1).c)}°C (${diff>=0?'+':''}${fmt(diff)}°C)`,L+8,T+22);
-    if($('fhLatest')) $('fhLatest').textContent=fmt(pts.at(-1).c)+'°C';
-    if($('fhFirst')) $('fhFirst').textContent=fmt(pts[0].c)+'°C';
-    if($('fhChange')) $('fhChange').textContent=(diff>=0?'+':'')+fmt(diff)+'°C';
-    if($('fhBin')) $('fhBin').textContent=Math.round(pts.at(-1).c)+'°C';
+    for(let v=Math.floor(yMin);v<=Math.ceil(yMax);v++){const y=Y(v);ctx.beginPath();ctx.moveTo(L,y);ctx.lineTo(W-R,y);ctx.stroke();ctx.fillStyle='#6b7280';ctx.fillText(fmt(v)+'°',18,y+5)}
+    ctx.strokeStyle='#f97316';ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(X(0),Y(compact[0].high_c));compact.forEach((p,i)=>ctx.lineTo(X(i),Y(p.high_c)));ctx.stroke();
+    compact.forEach((p,i)=>{ctx.fillStyle=i===compact.length-1?'#ef4444':'#f97316';ctx.beginPath();ctx.arc(X(i),Y(p.high_c),6,0,Math.PI*2);ctx.fill()});
+    const diff=compact.at(-1).high_c-compact[0].high_c;
+    ctx.fillStyle=diff>0?'#dc2626':(diff<0?'#059669':'#374151');ctx.font='bold 17px ui-monospace,Consolas,monospace';
+    ctx.fillText(`WU hourly max trend: ${fmt(compact[0].high_c)}°C → ${fmt(compact.at(-1).high_c)}°C (${diff>=0?'+':''}${fmt(diff)}°C)`,L+8,T+24);
+    if($('fhLatest'))$('fhLatest').textContent=fmt(compact.at(-1).high_c)+'°C';
+    if($('fhFirst'))$('fhFirst').textContent=fmt(compact[0].high_c)+'°C';
+    if($('fhChange'))$('fhChange').textContent=(diff>=0?'+':'')+fmt(diff)+'°C';
+    if($('fhBin'))$('fhBin').textContent=Math.round(compact.at(-1).high_c)+'°C';
   }
   function chartAxis(){
     if(!window.__axisState)window.__axisState={};
-    let xMin=N($('xMinManual')?.value)??N(window.__axisState.xMin), xMax=N($('xMaxManual')?.value)??N(window.__axisState.xMax);
-    let yMin=N($('yMinManual')?.value)??N(window.__axisState.yMin), yMax=N($('yMaxManual')?.value)??N(window.__axisState.yMax);
-    if(!(xMin!=null&&xMax!=null&&xMax>xMin)){if(document.querySelector('[data-x="peak"].active,[data-xrange="peak"].active')){xMin=9;xMax=18}else{xMin=0;xMax=24}}
+    let yMin=N($('yMinManual')?.value)??N(window.__axisState.yMin),yMax=N($('yMaxManual')?.value)??N(window.__axisState.yMax);
     if(!(yMin!=null&&yMax!=null&&yMax>yMin)){yMin=unit()==='f'?14:-10;yMax=unit()==='f'?158:70}
-    return {xMin,xMax,yMin,yMax};
+    return {yMin,yMax};
   }
   function drawBadge(){
-    const j=getHist(), c=$('chart'); if(!j||!c)return;
-    const high=latestHourlyMax(j.forecast_snapshot_rows||[],todayIST()); if(!high)return;
+    const h=window.__hourlyHighs,c=$('chart'); if(!h||!c)return;
+    const item=h.days&&h.days[todayIST()]&&h.days[todayIST()].latest; if(!item)return;
     const ctx=c.getContext('2d'),W=c.width,H=c.height,L=78,R=30,T=48,B=68,ax=chartAxis();
-    const val=unit()==='f'?high.f:high.c;
-    if(val<ax.yMin||val>ax.yMax)return;
+    const val=unit()==='f'?item.high_f:item.high_c;if(val<ax.yMin||val>ax.yMax)return;
     const y=T+(ax.yMax-val)/(ax.yMax-ax.yMin)*(H-T-B);
-    ctx.save();
-    const label=`hourly forecast max ${fmt3(high.c)}°C`;
-    ctx.font='bold 15px ui-monospace,Consolas,monospace';
-    const tw=ctx.measureText(label).width, boxW=tw+22, boxH=30;
-    const x=W-R-boxW-10, yy=Math.max(T+8,Math.min(H-B-boxH-8,y-boxH/2));
-    ctx.strokeStyle='#f97316';ctx.lineWidth=2;ctx.setLineDash([6,6]);
-    ctx.beginPath();ctx.moveTo(Math.max(L,W-R-180),y);ctx.lineTo(W-R-8,y);ctx.stroke();ctx.setLineDash([]);
-    ctx.fillStyle='rgba(249,115,22,.14)';ctx.strokeStyle='#f97316';
-    if(ctx.roundRect){ctx.beginPath();ctx.roundRect(x,yy,boxW,boxH,9);ctx.fill();ctx.stroke();}else{ctx.fillRect(x,yy,boxW,boxH);ctx.strokeRect(x,yy,boxW,boxH);}
-    ctx.fillStyle='#c2410c';ctx.fillText(label,x+11,yy+20);
-    ctx.restore();
-  }
-  function activeLayers(){
-    const q=s=>document.querySelector(s);
-    function c(sel,def=true){const e=q(sel); return e?!!e.checked:def}
-    return {wu:c('input[data-line="wu"]'),metar:c('input[data-line="metar"]'),fc:c('input[data-line="fc"]'),bias:c('input[data-line="bias"]'),ceil95:c('input[data-line="ceil95"]'),ceil99:c('input[data-line="ceil99"]',false),analog:c('input[data-line="analog"]'),peakWindow:c('input[data-line="peakWindow"]')};
-  }
-  function patchContext(){
-    const c=$('chart'); if(!c||c.dataset.finalCtx)return;
-    c.dataset.finalCtx='1';
-    const ctx=c.getContext('2d'); if(!ctx||ctx.__finalLayerPatch)return; ctx.__finalLayerPatch=true;
-    const stroke=ctx.stroke.bind(ctx), fill=ctx.fill.bind(ctx), fillText=ctx.fillText.bind(ctx);
-    function skip(){
-      const L=activeLayers(), st=(String(ctx.strokeStyle)+' '+String(ctx.fillStyle)).toLowerCase();
-      const old=st.includes('60a5fa')||st.includes('147,197,253')||st.includes('lightblue');
-      const latest=st.includes('111827')||st.includes('black')||st.includes('17,24,39');
-      const bias=st.includes('06b6d4')||st.includes('cyan')||st.includes('14,165,233');
-      const ceil=st.includes('a855f7')||st.includes('purple')||st.includes('168,85,247');
-      const extreme=st.includes('991b1b')||st.includes('153,27,27');
-      const analog=st.includes('94a3b8')||st.includes('gray')||st.includes('grey')||st.includes('148,163,184');
-      if(!L.fc&&(old||latest))return true;
-      if(!L.bias&&bias)return true;
-      if(!L.ceil95&&ceil)return true;
-      if(!L.ceil99&&extreme)return true;
-      if(!L.analog&&analog)return true;
-      return false;
-    }
-    ctx.stroke=function(){if(skip())return;return stroke()};
-    ctx.fill=function(){if(skip())return;return fill()};
-    ctx.fillText=function(text,x,y,maxWidth){
-      const s=String(text||'').toLowerCase(),L=activeLayers();
-      if(!L.fc&&s.includes('forecast'))return;
-      if(!L.bias&&s.includes('bias'))return;
-      if(!L.ceil95&&(s.includes('ceiling')||s.includes('historical')))return;
-      if(!L.analog&&s.includes('analog'))return;
-      return fillText(text,x,y,maxWidth);
-    };
+    ctx.save();const label=`hourly max ${fmt3(item.high_c)}°C`;ctx.font='bold 15px ui-monospace,Consolas,monospace';const tw=ctx.measureText(label).width,boxW=tw+22,boxH=30,x=W-R-boxW-10,yy=Math.max(T+8,Math.min(H-B-boxH-8,y-boxH/2));
+    ctx.strokeStyle='#f97316';ctx.lineWidth=2;ctx.setLineDash([6,6]);ctx.beginPath();ctx.moveTo(Math.max(L,W-R-170),y);ctx.lineTo(W-R-8,y);ctx.stroke();ctx.setLineDash([]);
+    ctx.fillStyle='rgba(249,115,22,.16)';ctx.strokeStyle='#f97316';if(ctx.roundRect){ctx.beginPath();ctx.roundRect(x,yy,boxW,boxH,9);ctx.fill();ctx.stroke()}else{ctx.fillRect(x,yy,boxW,boxH);ctx.strokeRect(x,yy,boxW,boxH)}
+    ctx.fillStyle='#c2410c';ctx.fillText(label,x+11,yy+20);ctx.restore();
   }
   function wrapRender(){
-    ['masterRender','renderAll','render','fetchAll','loadAll'].forEach(name=>{
-      try{const fn=window[name]; if(typeof fn==='function'&&!fn.__finalSyncWrapped){
-        const w=function(){patchContext(); const r=fn.apply(this,arguments); Promise.resolve(r).finally(()=>setTimeout(()=>{drawBadge();},140)); return r;};
-        w.__finalSyncWrapped=true; window[name]=w;
-      }}catch(e){}
-    });
+    ['masterRender','renderAll','render','fetchAll','loadAll'].forEach(name=>{try{const fn=window[name];if(typeof fn==='function'&&!fn.__stableSyncWrapped){const w=function(){const r=fn.apply(this,arguments);Promise.resolve(r).finally(()=>setTimeout(drawBadge,150));return r};w.__stableSyncWrapped=true;window[name]=w}}catch(e){}});
   }
-  function lastWU(j,n=9){const arr=[];Object.values((j&&j.wu_obs_rows)||{}).forEach(list=>(Array.isArray(list)?list:[]).forEach(x=>arr.push(x)));return arr.sort((a,b)=>String(a.saved_at||'').localeCompare(String(b.saved_at||''))).slice(-n)}
-  function lastMETAR(j,n=4){return ((j&&j.metar_rows)||[]).slice(-n)}
-  function addTooltipExtras(){
-    const tip=$('tooltip'); if(!tip||tip.dataset.finalExtras)return; tip.dataset.finalExtras='1';
+  function addTooltips(){
+    const tip=$('tooltip'); if(!tip||tip.dataset.stableSync)return; tip.dataset.stableSync='1';
     const obs=new MutationObserver(()=>{
       if(tip.style.display==='none')return;
-      const j=getHist(); if(!j)return;
-      if(tip.textContent.includes('HISTORICAL 95%')&&!tip.querySelector('.ceilingFixedLine')){
-        const card=$('histCeiling'); const val=card?card.textContent.trim():'—';
-        const div=document.createElement('div'); div.className='trueHourlyWarn ceilingFixedLine'; div.innerHTML=`Actual historical ceiling from card/line: <b>${val}</b>`;
-        tip.appendChild(div);
+      if(tip.textContent.includes('HISTORICAL 95%')&&!tip.querySelector('.syncNote')){
+        const v=($('histCeiling')&&$('histCeiling').textContent.trim())||'—';
+        const d=document.createElement('div');d.className='syncNote';d.innerHTML=`Actual ceiling shown by card: <b>${v}</b>`;tip.appendChild(d);
       }
-      if(tip.textContent.includes('LATEST FORECAST')&&!tip.querySelector('.fcMaxFixedLine')){
-        const h=latestHourlyMax(j.forecast_snapshot_rows||[],todayIST());
-        if(h){const div=document.createElement('div'); div.className='trueHourlyWarn fcMaxFixedLine'; div.innerHTML=`Today hourly forecast max: <b>${fmt3(h.c)}°C / ${fmt(h.f)}°F</b> at <b>${fmtTime(h.h)}</b>`; tip.appendChild(div);}
-      }
-      if(!tip.querySelector('.tradeSummaryBox')){
-        const wu=lastWU(j,9), mt=lastMETAR(j,4);
-        const wuLine=wu.map(x=>`${x.saved_at||'?'} ${fmt3(x.temp_c)}°C`).join(' · ');
-        const mtLine=mt.map(x=>`${x.slot||'?'} ${fmt3(x.temp_c)}°C`).join(' · ');
-        const div=document.createElement('div'); div.className='tradeSummaryBox';
-        div.innerHTML=`<b>Last 9 WU:</b> ${wuLine||'—'}<br><b>Last 4 METAR:</b> ${mtLine||'—'}`;
-        tip.appendChild(div);
+      if(tip.textContent.includes('LATEST FORECAST')&&!tip.querySelector('.syncNote')){
+        const h=window.__hourlyHighs, item=h&&h.days&&h.days[todayIST()]&&h.days[todayIST()].latest;
+        if(item){const d=document.createElement('div');d.className='syncNote';d.innerHTML=`Today hourly max: <b>${fmt3(item.high_c)}°C / ${fmt(item.high_f)}°F</b> at <b>${fmtTime(item.peak_time)}</b>`;tip.appendChild(d);}
       }
     });
     obs.observe(tip,{childList:true,subtree:true});
   }
   async function run(){
-    const j=await fetchHist();
-    renderCards(j); renderTrend(j); patchContext(); wrapRender(); addTooltipExtras(); setTimeout(drawBadge,300);
+    const [h,j]=await Promise.all([highs(),hist()]);
+    renderCards(h);renderTrend(h);wrapRender();addTooltips();setTimeout(drawBadge,300);
   }
   window.addEventListener('load',()=>setTimeout(run,900));
   setInterval(run,120000);
-  document.addEventListener('click',e=>{
-    if(e.target && (e.target.matches('input[data-line]') || e.target.closest('label'))){
-      setTimeout(()=>{try{if(typeof window.masterRender==='function')window.masterRender();else if(typeof window.renderAll==='function')window.renderAll();else if(typeof window.render==='function')window.render();}catch(err){}},100);
-    }
-  });
 })();
 </script>
 
