@@ -621,6 +621,13 @@ td{
 #xyReadout b{color:#00d4ff}
 .highForecastCard{min-height:340px!important}.highForecastMeta{font-size:15px!important}
 
+
+/* ===== DAILY + HOURLY MAX BOTH PATCH ===== */
+.dualMaxBox{font-family:ui-monospace,Consolas,monospace;font-size:14px;line-height:1.55;color:#bfeaff;background:rgba(0,0,0,.16);border:1px solid rgba(0,212,255,.18);border-radius:12px;padding:10px 12px;margin-top:10px}
+.dualMaxBox b{color:#fff}.dailyHot{color:#fb923c;font-weight:1000}.hourlyHot{color:#60a5fa;font-weight:1000}
+.diffHot{color:#ef4444;font-weight:1000}.diffCold{color:#22c55e;font-weight:1000}.diffNeutral{color:#ffd433;font-weight:1000}
+.highForecastCard{min-height:390px!important}
+
 </style></head><body>
 <div class="wrap">
   <div class="header"><div><h1>VILK <span class="cyan">Live Signal</span></h1><div class="sub">● UI refresh 30 sec · cron save 1 min · Lucknow Airport (VILK) · D1 archive</div></div><div><button class="btn" id="refreshBtn">↻ Refresh Now</button><div class="updated" id="updated">Updated --</div></div></div>
@@ -1468,6 +1475,9 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
 
 
 
+
+
+
 <script id="vps-bot-source-polymarket-cards">
 (function(){
   const $=id=>document.getElementById(id);
@@ -1478,23 +1488,34 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
   function addDays(d,days){const [y,m,dd]=d.split('-').map(Number);const dt=new Date(y,m-1,dd+days,12);return dt.toLocaleDateString('en-CA')}
   function pretty(d){try{return new Date(d+'T00:00:00').toLocaleDateString('en-IN',{weekday:'short',day:'2-digit',month:'short',year:'numeric'})}catch(e){return d}}
   async function loadHighs(){try{const r=await fetch('/api/polymarket-highs?date='+todayIST()+'&t='+Date.now(),{cache:'no-store'});if(r.ok){const j=await r.json();window.__polyHighs=j;return j}}catch(e){}return window.__polyHighs||null}
+  function diffCls(x){x=N(x);return x==null?'diffNeutral':(x>0?'diffHot':(x<0?'diffCold':'diffNeutral'))}
   function trendLabel(item){const ch=N(item.change_from_previous_c);if(ch==null)return '<span class="trendFlat">first value today</span>';if(ch>0)return `<span class="trendUp">rising +${fmt3(ch)}°C</span>`;if(ch<0)return `<span class="trendDown">falling ${fmt3(ch)}°C</span>`;return '<span class="trendFlat">stable 0.000°C</span>'}
+  function dualBox(item){
+    const dc=item.daily_minus_hourly_c, df=item.daily_minus_hourly_f;
+    return `<div class="dualMaxBox">
+      <b>WU Daily Max:</b> <span class="dailyHot">${fmt3(item.high_c)}°C / ${fmt(item.high_f)}°F</span><br>
+      <b>WU Hourly Max:</b> <span class="hourlyHot">${fmt3(item.hourly_high_c)}°C / ${fmt(item.hourly_high_f)}°F</span><br>
+      <b>Hourly peak time:</b> ${item.hourly_peak_time||'—'} · points ${item.hourly_points||'—'}<br>
+      <b>Daily − Hourly:</b> <span class="${diffCls(dc)}">${dc==null?'—':(dc>=0?'+':'')+fmt3(dc)+'°C'} / ${df==null?'—':(df>=0?'+':'')+fmt(df)+'°F'}</span><br>
+      <b>Market bin daily:</b> ${item.daily_market_bin??'—'}°C · <b>hourly:</b> ${item.hourly_market_bin??'—'}°C
+    </div>`;
+  }
   function statsBlock(item,isToday){
     const drop=N(item.drop_from_highest_c);
-    const diff=(isToday&&N(item.diff_forecast_high_minus_current_c)!=null)?`<br><b>Forecast high − current obs:</b> ${item.diff_forecast_high_minus_current_c>=0?'+':''}${fmt3(item.diff_forecast_high_minus_current_c)}°C / ${item.diff_forecast_high_minus_current_f>=0?'+':''}${fmt(item.diff_forecast_high_minus_current_f)}°F`:'';
-    return `<div class="histStats"><b>Current forecast:</b> ${fmt3(item.high_c)}°C / ${fmt(item.high_f)}°F<br><b>Previous forecast:</b> ${fmt3(item.previous_c)}°C / ${fmt(item.previous_f)}°F<br><b>Highest seen today:</b> ${fmt3(item.highest_seen_c)}°C / ${fmt(item.highest_seen_f)}°F<br><b>Lowest seen today:</b> ${fmt3(item.lowest_seen_c)}°C / ${fmt(item.lowest_seen_f)}°F<br><b>Drop from highest:</b> ${drop==null?'—':(drop>=0?'+':'')+fmt3(drop)+'°C'}<br><b>Trend:</b> ${trendLabel(item)}${diff}</div>`;
+    const diff=(isToday&&N(item.diff_forecast_high_minus_current_c)!=null)?`<br><b>Daily forecast − current obs:</b> ${item.diff_forecast_high_minus_current_c>=0?'+':''}${fmt3(item.diff_forecast_high_minus_current_c)}°C / ${item.diff_forecast_high_minus_current_f>=0?'+':''}${fmt(item.diff_forecast_high_minus_current_f)}°F`:'';
+    return `<div class="histStats"><b>Current daily forecast:</b> ${fmt3(item.high_c)}°C / ${fmt(item.high_f)}°F<br><b>Previous daily forecast:</b> ${fmt3(item.previous_c)}°C / ${fmt(item.previous_f)}°F<br><b>Highest daily seen today:</b> ${fmt3(item.highest_seen_c)}°C / ${fmt(item.highest_seen_f)}°F<br><b>Lowest daily seen today:</b> ${fmt3(item.lowest_seen_c)}°C / ${fmt(item.lowest_seen_f)}°F<br><b>Drop from daily highest:</b> ${drop==null?'—':(drop>=0?'+':'')+fmt3(drop)+'°C'}<br><b>Daily trend:</b> ${trendLabel(item)}${diff}</div>`;
   }
   function valueBlock(item,isToday){
     const current=isToday?`<b>WU current raw:</b> ${fmt3(item.current_c)}°C / ${fmt(item.current_f)}°F<br><b>WU current converted:</b> ${fmt3(item.current_converted_c_from_f)}°C from F · ${fmt(item.current_converted_f_from_c)}°F from C<br>`:'';
-    return `<div class="sourceValues">${current}<b>Forecast raw from API:</b> ${fmt3(item.raw_c)}°C / ${fmt(item.raw_f)}°F<br><b>Forecast converted:</b> ${fmt3(item.converted_c_from_f)}°C from raw F · ${fmt(item.converted_f_from_c)}°F from raw C<br><b>Main value source:</b> ${item.display_source==='WU_RAW_F_CONVERTED_TO_C'?'raw F → converted C':'raw C fallback'}</div>`;
+    return `<div class="sourceValues">${current}<b>Daily raw from API:</b> ${fmt3(item.raw_c)}°C / ${fmt(item.raw_f)}°F<br><b>Daily converted:</b> ${fmt3(item.converted_c_from_f)}°C from raw F · ${fmt(item.converted_f_from_c)}°F from raw C<br><b>Main daily source:</b> ${item.display_source==='WU_RAW_F_CONVERTED_TO_C'?'raw F → converted C':'raw C fallback'}</div>`;
   }
   function setCard(prefix,item,type){
     const v=$(prefix),m=$(prefix+'Meta'),b=$(prefix+'Bin'); if(!v||!m||!b)return;
     if(!item||N(item.high_c)==null){v.textContent='—';m.innerHTML='<span class="sourceBadge wait">waiting for new saved value</span>';b.textContent='Bin —';return;}
     v.textContent=fmt3(item.high_c)+'°C';
-    if(type==='today') m.innerHTML=`${pretty(item.date)}<br>Current WU obs: <b>${fmt3(item.current_c)}°C / ${fmt(item.current_f)}°F</b><br>Forecast temperatureMax: <b>${fmt3(item.high_c)}°C / ${fmt(item.high_f)}°F</b><br>Obs peak since 7am: ${fmt3(item.obs_peak_c)}°C at ${item.obs_peak_time||'—'}<br>Saved values today: ${item.forecast_rows_checked||0}${statsBlock(item,true)}${valueBlock(item,true)}<span class="sourceBadge">Source: WU obs + WU daily 5day temperatureMax</span>`;
-    else m.innerHTML=`${pretty(item.date)}<br>temperatureMax: <b>${fmt3(item.high_c)}°C / ${fmt(item.high_f)}°F</b><br>Saved values today: ${item.forecast_rows_checked||0}${statsBlock(item,false)}${valueBlock(item,false)}<span class="sourceBadge forecast">Source: WU daily 5day temperatureMax</span>`;
-    b.textContent='Market bin ≈ '+Math.round(item.high_c)+'°C';
+    if(type==='today') m.innerHTML=`${pretty(item.date)}<br>Current WU obs: <b>${fmt3(item.current_c)}°C / ${fmt(item.current_f)}°F</b><br>Daily temperatureMax: <b>${fmt3(item.high_c)}°C / ${fmt(item.high_f)}°F</b><br>Hourly max: <b>${fmt3(item.hourly_high_c)}°C / ${fmt(item.hourly_high_f)}°F</b><br>Saved daily values: ${item.forecast_rows_checked||0}${dualBox(item)}${statsBlock(item,true)}${valueBlock(item,true)}<span class="sourceBadge">Source: WU daily + hourly + obs</span>`;
+    else m.innerHTML=`${pretty(item.date)}<br>Daily temperatureMax: <b>${fmt3(item.high_c)}°C / ${fmt(item.high_f)}°F</b><br>Hourly max: <b>${fmt3(item.hourly_high_c)}°C / ${fmt(item.hourly_high_f)}°F</b><br>Saved daily values: ${item.forecast_rows_checked||0} · hourly snapshots ${item.hourly_rows_checked||0}${dualBox(item)}${statsBlock(item,false)}${valueBlock(item,false)}<span class="sourceBadge forecast">Source: WU daily + hourly</span>`;
+    b.textContent=`Bin daily ≈ ${item.daily_market_bin??Math.round(item.high_c)}°C · hourly ≈ ${item.hourly_market_bin??'—'}°C`;
   }
   function renderHighs(j){
     if(!j||!j.days)return;

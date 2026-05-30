@@ -130,7 +130,7 @@ async function saveForecastSnapshots(env, fc){
  // HOURLY ONLY:
  // No daily max fallback. Cards/forecast max must match WU hourly forecast curve.
  // If hourly for a target day is unavailable, high_c/high_f remain NULL and frontend shows unavailable.
- for(let h=0;h<=2;h++){
+ for(let h=0;h<=3;h++){
    const target=addDaysIST(today,h);
    const hourly=hourlyForTarget(fc.raw_hourly,target);
 
