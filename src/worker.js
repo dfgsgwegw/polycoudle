@@ -246,6 +246,7 @@ async function polymarketDailyHighs(env, day){
 
   const wu=(wuRows.results||[]);
   const fc=(fcRows.results||[]);
+  const mt=(mtRows.results||[]);
   const latestWu=wu.at(-1)||null;
   const latestFc=fc.at(-1)||null;
 
@@ -276,6 +277,8 @@ async function polymarketDailyHighs(env, day){
   const d1v=fcDay('tmr');
   const d2v=fcDay('d2');
   const d3v=fcDay('d3');
+
+  const latePeakSignal=detectLatePeakPattern(wu,mt);
 
   const out={
     ok:true,
@@ -321,12 +324,82 @@ async function polymarketDailyHighs(env, day){
 
 
 
+
+function detectLatePeakPattern(wuRows, metarRows){
+  function hourFromTime(s){
+    s=String(s||'');
+    let m=s.match(/(\d{1,2}):(\d{2})/);
+    if(!m) return null;
+    return Number(m[1])+Number(m[2])/60;
+  }
+  const pts=[];
+  for(const r of (wuRows||[])){
+    const c=n(r.temp_c), h=hourFromTime(r.obs_time||r.slot||r.fetched_at);
+    if(c!=null && h!=null) pts.push({h,c,src:'WU',time:r.obs_time||r.slot||r.fetched_at});
+  }
+  for(const r of (metarRows||[])){
+    const c=n(r.temp_c), h=hourFromTime(r.slot||r.valid_ist||r.valid_utc);
+    if(c!=null && h!=null) pts.push({h,c,src:'METAR',time:r.slot||r.valid_ist||r.valid_utc});
+  }
+  pts.sort((a,b)=>a.h-b.h);
+  if(pts.length<5) return {type:'insufficient',score:0,label:'NOT ENOUGH DATA',reason:'Need more WU/METAR readings',peak_c:null};
+
+  const peak=Math.max(...pts.map(p=>p.c));
+  const peakPts=pts.filter(p=>p.c>=peak-0.11);
+  const firstPeak=peakPts[0]?.h??null;
+  const lastPeak=peakPts.at(-1)?.h??null;
+  const latest=pts.at(-1);
+  const last3=pts.slice(-3);
+  const last5=pts.slice(-5);
+  const latestDelta=latest?+(latest.c-peak).toFixed(3):null;
+
+  const after1530=pts.filter(p=>p.h>=15.5);
+  const after1600=pts.filter(p=>p.h>=16.0);
+  const nearAfter1530=after1530.filter(p=>p.c>=peak-0.30);
+  const nearLast3=last3.length?last3.filter(p=>p.c>=peak-0.30).length:0;
+
+  const earlyPlateau=pts.filter(p=>p.h>=12.0 && p.h<=15.5 && p.c>=peak-0.30).length;
+  const lateHold=nearAfter1530.length>=2 || nearLast3>=2;
+  const newHighLate=peakPts.some(p=>p.h>=15.5);
+  const noDropLatest=latest && latest.c>=peak-0.30;
+  const slowFall=last3.length>=3 && Math.abs(last3.at(-1).c-last3[0].c)<=0.30;
+  const fallingFast=last3.length>=3 && (last3.at(-1).c-last3[0].c)<=-0.60;
+
+  let score=0;
+  if(earlyPlateau>=3) score+=20;
+  if(lateHold) score+=30;
+  if(newHighLate) score+=25;
+  if(noDropLatest) score+=15;
+  if(slowFall) score+=10;
+  if(fallingFast) score-=30;
+
+  let type='normal_drop', label='NORMAL DROP';
+  let reason='Peak likely already done or dropping normally.';
+  if(score>=70){type='late_peak_hold';label='LATE PEAK HOLD';reason='Temp is still holding near peak after 3:30 PM; late peak / extended plateau day.';}
+  else if(score>=45){type='extended_peak_risk';label='EXTENDED PEAK RISK';reason='Late readings are near peak; wait for confirmed drop.';}
+  else if(fallingFast){type='falling';label='FALLING';reason='Last readings show clear drop from peak.';}
+
+  return {
+    type,label,score:Math.max(0,Math.min(100,score)),reason,
+    peak_c:peak,
+    latest_c:latest?.c??null,
+    latest_time:latest?.time??null,
+    latest_delta_from_peak_c:latestDelta,
+    first_peak_hour:firstPeak,
+    last_peak_hour:lastPeak,
+    after_1530_near_peak_count:nearAfter1530.length,
+    last3:last3.map(p=>({time:p.time,temp_c:p.c,src:p.src})),
+    rule:'late hold if readings after 3:30 PM remain within 0.3°C of peak or new/equal high occurs late'
+  };
+}
+
 async function polymarketDailyAndHourlyHighsFinal(env, day){
   const d0=day, d1=addDaysIST(day,1), d2=addDaysIST(day,2), d3=addDaysIST(day,3);
   const targets=[d0,d1,d2,d3];
 
   const wuRows=await env.DB.prepare('SELECT * FROM wu_obs WHERE obs_date=? ORDER BY obs_time ASC, created_at ASC LIMIT 3000').bind(d0).all();
   const fcRows=await env.DB.prepare('SELECT * FROM forecast WHERE forecast_date=? ORDER BY created_at ASC LIMIT 2000').bind(d0).all();
+  const mtRows=await env.DB.prepare('SELECT * FROM metar WHERE obs_date=? ORDER BY valid_utc ASC LIMIT 2000').bind(d0).all();
 
   let fsRows={results:[]};
   try{
@@ -335,6 +408,7 @@ async function polymarketDailyAndHourlyHighsFinal(env, day){
 
   const wu=(wuRows.results||[]);
   const fc=(fcRows.results||[]);
+  const mt=(mtRows.results||[]);
   const fs=(fsRows.results||[]);
   const latestWu=wu.at(-1)||null;
 
@@ -592,12 +666,15 @@ async function polymarketDailyAndHourlyHighsFinal(env, day){
     };
   }
 
+  const latePeakSignal=detectLatePeakPattern(wu,mt);
+
   const out={
     ok:true,
     base_date:d0,
     note:'FINAL STRICT FIX ACTIVE: Today uses WU obs peak/current; D+ cards show daily + direct hourly, strict per card date, no cross-date mixing.',
     updated_at:timeIST(),
-    debug_counts:{wu_rows:wu.length,forecast_rows:fc.length,snapshot_rows:fs.length,direct_hourly_ok:!!direct.obj,direct_hourly_url:direct.used,direct_hourly_error:direct.error},
+    debug_counts:{wu_rows:wu.length,metar_rows:mt.length,forecast_rows:fc.length,snapshot_rows:fs.length,direct_hourly_ok:!!direct.obj,direct_hourly_url:direct.used,direct_hourly_error:direct.error},
+    late_peak_signal:latePeakSignal,
     days:{}
   };
 
