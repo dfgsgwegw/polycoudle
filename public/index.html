@@ -628,6 +628,13 @@ td{
 .diffHot{color:#ef4444;font-weight:1000}.diffCold{color:#22c55e;font-weight:1000}.diffNeutral{color:#ffd433;font-weight:1000}
 .highForecastCard{min-height:390px!important}
 
+
+/* ===== HOURLY FALLBACK FIX DISPLAY ===== */
+.dualMaxBox{font-family:ui-monospace,Consolas,monospace;font-size:14px;line-height:1.55;color:#bfeaff;background:rgba(0,0,0,.16);border:1px solid rgba(0,212,255,.18);border-radius:12px;padding:10px 12px;margin-top:10px}
+.dualMaxBox b{color:#fff}.dailyHot{color:#fb923c;font-weight:1000}.hourlyHot{color:#60a5fa;font-weight:1000}
+.diffHot{color:#ef4444;font-weight:1000}.diffCold{color:#22c55e;font-weight:1000}.diffNeutral{color:#ffd433;font-weight:1000}
+.highForecastCard{min-height:390px!important}
+
 </style></head><body>
 <div class="wrap">
   <div class="header"><div><h1>VILK <span class="cyan">Live Signal</span></h1><div class="sub">● UI refresh 30 sec · cron save 1 min · Lucknow Airport (VILK) · D1 archive</div></div><div><button class="btn" id="refreshBtn">↻ Refresh Now</button><div class="updated" id="updated">Updated --</div></div></div>
@@ -1478,6 +1485,9 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
 
 
 
+
+
+
 <script id="vps-bot-source-polymarket-cards">
 (function(){
   const $=id=>document.getElementById(id);
@@ -1496,6 +1506,7 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
       <b>WU Daily Max:</b> <span class="dailyHot">${fmt3(item.high_c)}°C / ${fmt(item.high_f)}°F</span><br>
       <b>WU Hourly Max:</b> <span class="hourlyHot">${fmt3(item.hourly_high_c)}°C / ${fmt(item.hourly_high_f)}°F</span><br>
       <b>Hourly peak time:</b> ${item.hourly_peak_time||'—'} · points ${item.hourly_points||'—'}<br>
+      <b>Hourly source:</b> ${item.hourly_source||'—'}<br>
       <b>Daily − Hourly:</b> <span class="${diffCls(dc)}">${dc==null?'—':(dc>=0?'+':'')+fmt3(dc)+'°C'} / ${df==null?'—':(df>=0?'+':'')+fmt(df)+'°F'}</span><br>
       <b>Market bin daily:</b> ${item.daily_market_bin??'—'}°C · <b>hourly:</b> ${item.hourly_market_bin??'—'}°C
     </div>`;
@@ -1513,8 +1524,8 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
     const v=$(prefix),m=$(prefix+'Meta'),b=$(prefix+'Bin'); if(!v||!m||!b)return;
     if(!item||N(item.high_c)==null){v.textContent='—';m.innerHTML='<span class="sourceBadge wait">waiting for new saved value</span>';b.textContent='Bin —';return;}
     v.textContent=fmt3(item.high_c)+'°C';
-    if(type==='today') m.innerHTML=`${pretty(item.date)}<br>Current WU obs: <b>${fmt3(item.current_c)}°C / ${fmt(item.current_f)}°F</b><br>Daily temperatureMax: <b>${fmt3(item.high_c)}°C / ${fmt(item.high_f)}°F</b><br>Hourly max: <b>${fmt3(item.hourly_high_c)}°C / ${fmt(item.hourly_high_f)}°F</b><br>Saved daily values: ${item.forecast_rows_checked||0}${dualBox(item)}${statsBlock(item,true)}${valueBlock(item,true)}<span class="sourceBadge">Source: WU daily + hourly + obs</span>`;
-    else m.innerHTML=`${pretty(item.date)}<br>Daily temperatureMax: <b>${fmt3(item.high_c)}°C / ${fmt(item.high_f)}°F</b><br>Hourly max: <b>${fmt3(item.hourly_high_c)}°C / ${fmt(item.hourly_high_f)}°F</b><br>Saved daily values: ${item.forecast_rows_checked||0} · hourly snapshots ${item.hourly_rows_checked||0}${dualBox(item)}${statsBlock(item,false)}${valueBlock(item,false)}<span class="sourceBadge forecast">Source: WU daily + hourly</span>`;
+    if(type==='today') m.innerHTML=`${pretty(item.date)}<br>Current WU obs: <b>${fmt3(item.current_c)}°C / ${fmt(item.current_f)}°F</b><br>Daily temperatureMax: <b>${fmt3(item.high_c)}°C / ${fmt(item.high_f)}°F</b><br>Hourly max: <b>${fmt3(item.hourly_high_c)}°C / ${fmt(item.hourly_high_f)}°F</b><br>Saved daily values: ${item.forecast_rows_checked||0} · hourly values ${item.hourly_rows_checked||0}${dualBox(item)}${statsBlock(item,true)}${valueBlock(item,true)}<span class="sourceBadge">Source: WU daily + hourly + obs</span>`;
+    else m.innerHTML=`${pretty(item.date)}<br>Daily temperatureMax: <b>${fmt3(item.high_c)}°C / ${fmt(item.high_f)}°F</b><br>Hourly max: <b>${fmt3(item.hourly_high_c)}°C / ${fmt(item.hourly_high_f)}°F</b><br>Saved daily values: ${item.forecast_rows_checked||0} · hourly values ${item.hourly_rows_checked||0}${dualBox(item)}${statsBlock(item,false)}${valueBlock(item,false)}<span class="sourceBadge forecast">Source: WU daily + hourly</span>`;
     b.textContent=`Bin daily ≈ ${item.daily_market_bin??Math.round(item.high_c)}°C · hourly ≈ ${item.hourly_market_bin??'—'}°C`;
   }
   function renderHighs(j){
