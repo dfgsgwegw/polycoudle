@@ -1465,6 +1465,9 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
 
 
 
+
+
+
 <script id="vps-bot-source-polymarket-cards">
 (function(){
   const $=id=>document.getElementById(id);
@@ -1483,7 +1486,7 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
   }
   function valueBlock(item,isToday){
     const current=isToday?`<b>WU current raw:</b> ${fmt3(item.current_c)}°C / ${fmt(item.current_f)}°F<br><b>WU current converted:</b> ${fmt3(item.current_converted_c_from_f)}°C from F · ${fmt(item.current_converted_f_from_c)}°F from C<br>`:'';
-    return `<div class="sourceValues">${current}<b>Forecast raw from API:</b> ${fmt3(item.raw_c)}°C / ${fmt(item.raw_f)}°F<br><b>Forecast converted:</b> ${fmt3(item.converted_c_from_f)}°C from F · ${fmt(item.converted_f_from_c)}°F from C</div>`;
+    return `<div class="sourceValues">${current}<b>Forecast raw from API:</b> ${fmt3(item.raw_c)}°C / ${fmt(item.raw_f)}°F<br><b>Forecast converted:</b> ${fmt3(item.converted_c_from_f)}°C from raw F · ${fmt(item.converted_f_from_c)}°F from raw C<br><b>Main value source:</b> ${item.display_source==='WU_RAW_F_CONVERTED_TO_C'?'raw F → converted C':'raw C fallback'}</div>`;
   }
   function setCard(prefix,item,type){
     const v=$(prefix),m=$(prefix+'Meta'),b=$(prefix+'Bin'); if(!v||!m||!b)return;
@@ -1493,46 +1496,13 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
     else m.innerHTML=`${pretty(item.date)}<br>temperatureMax: <b>${fmt3(item.high_c)}°C / ${fmt(item.high_f)}°F</b><br>Saved values today: ${item.forecast_rows_checked||0}${statsBlock(item,false)}${valueBlock(item,false)}<span class="sourceBadge forecast">Source: WU daily 5day temperatureMax</span>`;
     b.textContent='Market bin ≈ '+Math.round(item.high_c)+'°C';
   }
-  function updateFalling(j){
-    let badge=document.getElementById('fallingBadge');
-    if(!badge){badge=document.createElement('div');badge.id='fallingBadge';badge.className='fallingBadge';document.body.appendChild(badge);}
-    if(j&&j.wu_falling_last3){const c=$('chart'),r=c?c.getBoundingClientRect():null;badge.style.display='block';badge.textContent='↘ WU OBS FALLING — last 3 readings down';if(r){badge.style.left=(r.left+18)+'px';badge.style.top=(r.top+18)+'px';}}
-    else badge.style.display='none';
-  }
   function renderHighs(j){
     if(!j||!j.days)return;
     const d0=todayIST(),d1=addDays(d0,1),d2=addDays(d0,2),d3=addDays(d0,3);
-    setCard('hfToday',j.days[d0],'today');setCard('hfTomorrow',j.days[d1],'future');setCard('hfDayAfter',j.days[d2],'future');setCard('hfD3',j.days[d3],'future');updateFalling(j);
-    const today=j.days[d0];
-    if(today){if($('fhLatest'))$('fhLatest').textContent=fmt3(today.high_c)+'°C';if($('fhLatestSub'))$('fhLatestSub').innerHTML='current forecast temperatureMax';if($('fhFirst'))$('fhFirst').textContent=fmt3(today.highest_seen_c)+'°C';if($('fhFirstSub'))$('fhFirstSub').innerHTML='highest forecast seen today';if($('fhChange'))$('fhChange').textContent=(today.drop_from_highest_c>=0?'+':'')+fmt3(today.drop_from_highest_c)+'°C';if($('fhChangeSub'))$('fhChangeSub').textContent='drop from highest forecast';if($('fhBin'))$('fhBin').textContent=today.market_bin!=null?today.market_bin+'°C':'—';if($('fhBinSub'))$('fhBinSub').textContent='market bin from current forecast';}
+    setCard('hfToday',j.days[d0],'today');setCard('hfTomorrow',j.days[d1],'future');setCard('hfDayAfter',j.days[d2],'future');setCard('hfD3',j.days[d3],'future');
   }
   async function run(){const j=await loadHighs();renderHighs(j)}
   window.addEventListener('load',()=>setTimeout(run,900));setInterval(run,120000);
-
-  function patchStraightLines(){
-    const c=$('chart'); if(!c||c.dataset.noSmoothPatch)return;c.dataset.noSmoothPatch='1';
-    const ctx=c.getContext('2d'); if(!ctx||ctx.__straightLinePatch)return;ctx.__straightLinePatch=true;
-    const line=ctx.lineTo.bind(ctx);
-    ctx.quadraticCurveTo=function(cpx,cpy,x,y){return line(x,y)};
-    ctx.bezierCurveTo=function(cp1x,cp1y,cp2x,cp2y,x,y){return line(x,y)};
-  }
-  window.addEventListener('load',()=>setTimeout(patchStraightLines,400));setInterval(patchStraightLines,1500);
-
-  function getAxis(){
-    let yMin=N($('yMinManual')&&$('yMinManual').value),yMax=N($('yMaxManual')&&$('yMaxManual').value);
-    if(!(yMin!=null&&yMax!=null&&yMax>yMin)){yMin=-10;yMax=70}
-    let xMin=N($('xMinManual')&&$('xMinManual').value),xMax=N($('xMaxManual')&&$('xMaxManual').value);
-    if(!(xMin!=null&&xMax!=null&&xMax>xMin)){const xs=N($('xStart')&&$('xStart').value),xe=N($('xEnd')&&$('xEnd').value);if(xs!=null&&xe!=null&&xe>xs){xMin=xs;xMax=xe}else{xMin=0;xMax=24}}
-    return {xMin,xMax,yMin,yMax};
-  }
-  function fmtTimeFromHour(h){h=Math.max(0,Math.min(24,h));let hh=Math.floor(h),mm=Math.round((h-hh)*60);if(mm===60){hh++;mm=0}const ap=hh>=12?'PM':'AM';return `${hh%12||12}:${String(mm).padStart(2,'0')} ${ap}`}
-  function initXY(){
-    const c=$('chart'); if(!c||c.dataset.xyReadout)return;c.dataset.xyReadout='1';
-    let box=$('xyReadout'); if(!box){box=document.createElement('div');box.id='xyReadout';document.body.appendChild(box)}
-    c.addEventListener('mousemove',ev=>{const rect=c.getBoundingClientRect(),W=c.width,H=c.height,L=78,R=30,T=48,B=68,sx=c.width/rect.width,sy=c.height/rect.height,px=(ev.clientX-rect.left)*sx,py=(ev.clientY-rect.top)*sy,ax=getAxis();const x=ax.xMin+(px-L)/(W-L-R)*(ax.xMax-ax.xMin),y=ax.yMax-(py-T)/(H-T-B)*(ax.yMax-ax.yMin);box.style.display='block';box.style.left=(ev.clientX+18)+'px';box.style.top=(ev.clientY+18)+'px';box.innerHTML=`<b>${fmtTimeFromHour(x)}</b> · <b>${fmt3(y)}°</b><br><span style="color:#9bd4ff">x=${fmt3(x)}h · y=${fmt3(y)}</span>`});
-    c.addEventListener('mouseleave',()=>{box.style.display='none'});
-  }
-  window.addEventListener('load',()=>setTimeout(initXY,700));
 })();
 </script>
 
