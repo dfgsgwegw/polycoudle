@@ -126,19 +126,52 @@ function hourlyForTarget(hourlyObj, target){
 async function saveForecastSnapshots(env, fc){
  const today=dateIST(), fetchTime=timeIST(), issue=fc.issue_time||('fingerprint:'+fc.raw_hash);
  let saved=0, duplicate=0, seen=0;
+
+ // IMPORTANT:
+ // Polymarket cards must use WU hourly max when hourly data exists.
+ // Daily forecast max is only fallback when hourly data for that target day is missing.
  for(let h=0;h<=2;h++){
    const target=addDaysIST(today,h);
-   const highsC=[fc.today_c,fc.tmr_c,fc.d2_c], highsF=[fc.today_f,fc.tmr_f,fc.d2_f];
-   const lowsC=[fc.today_low_c,null,null], lowsF=[fc.today_low_f,null,null];
+
+   const dailyHighC=[fc.today_c,fc.tmr_c,fc.d2_c][h];
+   const dailyHighF=[fc.today_f,fc.tmr_f,fc.d2_f][h];
+   const dailyLowC=[fc.today_low_c,null,null][h];
+   const dailyLowF=[fc.today_low_f,null,null][h];
+
    const hourly=hourlyForTarget(fc.raw_hourly,target);
-   let high_c=highsC[h], high_f=highsF[h], low_c=lowsC[h], low_f=lowsF[h];
-   if(high_c==null && hourly.length){const vals=hourly.map(x=>x.temp_c).filter(Number.isFinite); if(vals.length) high_c=Math.max(...vals);}
-   if(high_f==null && hourly.length){const vals=hourly.map(x=>x.temp_f).filter(Number.isFinite); if(vals.length) high_f=Math.max(...vals);}
-   if(low_c==null && hourly.length){const vals=hourly.map(x=>x.temp_c).filter(Number.isFinite); if(vals.length) low_c=Math.min(...vals);}
-   if(low_f==null && hourly.length){const vals=hourly.map(x=>x.temp_f).filter(Number.isFinite); if(vals.length) low_f=Math.min(...vals);}
+
+   let high_c=null, high_f=null, low_c=null, low_f=null, source='WU_DAILY_FALLBACK';
+
+   if(hourly.length){
+     const valsC=hourly.map(x=>x.temp_c).filter(Number.isFinite);
+     const valsF=hourly.map(x=>x.temp_f).filter(Number.isFinite);
+
+     if(valsC.length) high_c=Math.max(...valsC);
+     if(valsF.length) high_f=Math.max(...valsF);
+     if(valsC.length) low_c=Math.min(...valsC);
+     if(valsF.length) low_f=Math.min(...valsF);
+
+     source='WU_HOURLY_MAX';
+   }
+
+   // fallback only when hourly unavailable/incomplete
+   if(high_c==null) high_c=dailyHighC;
+   if(high_f==null) high_f=dailyHighF;
+   if(low_c==null) low_c=dailyLowC;
+   if(low_f==null) low_f=dailyLowF;
+
+   // keep C/F consistent if one is missing
+   if(high_c==null && high_f!=null) high_c=fToC(high_f);
+   if(high_f==null && high_c!=null) high_f=cToF(high_c);
+   if(low_c==null && low_f!=null) low_c=fToC(low_f);
+   if(low_f==null && low_c!=null) low_f=cToF(low_c);
+
+   const payloadHourly=hourly.map(x=>({...x,source}));
+   const rawPayload={daily: h===0?fc.raw_daily:{}, source, dailyHighC, dailyHighF, hourlyCount:hourly.length};
+
    seen++;
    try{
-    await env.DB.prepare(`INSERT INTO forecast_snapshots (forecast_date,target_date,horizon_days,fetch_time_ist,forecast_issue_time_ist,source,high_c,low_c,high_f,low_f,hourly_json,raw_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`).bind(today,target,h,fetchTime,issue,'WU',high_c,low_c,high_f,low_f,compactJson(hourly),compactJson(h===0?fc.raw_daily:{})).run();
+    await env.DB.prepare(`INSERT INTO forecast_snapshots (forecast_date,target_date,horizon_days,fetch_time_ist,forecast_issue_time_ist,source,high_c,low_c,high_f,low_f,hourly_json,raw_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`).bind(today,target,h,fetchTime,issue,source,high_c,low_c,high_f,low_f,compactJson(payloadHourly),compactJson(rawPayload)).run();
     saved++;
    }catch(e){ if(String(e.message||e).includes('UNIQUE')) duplicate++; else throw e; }
  }
@@ -189,5 +222,35 @@ async function history(env, day){
  const rows={}; for(const x of (wu.results||[])){if(!x.slot)continue; rows[x.slot]=rows[x.slot]||[]; rows[x.slot].push({temp_c:x.temp_c,temp_f:x.temp_f,dewpoint_c:x.dewpoint_c,dewpoint_f:x.dewpoint_f,humidity:x.humidity,wind_kph:x.wind_kph,condition:x.condition||'',saved_at:x.obs_time,fetched_at:x.fetched_at||'',temp_source:(x.temp_f!=null?'WU_F_RAW':'F_MISSING'),converted_source:(x.temp_c!=null?'WU_C_RAW_OR_CONVERTED':'C_MISSING')});}
  return {ok:true,today_ist:day,wu_obs_rows:rows,metar_rows:mt.results||[],forecast_rows:fc.results||[],forecast_snapshot_rows:fs.results||[],meta:{wu_count:(wu.results||[]).length,metar_count:(mt.results||[]).length,forecast_count:(fc.results||[]).length,forecast_snapshot_count:(fs.results||[]).length,latest_wu:(wu.results||[]).at(-1)||null,latest_metar:(mt.results||[]).at(-1)||null,latest_forecast:(fc.results||[]).at(-1)||null}};
 }
+
+async function forecastHighDebug(env, day){
+ const rows=await env.DB.prepare('SELECT * FROM forecast_snapshots WHERE forecast_date=? OR target_date IN (?,?,?) ORDER BY forecast_date, target_date, fetch_time_ist LIMIT 1000')
+   .bind(day, day, addDaysIST(day,1), addDaysIST(day,2)).all();
+ const out={ok:true,day,targets:{}};
+ for(const r of (rows.results||[])){
+   const target=r.target_date;
+   out.targets[target]=out.targets[target]||[];
+   let hourly=[];
+   try{hourly=JSON.parse(r.hourly_json||'[]');}catch(e){}
+   let maxHourlyC=null, maxHourlyF=null, peakTime=null;
+   for(const x of hourly){
+     const c=n(x.temp_c), f=n(x.temp_f);
+     if(c!=null && (maxHourlyC==null || c>maxHourlyC)){maxHourlyC=c;maxHourlyF=f;peakTime=x.time||null;}
+   }
+   out.targets[target].push({
+     fetch_time_ist:r.fetch_time_ist,
+     issue:r.forecast_issue_time_ist,
+     source:r.source,
+     db_high_c:r.high_c,
+     db_high_f:r.high_f,
+     hourly_count:hourly.length,
+     hourly_max_c:maxHourlyC,
+     hourly_max_f:maxHourlyF,
+     hourly_peak_time:peakTime
+   });
+ }
+ return out;
+}
+
 async function forecastSnapshots(env, day){ const rows=await env.DB.prepare('SELECT * FROM forecast_snapshots WHERE target_date=? ORDER BY forecast_date, forecast_issue_time_ist, fetch_time_ist LIMIT 1000').bind(day).all(); return {ok:true,target_date:day,rows:rows.results||[]}; }
-export default { async fetch(request, env){ const url=new URL(request.url); if(url.pathname==='/api/collect') return json(await collect(env)); if(url.pathname==='/api/history') return json(await history(env, url.searchParams.get('date')||dateIST())); if(url.pathname==='/api/wu-latest') { const day=url.searchParams.get('date')||dateIST(); const row=await env.DB.prepare('SELECT * FROM wu_obs WHERE obs_date=? ORDER BY obs_time DESC LIMIT 1').bind(day).first(); return json({ok:true,row}); } if(url.pathname==='/api/forecast-snapshots') return json(await forecastSnapshots(env, url.searchParams.get('date')||dateIST())); return env.ASSETS.fetch(request); }, async scheduled(event, env, ctx){ctx.waitUntil(collect(env));} };
+export default { async fetch(request, env){ const url=new URL(request.url); if(url.pathname==='/api/collect') return json(await collect(env)); if(url.pathname==='/api/history') return json(await history(env, url.searchParams.get('date')||dateIST())); if(url.pathname==='/api/wu-latest') { const day=url.searchParams.get('date')||dateIST(); const row=await env.DB.prepare('SELECT * FROM wu_obs WHERE obs_date=? ORDER BY obs_time DESC LIMIT 1').bind(day).first(); return json({ok:true,row}); } if(url.pathname==='/api/forecast-snapshots') return json(await forecastSnapshots(env, url.searchParams.get('date')||dateIST())); if(url.pathname==='/api/forecast-high-debug') return json(await forecastHighDebug(env, url.searchParams.get('date')||dateIST())); return env.ASSETS.fetch(request); }, async scheduled(event, env, ctx){ctx.waitUntil(collect(env));} };
