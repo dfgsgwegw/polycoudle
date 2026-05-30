@@ -127,24 +127,22 @@ async function saveForecastSnapshots(env, fc){
  const today=dateIST(), fetchTime=timeIST(), issue=fc.issue_time||('fingerprint:'+fc.raw_hash);
  let saved=0, duplicate=0, seen=0;
 
- // HOURLY ONLY:
- // No daily max fallback. Cards/forecast max must match WU hourly forecast curve.
- // If hourly for a target day is unavailable, high_c/high_f remain NULL and frontend shows unavailable.
+ // HOURLY ONLY. Daily max is NOT used, not even fallback.
+ // This keeps chart forecast curve, cards, and forecast-max badge on the same source.
  for(let h=0;h<=2;h++){
    const target=addDaysIST(today,h);
    const hourly=hourlyForTarget(fc.raw_hourly,target);
 
-   let high_c=null, high_f=null, low_c=null, low_f=null, source='WU_HOURLY_ONLY';
+   let high_c=null, high_f=null, low_c=null, low_f=null;
+   const source='WU_HOURLY_ONLY_NO_DAILY_FALLBACK';
 
    if(hourly.length){
      const valsC=hourly.map(x=>x.temp_c).filter(Number.isFinite);
      const valsF=hourly.map(x=>x.temp_f).filter(Number.isFinite);
-
      if(valsC.length) high_c=Math.max(...valsC);
      if(valsF.length) high_f=Math.max(...valsF);
      if(valsC.length) low_c=Math.min(...valsC);
      if(valsF.length) low_f=Math.min(...valsF);
-
      if(high_c==null && high_f!=null) high_c=fToC(high_f);
      if(high_f==null && high_c!=null) high_f=cToF(high_c);
      if(low_c==null && low_f!=null) low_c=fToC(low_f);
@@ -152,7 +150,7 @@ async function saveForecastSnapshots(env, fc){
    }
 
    const payloadHourly=hourly.map(x=>({...x,source}));
-   const rawPayload={source, hourlyCount:hourly.length, note:'HOURLY_ONLY_NO_DAILY_FALLBACK'};
+   const rawPayload={source,hourlyCount:hourly.length,note:'HOURLY_ONLY_NO_DAILY_FALLBACK'};
 
    seen++;
    try{
@@ -185,7 +183,7 @@ async function collect(env){
  try{
   let daily=null, hourly=null;
   for(const u of [`https://api.weather.com/v3/wx/forecast/daily/5day?icaoCode=${ICAO}&apiKey=${WU_KEY}&units=e&language=en-US&format=json`,`https://api.weather.com/v3/wx/forecast/daily/5day?iataCode=${IATA}&apiKey=${WU_KEY}&units=e&language=en-US&format=json`,`https://api.weather.com/v3/wx/forecast/daily/5day?geocode=${GEO}&apiKey=${WU_KEY}&units=e&language=en-US&format=json`]){try{daily=await getJson(u);break;}catch(e){}}
-  for(const u of [`https://api.weather.com/v3/wx/forecast/hourly/2day?icaoCode=${ICAO}&apiKey=${WU_KEY}&units=e&language=en-US&format=json`,`https://api.weather.com/v3/wx/forecast/hourly/2day?iataCode=${IATA}&apiKey=${WU_KEY}&units=e&language=en-US&format=json`,`https://api.weather.com/v3/wx/forecast/hourly/2day?geocode=${GEO}&apiKey=${WU_KEY}&units=e&language=en-US&format=json`]){try{hourly=await getJson(u);break;}catch(e){}}
+  for(const u of [`https://api.weather.com/v3/wx/forecast/hourly/10day?icaoCode=${ICAO}&apiKey=${WU_KEY}&units=e&language=en-US&format=json`,`https://api.weather.com/v3/wx/forecast/hourly/10day?iataCode=${IATA}&apiKey=${WU_KEY}&units=e&language=en-US&format=json`,`https://api.weather.com/v3/wx/forecast/hourly/10day?geocode=${GEO}&apiKey=${WU_KEY}&units=e&language=en-US&format=json`]){try{hourly=await getJson(u);break;}catch(e){}}
   const fc=parseForecast(daily||{}, hourly||{});
   const ex=await env.DB.prepare('SELECT id FROM forecast WHERE forecast_date=? AND raw_hash=? LIMIT 1').bind(fc.forecast_date,fc.raw_hash).first();
   if(ex) out.forecast={ok:true,saved:false,duplicate:true,today_c:fc.today_c,today_f:fc.today_f};

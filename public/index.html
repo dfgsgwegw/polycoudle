@@ -590,6 +590,15 @@ td{
   margin:8px 0;
 }
 
+
+/* ===== FINAL SYNC PATCH: forecast cards/ceiling/toggles ===== */
+.forecastSourceBadge.hourly{background:#064e3b!important;color:#8fffd2!important}
+.forecastSourceBadge.badrow,.forecastSourceBadge.unavailable{background:#3f1d1d!important;color:#fecaca!important}
+.trueHourlyWarn{color:#ffd433;font-family:ui-monospace,Consolas,monospace;font-size:13px;line-height:1.5;margin-top:6px}
+.tradeSummaryBox{border:1px solid #0e6b91;background:#061827;color:#bfeaff;border-radius:14px;padding:12px 14px;margin-top:10px;font-family:ui-monospace,Consolas,monospace;font-size:14px;line-height:1.55}
+.tradeGood{color:#22c55e;font-weight:1000}.tradeBad{color:#ef4444;font-weight:1000}.tradeWait{color:#facc15;font-weight:1000}
+.layerToggleNote{color:#ffd433;font-family:ui-monospace,Consolas,monospace;font-size:13px;line-height:1.5;margin:8px 0}
+
 </style></head><body>
 <div class="wrap">
   <div class="header"><div><h1>VILK <span class="cyan">Live Signal</span></h1><div class="sub">● UI refresh 30 sec · cron save 1 min · Lucknow Airport (VILK) · D1 archive</div></div><div><button class="btn" id="refreshBtn">↻ Refresh Now</button><div class="updated" id="updated">Updated --</div></div></div>
@@ -1240,7 +1249,13 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
 
 
 
-<script id="true-hourly-json-max-only-final">
+
+
+
+
+
+
+<script id="final-sync-forecast-ceiling-toggles">
 (function(){
   const $=id=>document.getElementById(id);
   const N=v=>{const x=Number(v);return Number.isFinite(x)?x:null};
@@ -1249,129 +1264,87 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
   const fmt=v=>{const x=N(v);if(x==null)return '—';return x.toFixed(1).replace(/\.0$/,'')};
   const fmt3=v=>{const x=N(v);if(x==null)return '—';return x.toFixed(3).replace(/\.?0+$/,'')};
   const todayIST=()=>new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});
-  function addDays(dateStr,days){
-    const [y,m,d]=String(dateStr).split('-').map(Number);
-    const dt=new Date(y,m-1,d+days,12,0,0);
-    return dt.toLocaleDateString('en-CA');
+  function addDays(dateStr,days){const [y,m,d]=String(dateStr).split('-').map(Number);const dt=new Date(y,m-1,d+days,12,0,0);return dt.toLocaleDateString('en-CA');}
+  function pretty(d){try{return new Date(d+'T00:00:00').toLocaleDateString('en-IN',{weekday:'short',day:'2-digit',month:'short',year:'numeric'})}catch(e){return d}}
+  function parseHour(s){s=String(s||'');let m=s.match(/T(\d{1,2}):(\d{2})/)||s.match(/\b(\d{1,2}):(\d{2})/);if(!m)return null;let h=+m[1],mi=+m[2],lo=s.toLowerCase();if((lo.includes('pm')||/\bp\b/.test(lo))&&h<12)h+=12;if((lo.includes('am')||/\ba\b/.test(lo))&&h===12)h=0;return h+mi/60}
+  function fmtTime(h){if(N(h)==null)return '—';let hh=Math.floor(h),mm=Math.round((h-hh)*60);if(mm===60){hh++;mm=0}const ap=hh>=12?'PM':'AM';return `${hh%12||12}:${String(mm).padStart(2,'0')} ${ap}`}
+  function unit(){try{if(window.state&&state.unit)return String(state.unit).toLowerCase().startsWith('f')?'f':'c';if(window.masterChart&&masterChart.unit)return String(masterChart.unit).toLowerCase().startsWith('f')?'f':'c';if(window.S&&S.unit)return String(S.unit).toLowerCase().startsWith('f')?'f':'c'}catch(e){}return document.querySelector('[data-u="f"].active,[data-unit="f"].active')?'f':'c'}
+  function getHist(){return window.__goodHist||window.goodHist||(window.S&&window.S.data&&window.S.data.hist)||null}
+  async function fetchHist(){
+    const d=todayIST();
+    try{const r=await fetch('/api/history?date='+d+'&t='+Date.now(),{cache:'no-store'});if(r.ok){const j=await r.json();window.__goodHist=j;return j}}catch(e){}
+    return getHist();
   }
-  function pretty(d){
-    try{return new Date(d+'T00:00:00').toLocaleDateString('en-IN',{weekday:'short',day:'2-digit',month:'short',year:'numeric'})}catch(e){return d}
-  }
-  function parseHour(s){
-    s=String(s||'');
-    let m=s.match(/T(\d{1,2}):(\d{2})/)||s.match(/\b(\d{1,2}):(\d{2})/);
-    if(!m)return null;
-    let h=+m[1], mi=+m[2], lo=s.toLowerCase();
-    if((lo.includes('pm')||/\bp\b/.test(lo))&&h<12)h+=12;
-    if((lo.includes('am')||/\ba\b/.test(lo))&&h===12)h=0;
-    return h+mi/60;
-  }
-  function fmtTime(h){
-    if(N(h)==null)return '—';
-    let hh=Math.floor(h),mm=Math.round((h-hh)*60);
-    if(mm===60){hh++;mm=0}
-    const ap=hh>=12?'PM':'AM';
-    return `${hh%12||12}:${String(mm).padStart(2,'0')} ${ap}`;
-  }
-  function unit(){
-    try{
-      if(window.state&&state.unit)return String(state.unit).toLowerCase().startsWith('f')?'f':'c';
-      if(window.masterChart&&masterChart.unit)return String(masterChart.unit).toLowerCase().startsWith('f')?'f':'c';
-      if(window.S&&S.unit)return String(S.unit).toLowerCase().startsWith('f')?'f':'c';
-    }catch(e){}
-    return document.querySelector('[data-u="f"].active,[data-unit="f"].active')?'f':'c';
-  }
-  function rowTimeKey(r){
-    return String(r.forecast_issue_time_ist||'')+' '+String(r.fetch_time_ist||'')+' '+String(r.created_at||'');
-  }
-  function parseHourly(row,targetDate){
-    let arr=[];
-    try{arr=JSON.parse(row.hourly_json||'[]')}catch(e){arr=[]}
+  function rowKey(r){return String(r.forecast_issue_time_ist||'')+' '+String(r.fetch_time_ist||'')+' '+String(r.created_at||'')}
+  function parseHourly(row,target){
+    let arr=[]; try{arr=JSON.parse(row.hourly_json||'[]')}catch(e){}
     return arr.map(x=>{
-      const c=N(x.temp_c) ?? fToC(x.temp_f);
-      const f=N(x.temp_f) ?? cToF(c);
-      const time=String(x.time||'');
-      const h=parseHour(time);
-      return {time,h,c,f,raw:x};
+      const c=N(x.temp_c)??fToC(x.temp_f), f=N(x.temp_f)??cToF(c), time=String(x.time||''), h=parseHour(time);
+      return {c,f,time,h,raw:x};
     }).filter(x=>{
       if(N(x.c)==null)return false;
-      // If WU time includes date, enforce correct target day.
-      if(String(x.time||'').includes('-') && !String(x.time||'').startsWith(targetDate)) return false;
+      if(String(x.time||'').includes('-') && !String(x.time||'').startsWith(target))return false;
       return true;
     });
   }
-  function hourlyMax(row,targetDate){
-    const hourly=parseHourly(row,targetDate);
-    if(!hourly.length)return null;
-    let best=hourly[0];
-    for(const x of hourly){ if(x.c>best.c) best=x; }
-    return {c:best.c,f:best.f,hour:best.h,time:best.time,count:hourly.length,row};
-  }
-  function latestHourlyMax(rows,targetDate){
-    const rr=(rows||[]).filter(r=>r.target_date===targetDate).sort((a,b)=>rowTimeKey(a).localeCompare(rowTimeKey(b)));
+  function latestHourlyMax(rows,target){
+    const rr=(rows||[]).filter(r=>r.target_date===target).sort((a,b)=>rowKey(a).localeCompare(rowKey(b)));
     for(let i=rr.length-1;i>=0;i--){
-      const h=hourlyMax(rr[i],targetDate);
-      if(h) return {...h,snapshots:rr.length,latestRow:rr[i]};
+      const hourly=parseHourly(rr[i],target);
+      if(!hourly.length)continue;
+      let best=hourly[0];
+      for(const x of hourly) if(x.c>best.c) best=x;
+      return {...best,count:hourly.length,snapshots:rr.length,row:rr[i]};
     }
     return null;
   }
-  async function getHist(){
-    try{
-      const d=todayIST();
-      const r=await fetch('/api/history?date='+d+'&t='+Date.now(),{cache:'no-store'});
-      if(r.ok){const j=await r.json();window.__goodHist=j;return j;}
-    }catch(e){}
-    return window.__goodHist || window.goodHist || null;
-  }
   function renderCards(j){
     if(!j)return;
-    const today=todayIST();
-    const dates=[today,addDays(today,1),addDays(today,2)];
+    const dates=[todayIST(),addDays(todayIST(),1),addDays(todayIST(),2)];
     const ids=[['hfToday','hfTodayMeta','hfTodayBin'],['hfTomorrow','hfTomorrowMeta','hfTomorrowBin'],['hfDayAfter','hfDayAfterMeta','hfDayAfterBin']];
     dates.forEach((d,i)=>{
       const high=latestHourlyMax(j.forecast_snapshot_rows||[],d);
-      const [v,m,b]=ids[i].map($);
-      if(!v||!m||!b)return;
-      if(!high){
-        v.textContent='—';
-        m.innerHTML=`${pretty(d)}<br><span class="forecastSourceBadge badrow">No hourly_json for this day — daily max ignored</span>`;
-        b.textContent='Bin —';
-        return;
-      }
+      const [v,m,b]=ids[i].map($); if(!v||!m||!b)return;
+      if(!high){v.textContent='—';m.innerHTML=`${pretty(d)}<br><span class="forecastSourceBadge badrow">No hourly_json for this day — daily max ignored</span>`;b.textContent='Bin —';return;}
       v.textContent=`${fmt(high.c)}°C`;
-      m.innerHTML=`${pretty(d)}
-        <br>Peak forecast time: <b>${fmtTime(high.hour)}</b>
-        <br><b>Hourly JSON max:</b> ${fmt3(high.c)}°C / ${fmt(high.f)}°F
-        <br>Hourly points used: ${high.count}
-        <br>Snapshots checked: ${high.snapshots}
-        <br><span class="forecastSourceBadge hourly">Source: hourly_json max only</span>
-        <div class="trueHourlyWarn">DB high_c ignored to avoid old/wrong saved max rows.</div>`;
+      m.innerHTML=`${pretty(d)}<br>Peak forecast time: <b>${fmtTime(high.h)}</b><br><b>Hourly JSON max:</b> ${fmt3(high.c)}°C / ${fmt(high.f)}°F<br>Hourly points used: ${high.count}<br>Snapshots checked: ${high.snapshots}<br><span class="forecastSourceBadge hourly">Source: hourly_json max only</span><div class="trueHourlyWarn">DB high_c ignored; daily max ignored.</div>`;
       b.textContent=`Market bin ≈ ${Math.round(high.c)}°C`;
     });
   }
-
-  // Draw a small clean badge using TRUE hourly max from latest hourly_json.
+  function renderTrend(j){
+    const c=$('forecastHighTrendCanvas'); if(!c||!j)return;
+    const rows=(j.forecast_snapshot_rows||[]).filter(r=>r.target_date===todayIST()).sort((a,b)=>rowKey(a).localeCompare(rowKey(b)));
+    const pts=[];
+    rows.forEach((r,i)=>{const h=latestHourlyMax([r],todayIST()); if(h) pts.push({x:i+1,c:h.c,f:h.f,hour:h.h});});
+    const ctx=c.getContext('2d'),W=c.width,H=c.height,L=70,R=25,T=28,B=44;
+    ctx.clearRect(0,0,W,H);ctx.fillStyle='#fafafa';ctx.fillRect(0,0,W,H);ctx.font='14px ui-monospace,Consolas,monospace';
+    if(!pts.length){ctx.fillStyle='#6b7280';ctx.fillText('No hourly forecast snapshots yet',L,T+40);return;}
+    const yMin=Math.min(...pts.map(p=>p.c))-1,yMax=Math.max(...pts.map(p=>p.c))+1;
+    const X=i=>L+(i-1)/Math.max(1,pts.length-1)*(W-L-R),Y=y=>T+(yMax-y)/(yMax-yMin)*(H-T-B);
+    ctx.strokeStyle='#e5e7eb';ctx.lineWidth=1;
+    for(let v=Math.floor(yMin);v<=Math.ceil(yMax);v++){const y=Y(v);ctx.beginPath();ctx.moveTo(L,y);ctx.lineTo(W-R,y);ctx.stroke();ctx.fillStyle='#6b7280';ctx.fillText(fmt(v)+'°',18,y+4);}
+    ctx.strokeStyle='#f97316';ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(X(1),Y(pts[0].c));pts.forEach((p,i)=>ctx.lineTo(X(i+1),Y(p.c)));ctx.stroke();
+    pts.forEach((p,i)=>{ctx.fillStyle=i===pts.length-1?'#ef4444':'#f97316';ctx.beginPath();ctx.arc(X(i+1),Y(p.c),5,0,Math.PI*2);ctx.fill();});
+    const diff=pts.at(-1).c-pts[0].c;
+    ctx.fillStyle=diff>0?'#dc2626':(diff<0?'#059669':'#374151');ctx.font='bold 16px ui-monospace,Consolas,monospace';
+    ctx.fillText(`WU hourly max trend: ${fmt(pts[0].c)}°C → ${fmt(pts.at(-1).c)}°C (${diff>=0?'+':''}${fmt(diff)}°C)`,L+8,T+22);
+    if($('fhLatest')) $('fhLatest').textContent=fmt(pts.at(-1).c)+'°C';
+    if($('fhFirst')) $('fhFirst').textContent=fmt(pts[0].c)+'°C';
+    if($('fhChange')) $('fhChange').textContent=(diff>=0?'+':'')+fmt(diff)+'°C';
+    if($('fhBin')) $('fhBin').textContent=Math.round(pts.at(-1).c)+'°C';
+  }
   function chartAxis(){
     if(!window.__axisState)window.__axisState={};
-    let xMin=N($('xMinManual')?.value)??N(window.__axisState.xMin);
-    let xMax=N($('xMaxManual')?.value)??N(window.__axisState.xMax);
-    let yMin=N($('yMinManual')?.value)??N(window.__axisState.yMin);
-    let yMax=N($('yMaxManual')?.value)??N(window.__axisState.yMax);
-    if(!(xMin!=null&&xMax!=null&&xMax>xMin)){
-      if(document.querySelector('[data-x="peak"].active,[data-xrange="peak"].active')){xMin=9;xMax=18}else{xMin=0;xMax=24}
-    }
+    let xMin=N($('xMinManual')?.value)??N(window.__axisState.xMin), xMax=N($('xMaxManual')?.value)??N(window.__axisState.xMax);
+    let yMin=N($('yMinManual')?.value)??N(window.__axisState.yMin), yMax=N($('yMaxManual')?.value)??N(window.__axisState.yMax);
+    if(!(xMin!=null&&xMax!=null&&xMax>xMin)){if(document.querySelector('[data-x="peak"].active,[data-xrange="peak"].active')){xMin=9;xMax=18}else{xMin=0;xMax=24}}
     if(!(yMin!=null&&yMax!=null&&yMax>yMin)){yMin=unit()==='f'?14:-10;yMax=unit()==='f'?158:70}
     return {xMin,xMax,yMin,yMax};
   }
-  function drawTrueForecastMaxBadge(){
-    const j=window.__goodHist||window.goodHist;
-    const c=$('chart');
-    if(!j||!c)return;
-    const high=latestHourlyMax(j.forecast_snapshot_rows||[],todayIST());
-    if(!high)return;
-    const ctx=c.getContext('2d');
-    const W=c.width,H=c.height,L=78,R=30,T=48,B=68;
-    const ax=chartAxis();
+  function drawBadge(){
+    const j=getHist(), c=$('chart'); if(!j||!c)return;
+    const high=latestHourlyMax(j.forecast_snapshot_rows||[],todayIST()); if(!high)return;
+    const ctx=c.getContext('2d'),W=c.width,H=c.height,L=78,R=30,T=48,B=68,ax=chartAxis();
     const val=unit()==='f'?high.f:high.c;
     if(val<ax.yMin||val>ax.yMax)return;
     const y=T+(ax.yMax-val)/(ax.yMax-ax.yMin)*(H-T-B);
@@ -1381,236 +1354,94 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
     const tw=ctx.measureText(label).width, boxW=tw+22, boxH=30;
     const x=W-R-boxW-10, yy=Math.max(T+8,Math.min(H-B-boxH-8,y-boxH/2));
     ctx.strokeStyle='#f97316';ctx.lineWidth=2;ctx.setLineDash([6,6]);
-    ctx.beginPath();ctx.moveTo(Math.max(L,W-R-180),y);ctx.lineTo(W-R-8,y);ctx.stroke();
-    ctx.setLineDash([]);
+    ctx.beginPath();ctx.moveTo(Math.max(L,W-R-180),y);ctx.lineTo(W-R-8,y);ctx.stroke();ctx.setLineDash([]);
     ctx.fillStyle='rgba(249,115,22,.14)';ctx.strokeStyle='#f97316';
-    if(ctx.roundRect){ctx.beginPath();ctx.roundRect(x,yy,boxW,boxH,9);ctx.fill();ctx.stroke();}
-    else{ctx.fillRect(x,yy,boxW,boxH);ctx.strokeRect(x,yy,boxW,boxH);}
+    if(ctx.roundRect){ctx.beginPath();ctx.roundRect(x,yy,boxW,boxH,9);ctx.fill();ctx.stroke();}else{ctx.fillRect(x,yy,boxW,boxH);ctx.strokeRect(x,yy,boxW,boxH);}
     ctx.fillStyle='#c2410c';ctx.fillText(label,x+11,yy+20);
     ctx.restore();
   }
+  function activeLayers(){
+    const q=s=>document.querySelector(s);
+    function c(sel,def=true){const e=q(sel); return e?!!e.checked:def}
+    return {wu:c('input[data-line="wu"]'),metar:c('input[data-line="metar"]'),fc:c('input[data-line="fc"]'),bias:c('input[data-line="bias"]'),ceil95:c('input[data-line="ceil95"]'),ceil99:c('input[data-line="ceil99"]',false),analog:c('input[data-line="analog"]'),peakWindow:c('input[data-line="peakWindow"]')};
+  }
+  function patchContext(){
+    const c=$('chart'); if(!c||c.dataset.finalCtx)return;
+    c.dataset.finalCtx='1';
+    const ctx=c.getContext('2d'); if(!ctx||ctx.__finalLayerPatch)return; ctx.__finalLayerPatch=true;
+    const stroke=ctx.stroke.bind(ctx), fill=ctx.fill.bind(ctx), fillText=ctx.fillText.bind(ctx);
+    function skip(){
+      const L=activeLayers(), st=(String(ctx.strokeStyle)+' '+String(ctx.fillStyle)).toLowerCase();
+      const old=st.includes('60a5fa')||st.includes('147,197,253')||st.includes('lightblue');
+      const latest=st.includes('111827')||st.includes('black')||st.includes('17,24,39');
+      const bias=st.includes('06b6d4')||st.includes('cyan')||st.includes('14,165,233');
+      const ceil=st.includes('a855f7')||st.includes('purple')||st.includes('168,85,247');
+      const extreme=st.includes('991b1b')||st.includes('153,27,27');
+      const analog=st.includes('94a3b8')||st.includes('gray')||st.includes('grey')||st.includes('148,163,184');
+      if(!L.fc&&(old||latest))return true;
+      if(!L.bias&&bias)return true;
+      if(!L.ceil95&&ceil)return true;
+      if(!L.ceil99&&extreme)return true;
+      if(!L.analog&&analog)return true;
+      return false;
+    }
+    ctx.stroke=function(){if(skip())return;return stroke()};
+    ctx.fill=function(){if(skip())return;return fill()};
+    ctx.fillText=function(text,x,y,maxWidth){
+      const s=String(text||'').toLowerCase(),L=activeLayers();
+      if(!L.fc&&s.includes('forecast'))return;
+      if(!L.bias&&s.includes('bias'))return;
+      if(!L.ceil95&&(s.includes('ceiling')||s.includes('historical')))return;
+      if(!L.analog&&s.includes('analog'))return;
+      return fillText(text,x,y,maxWidth);
+    };
+  }
   function wrapRender(){
     ['masterRender','renderAll','render','fetchAll','loadAll'].forEach(name=>{
-      try{
-        const fn=window[name];
-        if(typeof fn==='function'&&!fn.__trueHourlyWrapped){
-          const w=function(){
-            const r=fn.apply(this,arguments);
-            Promise.resolve(r).finally(()=>setTimeout(drawTrueForecastMaxBadge,120));
-            return r;
-          };
-          w.__trueHourlyWrapped=true;
-          window[name]=w;
-        }
-      }catch(e){}
+      try{const fn=window[name]; if(typeof fn==='function'&&!fn.__finalSyncWrapped){
+        const w=function(){patchContext(); const r=fn.apply(this,arguments); Promise.resolve(r).finally(()=>setTimeout(()=>{drawBadge();},140)); return r;};
+        w.__finalSyncWrapped=true; window[name]=w;
+      }}catch(e){}
     });
   }
-  function improveTooltip(){
-    const tip=$('tooltip'); if(!tip||tip.dataset.trueHourlyObs)return;
-    tip.dataset.trueHourlyObs='1';
+  function lastWU(j,n=9){const arr=[];Object.values((j&&j.wu_obs_rows)||{}).forEach(list=>(Array.isArray(list)?list:[]).forEach(x=>arr.push(x)));return arr.sort((a,b)=>String(a.saved_at||'').localeCompare(String(b.saved_at||''))).slice(-n)}
+  function lastMETAR(j,n=4){return ((j&&j.metar_rows)||[]).slice(-n)}
+  function addTooltipExtras(){
+    const tip=$('tooltip'); if(!tip||tip.dataset.finalExtras)return; tip.dataset.finalExtras='1';
     const obs=new MutationObserver(()=>{
       if(tip.style.display==='none')return;
-      // If tooltip says LATEST FORECAST, add current-day true hourly max.
-      if(tip.textContent.includes('LATEST FORECAST') && !tip.querySelector('.trueHourlyWarn')){
-        const j=window.__goodHist||window.goodHist;
-        const high=j?latestHourlyMax(j.forecast_snapshot_rows||[],todayIST()):null;
-        if(high){
-          const div=document.createElement('div');
-          div.className='trueHourlyWarn';
-          div.innerHTML=`Today hourly max from same snapshot data: <b>${fmt3(high.c)}°C / ${fmt(high.f)}°F</b> at <b>${fmtTime(high.hour)}</b>`;
-          tip.appendChild(div);
-        }
+      const j=getHist(); if(!j)return;
+      if(tip.textContent.includes('HISTORICAL 95%')&&!tip.querySelector('.ceilingFixedLine')){
+        const card=$('histCeiling'); const val=card?card.textContent.trim():'—';
+        const div=document.createElement('div'); div.className='trueHourlyWarn ceilingFixedLine'; div.innerHTML=`Actual historical ceiling from card/line: <b>${val}</b>`;
+        tip.appendChild(div);
+      }
+      if(tip.textContent.includes('LATEST FORECAST')&&!tip.querySelector('.fcMaxFixedLine')){
+        const h=latestHourlyMax(j.forecast_snapshot_rows||[],todayIST());
+        if(h){const div=document.createElement('div'); div.className='trueHourlyWarn fcMaxFixedLine'; div.innerHTML=`Today hourly forecast max: <b>${fmt3(h.c)}°C / ${fmt(h.f)}°F</b> at <b>${fmtTime(h.h)}</b>`; tip.appendChild(div);}
+      }
+      if(!tip.querySelector('.tradeSummaryBox')){
+        const wu=lastWU(j,9), mt=lastMETAR(j,4);
+        const wuLine=wu.map(x=>`${x.saved_at||'?'} ${fmt3(x.temp_c)}°C`).join(' · ');
+        const mtLine=mt.map(x=>`${x.slot||'?'} ${fmt3(x.temp_c)}°C`).join(' · ');
+        const div=document.createElement('div'); div.className='tradeSummaryBox';
+        div.innerHTML=`<b>Last 9 WU:</b> ${wuLine||'—'}<br><b>Last 4 METAR:</b> ${mtLine||'—'}`;
+        tip.appendChild(div);
       }
     });
     obs.observe(tip,{childList:true,subtree:true});
   }
   async function run(){
-    const j=await getHist();
-    renderCards(j);
-    wrapRender();
-    improveTooltip();
-    setTimeout(drawTrueForecastMaxBadge,300);
+    const j=await fetchHist();
+    renderCards(j); renderTrend(j); patchContext(); wrapRender(); addTooltipExtras(); setTimeout(drawBadge,300);
   }
   window.addEventListener('load',()=>setTimeout(run,900));
   setInterval(run,120000);
-})();
-</script>
-
-
-<script id="hard-layer-toggle-fix">
-(function(){
-  const $=id=>document.getElementById(id);
-
-  function txt(el){return (el && (el.textContent||el.value||'')).trim().toLowerCase();}
-  function findControls(){
-    const all=[...document.querySelectorAll('button,label,input')];
-    function byText(words){
-      return all.find(el=>{
-        const t=txt(el);
-        return words.every(w=>t.includes(w));
-      });
+  document.addEventListener('click',e=>{
+    if(e.target && (e.target.matches('input[data-line]') || e.target.closest('label'))){
+      setTimeout(()=>{try{if(typeof window.masterRender==='function')window.masterRender();else if(typeof window.renderAll==='function')window.renderAll();else if(typeof window.render==='function')window.render();}catch(err){}},100);
     }
-    function checkedFor(el, def=true){
-      if(!el) return def;
-      if(el.tagName==='INPUT') return el.checked;
-      const inp=el.querySelector && el.querySelector('input[type="checkbox"]');
-      if(inp) return inp.checked;
-      if(el.classList && el.classList.contains('active')) return true;
-      if(el.getAttribute && el.getAttribute('aria-pressed')==='true') return true;
-      // pill buttons usually active when cyan / active class; if no active state found, use def
-      return def;
-    }
-    return {
-      forecast: checkedFor(byText(['forecast']), true),
-      bias: checkedFor(byText(['bias']), true),
-      ceiling: checkedFor(byText(['95']), true),
-      extreme: checkedFor(byText(['99']), false),
-      analog: checkedFor(byText(['analog']), true),
-      peakWindow: checkedFor(byText(['peak','window']), true),
-      wu: checkedFor(byText(['wu']), true),
-      metar: checkedFor(byText(['metar']), true)
-    };
-  }
-
-  function hideByRedrawRules(){
-    window.__layerToggles = findControls();
-  }
-
-  // Patch canvas drawing functions at context level:
-  // If a disabled overlay tries to draw after main render, make it transparent/no-op by detecting strokeStyle colors.
-  function patchCanvasContext(){
-    const c=$('chart');
-    if(!c || c.dataset.hardLayerToggleCtx) return;
-    c.dataset.hardLayerToggleCtx='1';
-    const ctx=c.getContext('2d');
-    if(!ctx || ctx.__layerTogglePatched) return;
-    ctx.__layerTogglePatched=true;
-
-    const origStroke=ctx.stroke.bind(ctx);
-    const origFill=ctx.fill.bind(ctx);
-    const origFillText=ctx.fillText.bind(ctx);
-    const origStrokeText=ctx.strokeText ? ctx.strokeText.bind(ctx) : null;
-
-    function styleString(v){return String(v||'').toLowerCase();}
-    function shouldSkip(){
-      const st=styleString(ctx.strokeStyle)+' '+styleString(ctx.fillStyle);
-      const L=window.__layerToggles || findControls();
-
-      // common layer colors:
-      const isOldForecast = st.includes('60a5fa') || st.includes('147,197,253') || st.includes('93,173,226') || st.includes('lightblue');
-      const isLatestForecast = st.includes('111827') || st.includes('0,0,0') || st.includes('black') || st.includes('17,24,39');
-      const isBias = st.includes('06b6d4') || st.includes('cyan') || st.includes('14,165,233');
-      const isCeiling = st.includes('a855f7') || st.includes('purple') || st.includes('168,85,247');
-      const isExtreme = st.includes('991b1b') || st.includes('red') || st.includes('153,27,27');
-      const isAnalog = st.includes('94a3b8') || st.includes('grey') || st.includes('gray') || st.includes('148,163,184');
-
-      if(!L.forecast && (isOldForecast || isLatestForecast)) return true;
-      if(!L.bias && isBias) return true;
-      if(!L.ceiling && isCeiling) return true;
-      if(!L.extreme && isExtreme) return true;
-      if(!L.analog && isAnalog) return true;
-      return false;
-    }
-
-    ctx.stroke=function(){ if(shouldSkip()) return; return origStroke(); };
-    ctx.fill=function(){ if(shouldSkip()) return; return origFill(); };
-    ctx.fillText=function(text,x,y,maxWidth){
-      const s=String(text||'').toLowerCase();
-      const L=window.__layerToggles || findControls();
-      if(!L.forecast && s.includes('forecast')) return;
-      if(!L.bias && s.includes('bias')) return;
-      if(!L.ceiling && (s.includes('ceiling')||s.includes('historical'))) return;
-      if(!L.analog && s.includes('analog')) return;
-      return origFillText(text,x,y,maxWidth);
-    };
-    if(origStrokeText){
-      ctx.strokeText=function(text,x,y,maxWidth){
-        const s=String(text||'').toLowerCase();
-        const L=window.__layerToggles || findControls();
-        if(!L.forecast && s.includes('forecast')) return;
-        if(!L.bias && s.includes('bias')) return;
-        if(!L.ceiling && (s.includes('ceiling')||s.includes('historical'))) return;
-        if(!L.analog && s.includes('analog')) return;
-        return origStrokeText(text,x,y,maxWidth);
-      };
-    }
-  }
-
-  // Stronger fix: before rendering, if forecast controls off, temporarily empty forecast rows in known global data.
-  function patchRender(){
-    ['masterRender','renderAll','render','loadAll','fetchAll'].forEach(name=>{
-      try{
-        const fn=window[name];
-        if(typeof fn==='function' && !fn.__hardLayerToggleWrapped){
-          const wrapped=function(){
-            hideByRedrawRules();
-            patchCanvasContext();
-
-            const L=window.__layerToggles || {};
-            let backups=[];
-            try{
-              const roots=[window.S && window.S.data, window.__goodHist, window.goodHist, window.__lastMasterData && window.__lastMasterData.hist].filter(Boolean);
-              for(const root of roots){
-                if(!L.forecast && root.forecast_snapshot_rows){
-                  backups.push([root,'forecast_snapshot_rows',root.forecast_snapshot_rows]);
-                  root.forecast_snapshot_rows=[];
-                }
-                if(!L.forecast && root.forecast_rows){
-                  backups.push([root,'forecast_rows',root.forecast_rows]);
-                  root.forecast_rows=[];
-                }
-                if(!L.metar && root.metar_rows){
-                  backups.push([root,'metar_rows',root.metar_rows]);
-                  root.metar_rows=[];
-                }
-                if(!L.wu && root.wu_obs_rows){
-                  backups.push([root,'wu_obs_rows',root.wu_obs_rows]);
-                  root.wu_obs_rows={};
-                }
-              }
-            }catch(e){}
-
-            let result;
-            try{ result=fn.apply(this, arguments); }
-            finally{
-              setTimeout(()=>{ for(const [obj,key,val] of backups) obj[key]=val; },0);
-            }
-            return result;
-          };
-          wrapped.__hardLayerToggleWrapped=true;
-          window[name]=wrapped;
-        }
-      }catch(e){}
-    });
-  }
-
-  function bindControls(){
-    document.querySelectorAll('button,label,input').forEach(el=>{
-      if(el.dataset.layerToggleBound) return;
-      const t=txt(el);
-      if(['forecast','bias','95','99','analog','peak window','wu','metar'].some(w=>t.includes(w))){
-        el.dataset.layerToggleBound='1';
-        el.addEventListener('click',()=>setTimeout(()=>{
-          hideByRedrawRules();
-          try{
-            if(typeof window.masterRender==='function') window.masterRender();
-            else if(typeof window.renderAll==='function') window.renderAll();
-            else if(typeof window.render==='function') window.render();
-          }catch(e){}
-        },80));
-      }
-    });
-  }
-
-  function init(){
-    hideByRedrawRules();
-    patchCanvasContext();
-    patchRender();
-    bindControls();
-  }
-
-  window.addEventListener('load',()=>setTimeout(init,500));
-  setInterval(init,1200);
+  });
 })();
 </script>
 
