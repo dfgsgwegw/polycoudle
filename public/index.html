@@ -640,6 +640,55 @@ td{
 .highForecastCard{min-height:300px!important}
 .highForecastMeta{font-size:15px!important}
 
+
+/* ===== WU / METAR TABLE READABILITY PATCH ===== */
+.wuTrendSummary{
+  display:flex;flex-wrap:wrap;gap:10px;align-items:center;
+  padding:10px 12px;margin:0 0 10px;border-radius:12px;
+  background:rgba(0,0,0,.22);border:1px solid rgba(0,212,255,.18);
+  font-family:ui-monospace,Consolas,monospace;font-weight:900
+}
+.wuTrendPill{border-radius:999px;padding:6px 10px;background:#0b2b40;color:#bfeaff}
+.wuRise{color:#22c55e!important;font-weight:1000!important}
+.wuDrop{color:#ef4444!important;font-weight:1000!important}
+.wuSame{color:#ffd433!important;font-weight:1000!important}
+.wuHot{color:#ff4f45!important;font-weight:1000!important}
+.wuWarm{color:#ff8a3d!important;font-weight:1000!important}
+.wuMild{color:#ffd433!important;font-weight:1000!important}
+.wuCool{color:#22c55e!important;font-weight:1000!important}
+.wuHumRise{color:#60a5fa!important;font-weight:1000!important}
+.wuHumDrop{color:#f97316!important;font-weight:1000!important}
+.wuWx{color:#fbbf24!important;font-weight:1000!important}
+.wuLineNew{
+  display:grid;
+  grid-template-columns:74px 105px 105px 80px 70px 1fr;
+  gap:8px;align-items:center;
+  padding:5px 8px;margin:4px 0;
+  border-radius:10px;
+  background:rgba(255,255,255,.035);
+  border-left:4px solid rgba(255,255,255,.14);
+  font-family:ui-monospace,Consolas,monospace;
+  font-size:14px;line-height:1.35
+}
+.wuLineNew.rise{border-left-color:#22c55e;background:rgba(34,197,94,.08)}
+.wuLineNew.drop{border-left-color:#ef4444;background:rgba(239,68,68,.08)}
+.wuLineNew.same{border-left-color:#ffd433;background:rgba(250,204,21,.07)}
+.wuTime{color:#9bd4ff;font-weight:1000}
+.wuTemp{font-size:15px}
+.wuDelta{font-size:15px}
+.wuHum{color:#93c5fd}
+.wuMetarBig{
+  display:inline-block;padding:7px 10px;border-radius:12px;background:rgba(16,185,129,.12);
+  border:1px solid rgba(16,185,129,.35);font-size:14px;line-height:1.4
+}
+.metarShock{color:#ef4444!important;background:rgba(239,68,68,.12)!important;border-color:#ef4444!important}
+.deltaBig{font-size:17px;font-weight:1000}
+.tableWrap table td:nth-child(3){min-width:620px}
+@media(max-width:900px){
+  .wuLineNew{grid-template-columns:1fr 1fr;gap:5px;font-size:13px}
+  .tableWrap table td:nth-child(3){min-width:480px}
+}
+
 </style></head><body>
 <div class="wrap">
   <div class="header"><div><h1>VILK <span class="cyan">Live Signal</span></h1><div class="sub">● UI refresh 30 sec · cron save 1 min · Lucknow Airport (VILK) · D1 archive</div></div><div><button class="btn" id="refreshBtn">↻ Refresh Now</button><div class="updated" id="updated">Updated --</div></div></div>
@@ -1586,6 +1635,125 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
   async function run(){renderHighs(await loadHighs())}
   window.addEventListener('load',()=>setTimeout(run,800));
   setInterval(run,60000);
+})();
+</script>
+
+
+<script id="wu-table-readability-patch">
+(function(){
+  const N=v=>{const x=Number(v);return Number.isFinite(x)?x:null};
+  const fToC=f=>(f-32)*5/9;
+  const cToF=c=>c*9/5+32;
+  const fmtC=v=>{const x=N(v);return x==null?'—':x.toFixed(3).replace(/\.?0+$/,'')+'°C'};
+  const fmtF=v=>{const x=N(v);return x==null?'—':x.toFixed(1).replace(/\.0$/,'')+'°F'};
+  function clsTemp(c){
+    c=N(c);
+    if(c==null)return '';
+    if(c>=33)return 'wuHot';
+    if(c>=32)return 'wuWarm';
+    if(c>=31)return 'wuMild';
+    return 'wuCool';
+  }
+  function deltaSpan(dc){
+    dc=N(dc);
+    if(dc==null)return '<span class="wuSame">→ —</span>';
+    const df=dc*9/5;
+    if(dc>0.001)return `<span class="wuRise deltaBig">↑ +${fmtC(dc)} / +${fmtF(df)}</span>`;
+    if(dc<-0.001)return `<span class="wuDrop deltaBig">↓ ${fmtC(dc)} / ${fmtF(df)}</span>`;
+    return `<span class="wuSame deltaBig">→ 0°C / 0°F</span>`;
+  }
+  function humDelta(now,prev){
+    now=N(now); prev=N(prev);
+    if(now==null)return '';
+    if(prev==null)return `<span class="wuHum">💧${now}%</span>`;
+    const d=now-prev;
+    if(d>0)return `<span class="wuHumRise">💧${now}% ↑ +${d}%</span>`;
+    if(d<0)return `<span class="wuHumDrop">💧${now}% ↓ ${d}%</span>`;
+    return `<span class="wuHum">💧${now}% →</span>`;
+  }
+  function parseWuLines(cell){
+    const text=cell.innerText||'';
+    const parts=text.split(/\n+/).map(s=>s.trim()).filter(Boolean);
+    const out=[];
+    for(let i=0;i<parts.length;i++){
+      const line=parts[i];
+      const m=line.match(/WU\s+([0-9]{1,2}:[0-9]{2}\s*(?:am|pm|a|p)?).*?([0-9.]+)\s*°?F.*?([0-9.]+)\s*°?C/i);
+      if(!m) continue;
+      const time=m[1].replace(/\s+/g,' ');
+      const f=N(m[2]), c=N(m[3]) ?? (f!=null?fToC(f):null);
+      let hum=null, wx='';
+      const sameOrNext=line+' '+(parts[i+1]||'');
+      const hm=sameOrNext.match(/💧\s*([0-9]+)%/);
+      if(hm) hum=N(hm[1]);
+      const wxm=sameOrNext.match(/\b(Haze|HZ|Mist|Rain|RA|TS|Dust|DU|Cloudy|Clear)\b/i);
+      if(wxm) wx=wxm[1];
+      out.push({time,f,c,hum,wx});
+    }
+    return out;
+  }
+  function renderWuCell(cell){
+    if(cell.dataset.readableDone==='1')return;
+    const rows=parseWuLines(cell);
+    if(!rows.length)return;
+    cell.dataset.readableDone='1';
+    let prev=null, prevHum=null;
+    const temps=rows.map(r=>r.c).filter(v=>v!=null);
+    const net=temps.length>=2 ? temps.at(-1)-temps[0] : 0;
+    const trendCls=net>0.001?'wuRise':(net<-0.001?'wuDrop':'wuSame');
+    const trendIcon=net>0.001?'↑ RISING':(net<-0.001?'↓ FALLING':'→ HOLDING');
+    let html=`<div class="wuTrendSummary">
+      <span class="wuTrendPill ${trendCls}">${trendIcon}</span>
+      <span class="wuTrendPill">Net ${deltaSpan(net)}</span>
+      <span class="wuTrendPill">Last ${rows.length} WU</span>
+    </div>`;
+    for(const r of rows){
+      const dc=prev? r.c-prev.c : null;
+      const trend = dc==null ? 'same' : (dc>0.001?'rise':(dc<-0.001?'drop':'same'));
+      html += `<div class="wuLineNew ${trend}">
+        <span class="wuTime">${r.time}</span>
+        <span class="wuTemp ${clsTemp(r.c)}">${fmtC(r.c)} / ${fmtF(r.f)}</span>
+        <span class="wuDelta">${deltaSpan(dc)}</span>
+        <span>${humDelta(r.hum,prevHum)}</span>
+        <span class="wuWx">${r.wx||'—'}</span>
+        <span class="muted">raw WU</span>
+      </div>`;
+      prev=r;
+      if(r.hum!=null)prevHum=r.hum;
+    }
+    cell.innerHTML=html;
+  }
+  function patchMetarCell(cell){
+    if(cell.dataset.metarReadable==='1')return;
+    const text=cell.innerText||'';
+    const m=text.match(/(-?[0-9.]+)\s*°?C/i);
+    if(!m)return;
+    cell.dataset.metarReadable='1';
+    const c=N(m[1]), f=c!=null?cToF(c):null;
+    const shock=c!=null && c<25;
+    cell.innerHTML=`<span class="wuMetarBig ${shock?'metarShock':''}">METAR ${fmtC(c)} / ${fmtF(f)}${shock?' ⚠ check spike/drop':''}</span>`;
+  }
+  function patchDeltaCell(cell){
+    if(cell.dataset.deltaReadable==='1')return;
+    const text=(cell.innerText||'').trim();
+    const m=text.match(/([+-]?[0-9.]+)/);
+    if(!m)return;
+    const dc=N(m[1]);
+    cell.dataset.deltaReadable='1';
+    cell.innerHTML=deltaSpan(dc);
+  }
+  function run(){
+    const tbody=document.getElementById('rows');
+    if(!tbody)return;
+    [...tbody.querySelectorAll('tr')].forEach(tr=>{
+      const tds=[...tr.children];
+      if(tds[1])patchMetarCell(tds[1]);
+      if(tds[2])renderWuCell(tds[2]);
+      if(tds[7])patchDeltaCell(tds[7]);
+    });
+  }
+  const mo=new MutationObserver(()=>run());
+  window.addEventListener('load',()=>{run(); const tb=document.getElementById('rows'); if(tb)mo.observe(tb,{childList:true,subtree:true,characterData:true});});
+  setInterval(run,2000);
 })();
 </script>
 
