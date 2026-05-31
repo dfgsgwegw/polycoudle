@@ -657,6 +657,11 @@ td{
 .todayLiveNote{color:#9bd4ff;font-size:13px;margin-top:6px}
 .trendFallbackText{font-family:ui-monospace,Consolas,monospace;color:#9bd4ff;font-size:14px;margin-top:6px}
 
+
+/* ===== FINAL TODAY CLEAN + TREND FIX ===== */
+.pmBox{margin-top:12px;padding:12px;border:1px solid rgba(0,212,255,.22);background:rgba(0,0,0,.16);border-radius:14px;font-family:ui-monospace,Consolas,monospace}
+.pmTitle{font-size:14px;color:#00d4ff;font-weight:1000;letter-spacing:1.4px;margin-bottom:8px}.pmRow{display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid rgba(0,212,255,.1);padding:7px 0;font-size:15px}.pmRow b{color:#9bd4ff}.pmVal{font-weight:1000;color:#fff;text-align:right}.pmUp{color:#22c55e}.pmDown{color:#ef4444}.pmSame{color:#ffd433}.todayForecastBox{border-color:#f59e0b;background:rgba(245,158,11,.07)}.highForecastCard{min-height:250px!important}.trendFilledNote{font-family:ui-monospace,Consolas,monospace;color:#9bd4ff;font-size:14px;margin-top:6px}#forecastTrendFallbackSvg{width:100%;height:240px;background:#fff;border-radius:14px;margin-top:10px}
+
 </style></head><body>
 <div class="wrap">
   <div class="header"><div><h1>VILK <span class="cyan">Live Signal</span></h1><div class="sub">● UI refresh 30 sec · cron save 1 min · Lucknow Airport (VILK) · D1 archive</div></div><div><button class="btn" id="refreshBtn">↻ Refresh Now</button><div class="updated" id="updated">Updated --</div></div></div>
@@ -1522,101 +1527,7 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
 
 
 
-<script id="vps-bot-source-polymarket-cards">
-(function(){
-  const $=id=>document.getElementById(id);
-  const N=v=>{const x=Number(v);return Number.isFinite(x)?x:null};
-  const C=v=>{const x=N(v);return x==null?'—':x.toFixed(3).replace(/\.?0+$/,'')+'°C'};
-  const F=v=>{const x=N(v);return x==null?'—':x.toFixed(1).replace(/\.0$/,'')+'°F'};
-  const CF=(c,f)=>`${C(c)} / ${F(f)}`;
-  const dCtoF=d=>N(d)==null?null:d*9/5;
-  const DELTA=c=>{
-    const x=N(c); if(x==null)return '<span class="cfSame">—</span>';
-    const cls=x>0?'cfUp':(x<0?'cfDown':'cfSame');
-    const arrow=x>0?'↑':(x<0?'↓':'→');
-    const sign=x>0?'+':'';
-    return `<span class="${cls}">${arrow} ${sign}${C(x)} / ${sign}${F(dCtoF(x))}</span>`;
-  };
-  const todayIST=()=>new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});
-  function addDays(d,days){const [y,m,dd]=d.split('-').map(Number);const dt=new Date(y,m-1,dd+days,12);return dt.toLocaleDateString('en-CA')}
-  function pretty(d){try{return new Date(d+'T00:00:00').toLocaleDateString('en-IN',{weekday:'short',day:'2-digit',month:'short',year:'numeric'})}catch(e){return d}}
-  async function loadHighs(){
-    try{
-      const r=await fetch('/api/polymarket-highs?date='+todayIST()+'&t='+Date.now(),{cache:'no-store'});
-      if(r.ok){const j=await r.json();window.__polyHighs=j;return j}
-    }catch(e){}
-    return window.__polyHighs||null;
-  }
-  function row(k,v){return `<div class="cfRow"><b>${k}</b><span class="cfVal">${v}</span></div>`}
-  function trendWord(t){
-    if(t==='rising')return '<span class="cfUp">↑ rising</span>';
-    if(t==='falling')return '<span class="cfDown">↓ falling</span>';
-    if(t==='stable')return '<span class="cfSame">→ stable</span>';
-    return '<span class="cfSame">first</span>';
-  }
-  function cleanBlock(item,isToday){
-    const obs = isToday ? `
-      <div class="cfBox"><div class="cfTitle">OBS LIVE</div>
-        ${row('Now', CF(item.current_c,item.current_f))}
-        ${row('Peak', CF(item.obs_peak_c,item.obs_peak_f))}
-        ${row('Obs bin', (item.today_main_c!=null?Math.round(item.today_main_c)+'°C':'—'))}
-      </div>` : '';
 
-    const dailyDelta = DELTA(item.daily_change_from_previous_c ?? item.change_from_previous_c);
-    const hourlyDelta = DELTA(item.hourly_change_from_previous_c);
-
-    return `<div class="cleanForecastCard">
-      ${obs}
-      <div class="cfBox"><div class="cfTitle">DAILY FORECAST</div>
-        ${row('Current', CF(item.high_c,item.high_f))}
-        ${row('Previous', CF(item.daily_previous_c ?? item.previous_c,item.daily_previous_f ?? item.previous_f))}
-        ${row('Highest seen', CF(item.daily_highest_seen_c ?? item.highest_seen_c,item.daily_highest_seen_f ?? item.highest_seen_f))}
-        ${row('Lowest seen', CF(item.daily_lowest_seen_c ?? item.lowest_seen_c,item.daily_lowest_seen_f ?? item.lowest_seen_f))}
-        ${row('Change', dailyDelta)}
-        ${row('Trend', trendWord(item.daily_trend ?? item.trend))}
-      </div>
-      <div class="cfBox"><div class="cfTitle">HOURLY FORECAST</div>
-        ${row('Current max', CF(item.hourly_high_c,item.hourly_high_f))}
-        ${row('Previous', CF(item.hourly_previous_c,item.hourly_previous_f))}
-        ${row('Highest seen', CF(item.hourly_highest_seen_c,item.hourly_highest_seen_f))}
-        ${row('Lowest seen', CF(item.hourly_lowest_seen_c,item.hourly_lowest_seen_f))}
-        ${row('Change', hourlyDelta)}
-        ${row('Peak time', item.hourly_peak_time||'—')}
-      </div>
-      <div class="cfBox"><div class="cfTitle">GAP + BINS</div>
-        ${row('Daily - Hourly', DELTA(item.daily_minus_hourly_c))}
-        ${row('Daily bin', (item.daily_market_bin??(item.high_c!=null?Math.round(item.high_c):'—'))+'°C')}
-        ${row('Hourly bin', (item.hourly_market_bin??'—')+'°C')}
-      </div>
-    </div>`;
-  }
-  function setCard(prefix,item,type){
-    const v=$(prefix),m=$(prefix+'Meta'),b=$(prefix+'Bin'); if(!v||!m||!b)return;
-    if(!item){v.textContent='—';m.innerHTML='waiting';b.textContent='Bin —';return;}
-    const isToday=type==='today';
-    const topC=isToday?(N(item.today_main_c)??N(item.current_c)??N(item.high_c)):N(item.high_c);
-    const topF=isToday?(N(item.today_main_f)??N(item.current_f)??N(item.high_f)):N(item.high_f);
-    v.textContent=C(topC);
-    m.innerHTML=`${pretty(item.date)}<br><b>${isToday?'Main OBS':'Daily Max'}:</b> ${CF(topC,topF)}${cleanBlock(item,isToday)}<span class="sourceBadge">${isToday?'Source: OBS + daily + hourly':'Source: daily + hourly'}</span>`;
-    if(isToday){
-      b.textContent=`Bin obs ≈ ${topC!=null?Math.round(topC):'—'}°C · daily ≈ ${item.daily_market_bin??'—'}°C · hourly ≈ ${item.hourly_market_bin??'—'}°C`;
-    }else{
-      b.textContent=`Bin daily ≈ ${item.daily_market_bin??'—'}°C · hourly ≈ ${item.hourly_market_bin??'—'}°C`;
-    }
-  }
-  function renderHighs(j){
-    if(!j||!j.days)return;
-    const d0=todayIST(),d1=addDays(d0,1),d2=addDays(d0,2),d3=addDays(d0,3);
-    setCard('hfToday',j.days[d0],'today');
-    setCard('hfTomorrow',j.days[d1],'future');
-    setCard('hfDayAfter',j.days[d2],'future');
-    setCard('hfD3',j.days[d3],'future');
-  }
-  async function run(){renderHighs(await loadHighs())}
-  window.addEventListener('load',()=>setTimeout(run,800));
-  setInterval(run,60000);
-})();
-</script>
 
 
 <script id="live-crosscheck-ui">
@@ -1636,56 +1547,26 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
 </script>
 
 
-<script id="same-day-peak-trend-fallback-patch">
+
+
+
+<script id="final-clean-polymarket-ui">
 (function(){
-  const $=id=>document.getElementById(id);
-  const N=v=>{const x=Number(v);return Number.isFinite(x)?x:null};
-  const C=v=>{const x=N(v);return x==null?'—':x.toFixed(3).replace(/\.?0+$/,'')+'°C'};
-  const F=v=>{const x=N(v);return x==null?'—':x.toFixed(1).replace(/\.0$/,'')+'°F'};
-  const CF=(c,f)=>`${C(c)} / ${F(f)}`;
-  const todayIST=()=>new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});
-  async function loadHighs(){
-    try{
-      const r=await fetch('/api/polymarket-highs?date='+todayIST()+'&t='+Date.now(),{cache:'no-store'});
-      if(!r.ok)return null;
-      return await r.json();
-    }catch(e){return null;}
-  }
-  function setText(ids,val){for(const id of ids){const el=$(id);if(el){el.textContent=val;return true;}}return false;}
-  function forceTodayCard(j){
-    const d=j&&j.days&&j.days[todayIST()]; if(!d)return;
-    const mainC=N(d.today_main_c)??N(d.obs_peak_c)??N(d.current_c);
-    const mainF=N(d.today_main_f)??N(d.obs_peak_f)??N(d.current_f);
-    const v=$('hfToday'); if(v)v.textContent=C(mainC);
-    const meta=$('hfTodayMeta');
-    if(meta && !meta.innerHTML.includes('Today live peak after 7 AM')){
-      meta.innerHTML = `<div class="todayLiveNote"><b>Today live peak after 7 AM:</b> ${CF(mainC,mainF)} · now ${CF(d.current_c,d.current_f)} · peak time ${d.obs_peak_time||'—'}</div>` + meta.innerHTML;
-    }
-    const bin=$('hfTodayBin');
-    if(bin)bin.textContent=`Bin live ≈ ${mainC!=null?Math.round(mainC):'—'}°C · forecast daily ≈ ${d.daily_market_bin??'—'}°C · hourly ≈ ${d.hourly_market_bin??'—'}°C`;
-  }
-  function fillTrendFallback(j){
-    const d=j&&j.days&&j.days[todayIST()]; if(!d)return;
-    const latest=CF(d.high_c,d.high_f);
-    const start=CF(d.daily_lowest_seen_c??d.lowest_seen_c,d.daily_lowest_seen_f??d.lowest_seen_f);
-    const chC=N(d.daily_change_from_previous_c??d.change_from_previous_c);
-    const ch=chC==null?'—':`${chC>=0?'+':''}${C(chC)} / ${chC>=0?'+':''}${F(chC*9/5)}`;
-    const bin=`${d.daily_market_bin??(d.high_c!=null?Math.round(d.high_c):'—')}°C`;
-    setText(['latestForecastHigh','hfTrendLatest','trendLatestValue','latestWuForecastHigh'],latest);
-    setText(['startForecastHigh','hfTrendStart','trendStartValue','startOfDayForecast'],start);
-    setText(['changeForecastHigh','hfTrendChange','trendChangeValue','changeToday'],ch);
-    setText(['marketBinNow','hfTrendBin','trendMarketBin','marketBinForecast'],bin);
-    document.querySelectorAll('.statCard,.miniCard,.forecastTrendCard,.card').forEach(card=>{
-      const txt=(card.textContent||'').toLowerCase();
-      if(txt.includes('latest wu forecast high')&&txt.includes('loading'))card.innerHTML+=`<div class="trendFallbackText">${latest}</div>`;
-      if(txt.includes('start of day forecast')&&!txt.includes('°c'))card.innerHTML+=`<div class="trendFallbackText">${start}</div>`;
-      if(txt.includes('change today')&&!txt.includes('°c'))card.innerHTML+=`<div class="trendFallbackText">${ch}</div>`;
-      if(txt.includes('market bin now')&&!txt.includes('°c'))card.innerHTML+=`<div class="trendFallbackText">${bin}</div>`;
-    });
-  }
-  async function run(){const j=await loadHighs(); if(j){forceTodayCard(j);fillTrendFallback(j);}}
-  window.addEventListener('load',()=>setTimeout(run,1200));
-  setInterval(run,30000);
+ const $=id=>document.getElementById(id),N=v=>{const x=Number(v);return Number.isFinite(x)?x:null};
+ const C=v=>{const x=N(v);return x==null?'—':x.toFixed(3).replace(/\.?0+$/,'')+'°C'},F=v=>{const x=N(v);return x==null?'—':x.toFixed(1).replace(/\.0$/,'')+'°F'},CF=(c,f)=>`${C(c)} / ${F(f)}`;
+ const todayIST=()=>new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});
+ function addDays(d,n){const [y,m,dd]=d.split('-').map(Number);return new Date(y,m-1,dd+n,12).toLocaleDateString('en-CA')}
+ function pretty(d){try{return new Date(d+'T00:00:00').toLocaleDateString('en-IN',{weekday:'short',day:'2-digit',month:'short',year:'numeric'})}catch(e){return d}}
+ function delta(c){const x=N(c);if(x==null)return '<span class="pmSame">—</span>';const f=x*9/5,cls=x>0?'pmUp':x<0?'pmDown':'pmSame',ar=x>0?'↑':x<0?'↓':'→',s=x>0?'+':'';return `<span class="${cls}">${ar} ${s}${C(x)} / ${s}${F(f)}</span>`}
+ function row(k,v){return `<div class="pmRow"><b>${k}</b><span class="pmVal">${v}</span></div>`}
+ async function load(){try{const r=await fetch('/api/polymarket-highs?date='+todayIST()+'&t='+Date.now(),{cache:'no-store'});if(!r.ok)throw Error(r.status);const j=await r.json();window.__polyHighs=j;return j}catch(e){return window.__polyHighs||null}}
+ function todayCard(d){return `<div class="pmBox"><div class="pmTitle">LIVE OBS ONLY</div>${row('Now',CF(d.current_c,d.current_f))}${row('Peak after 7 AM',CF(d.today_main_c??d.obs_peak_c,d.today_main_f??d.obs_peak_f))}${row('Peak time',d.obs_peak_time||'—')}${row('Live bin',(Math.round(N(d.today_main_c??d.obs_peak_c??d.current_c))||'—')+'°C')}</div><div class="pmBox todayForecastBox"><div class="pmTitle">TODAY FORECAST SEPARATE</div>${row('Daily max',CF(d.high_c,d.high_f))}${row('Hourly max',CF(d.hourly_high_c,d.hourly_high_f))}${row('Daily - hourly',delta(d.daily_minus_hourly_c))}${row('Forecast bin',`daily ${d.daily_market_bin??'—'}°C · hourly ${d.hourly_market_bin??'—'}°C`)}</div>`}
+ function futureCard(d){return `<div class="pmBox"><div class="pmTitle">DAILY FORECAST</div>${row('Current',CF(d.high_c,d.high_f))}${row('Previous',CF(d.daily_previous_c,d.daily_previous_f))}${row('Highest seen',CF(d.daily_highest_seen_c,d.daily_highest_seen_f))}${row('Lowest seen',CF(d.daily_lowest_seen_c,d.daily_lowest_seen_f))}${row('Change',delta(d.daily_change_from_previous_c))}</div><div class="pmBox"><div class="pmTitle">HOURLY FORECAST</div>${row('Current max',CF(d.hourly_high_c,d.hourly_high_f))}${row('Highest seen',CF(d.hourly_highest_seen_c,d.hourly_highest_seen_f))}${row('Lowest seen',CF(d.hourly_lowest_seen_c,d.hourly_lowest_seen_f))}${row('Peak time',String(d.hourly_peak_time||'—').replace('T',' ').replace('+0530',''))}</div><div class="pmBox">${row('Daily - hourly',delta(d.daily_minus_hourly_c))}${row('Bins',`daily ${d.daily_market_bin??'—'}°C · hourly ${d.hourly_market_bin??'—'}°C`)}</div>`}
+ function setCard(prefix,d,type){const v=$(prefix),m=$(prefix+'Meta'),b=$(prefix+'Bin');if(!v||!m||!b||!d)return;const topC=type==='today'?(N(d.today_main_c)??N(d.obs_peak_c)??N(d.current_c)):N(d.high_c),topF=type==='today'?(N(d.today_main_f)??N(d.obs_peak_f)??N(d.current_f)):N(d.high_f);v.textContent=C(topC);m.innerHTML=`${pretty(d.date)}<br><b>${type==='today'?'Live peak':'Daily max'}:</b> ${CF(topC,topF)}${type==='today'?todayCard(d):futureCard(d)}`;b.textContent=type==='today'?`Bin live ≈ ${Math.round(topC)}°C · forecast daily ≈ ${d.daily_market_bin??'—'}°C`:`Bin daily ≈ ${d.daily_market_bin??'—'}°C · hourly ≈ ${d.hourly_market_bin??'—'}°C`}
+ function fillTrend(j){const d=j.days&&j.days[todayIST()];if(!d)return;const latest=CF(d.high_c,d.high_f),start=CF(d.daily_lowest_seen_c,d.daily_lowest_seen_f),chg=(N(d.high_c)!=null&&N(d.daily_lowest_seen_c)!=null)?N(d.high_c)-N(d.daily_lowest_seen_c):d.daily_change_from_previous_c,bin=`${d.daily_market_bin??Math.round(N(d.high_c))}°C`;const vals=[['latest wu forecast high',latest],['start of day forecast',start],['change today',delta(chg)],['market bin now',bin]];document.querySelectorAll('.statCard,.miniCard,.card').forEach(card=>{const t=(card.textContent||'').toLowerCase();for(const [k,v] of vals){if(t.includes(k)&&!card.dataset.filled){card.dataset.filled='1';card.innerHTML+=`<div class="trendFilledNote">${v}</div>`}}});drawTrend(j.forecast_trend||[])}
+ function drawTrend(points){let host=document.querySelector('#forecastTrendFallbackSvg');const box=[...document.querySelectorAll('canvas,svg,div')].find(el=>{const r=el.getBoundingClientRect&&el.getBoundingClientRect();return r&&r.height>150&&r.width>400&&(el.closest('section')?.textContent||'').toLowerCase().includes('current day high forecast trend')});if(!host){host=document.createElementNS('http://www.w3.org/2000/svg','svg');host.id='forecastTrendFallbackSvg';if(box&&box.parentNode)box.parentNode.replaceChild(host,box);else return}const arr=(points||[]).filter(p=>N(p.c)!=null);if(!arr.length){host.innerHTML='<rect width="900" height="240" fill="white"/><text x="20" y="40" fill="#111" font-size="18">No forecast trend rows yet</text>';return}const w=900,h=240,p=35,min=Math.min(...arr.map(x=>x.c))-.5,max=Math.max(...arr.map(x=>x.c))+.5,x=i=>p+(w-p*2)*(i/Math.max(1,arr.length-1)),y=v=>h-p-(h-p*2)*((v-min)/(max-min||1)),path=arr.map((q,i)=>`${i?'L':'M'}${x(i)},${y(q.c)}`).join(' ');host.setAttribute('viewBox',`0 0 ${w} ${h}`);host.innerHTML=`<rect width="${w}" height="${h}" fill="white" rx="14"/><text x="20" y="26" fill="#111" font-size="16" font-family="monospace">WU forecast trend: ${C(arr[0].c)} → ${C(arr.at(-1).c)}</text><path d="${path}" fill="none" stroke="#f97316" stroke-width="4"/>${arr.map((q,i)=>`<circle cx="${x(i)}" cy="${y(q.c)}" r="4" fill="#f97316"/>`).join('')}`}
+ function render(j){if(!j||!j.days)return;const d0=todayIST(),d1=addDays(d0,1),d2=addDays(d0,2),d3=addDays(d0,3);setCard('hfToday',j.days[d0],'today');setCard('hfTomorrow',j.days[d1],'future');setCard('hfDayAfter',j.days[d2],'future');setCard('hfD3',j.days[d3],'future');fillTrend(j)}
+ async function run(){render(await load())}window.addEventListener('load',()=>setTimeout(run,800));setInterval(run,60000);
 })();
 </script>
 
