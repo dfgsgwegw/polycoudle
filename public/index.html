@@ -1,81 +1,67 @@
 <!doctype html>
 <html lang="en"><head>
 
-<script id="no-big-localstorage-cache-fix">
+<script id="same-day-cache-only-fix">
 (function(){
+  const todayIST = () => new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});
+  const HEAVY = /^(snaps_|history_|forecast_|forecastSnapshots|trendCache)/;
   const originalSetItem = Storage.prototype.setItem;
-  const HEAVY_KEY = /^(snaps_|history_|forecast_|forecastSnapshots|trendCache)/;
-  const MAX_LEN = 50000;
 
-  function cleanupHeavy(){
+  function cleanup(){
+    const today = todayIST();
     try{
       for(let i=localStorage.length-1;i>=0;i--){
-        const k = localStorage.key(i);
-        if(HEAVY_KEY.test(k)) localStorage.removeItem(k);
+        const k=localStorage.key(i);
+        if(!k) continue;
+        if(HEAVY.test(k)){
+          // Keep only tiny same-day summary keys.
+          if(!k.includes(today) || k.endsWith('_summary')===false) localStorage.removeItem(k);
+        }
       }
     }catch(e){}
   }
 
-  cleanupHeavy();
+  cleanup();
+  setInterval(cleanup, 60_000);
 
-  Storage.prototype.setItem = function(key, value){
-    const k = String(key || '');
-    const v = String(value || '');
-
-    // Never store big API payloads in browser. Backend/API is source of truth.
-    if(HEAVY_KEY.test(k)){
-      if(v.length > MAX_LEN){
-        try{
-          return originalSetItem.call(this, k + '_summary', JSON.stringify({
-            skipped:true,
-            chars:v.length,
-            saved_at:new Date().toISOString(),
-            reason:'large api payload not cached'
-          }));
-        }catch(e){ return; }
-      }
-    }
-
+  Storage.prototype.setItem=function(key,value){
+    const k=String(key||'');
+    const v=String(value||'');
     try{
-      return originalSetItem.call(this, key, value);
+      if(HEAVY.test(k)){
+        const today=todayIST();
+        if(!k.includes(today)){
+          // Old date cache is never stored.
+          return;
+        }
+        if(v.length>30000){
+          // Store only tiny same-day summary, not full payload.
+          return originalSetItem.call(this, `trend_summary_${today}`, JSON.stringify({
+            saved_at:new Date().toISOString(),
+            skipped_key:k,
+            chars:v.length
+          }));
+        }
+      }
+      return originalSetItem.call(this,key,value);
     }catch(e){
-      const msg = String((e && e.message) || e || '').toLowerCase();
-      if(msg.includes('quota') || (e && e.name === 'QuotaExceededError')){
-        cleanupHeavy();
-        console.warn('localStorage quota prevented, cache skipped:', k);
+      const msg=String((e&&e.message)||e||'').toLowerCase();
+      if(msg.includes('quota') || (e&&e.name==='QuotaExceededError')){
+        cleanup();
+        console.warn('Cache quota protected; skipped',k);
         return;
       }
-      console.warn('localStorage write skipped:', k, e);
+      console.warn('Cache write skipped',k,e);
       return;
     }
   };
 
-  window.clearWeatherToolCache = function(){
-    cleanupHeavy();
-    console.log('Weather tool heavy cache cleared');
-  };
+  window.clearWeatherToolCache=function(){cleanup();console.log('Weather tool old/heavy cache cleared');};
 })();
 </script>
 
 
-<script id="weather-safe-cache-api">
-(function(){
-  window.weatherSafeSetItem = function(key, value){
-    try{
-      const text = typeof value === 'string' ? value : JSON.stringify(value);
-      if(/^(snaps_|history_|forecast_|forecastSnapshots|trendCache)/.test(String(key)) && text.length > 50000){
-        console.log('Skipped heavy cache:', key, text.length);
-        return false;
-      }
-      localStorage.setItem(key, text);
-      return true;
-    }catch(e){
-      console.warn('Skipped cache write:', key, e && e.message || e);
-      return false;
-    }
-  };
-})();
-</script>
+
 
 
 
@@ -745,6 +731,15 @@ td{
 #forceTrendSvg{width:100%;height:240px;background:#fff;border-radius:14px;margin-top:12px;display:block}
 #tooltip .tipRefValue{color:#fff;font-weight:1000}
 #tooltip .tipWarn{color:#ffd433;font-size:14px;margin-top:6px}
+
+
+/* ===== SAME DAY DIRECT HISTORY TREND FIX ===== */
+.trendStatusText{font-family:ui-monospace,Consolas,monospace;font-size:14px;color:#9bd4ff;margin-top:6px}
+.trendBigValue{font-family:ui-monospace,Consolas,monospace;font-size:28px;font-weight:1000;color:#fff;margin-top:12px}
+.trendUp{color:#22c55e!important}.trendDown{color:#ef4444!important}.trendSame{color:#ffd433!important}
+#directHistoryTrendSvg{width:100%;height:240px;background:#fff;border-radius:14px;margin-top:12px;display:block}
+.crossDisabled{color:#ffd433!important}
+.crossError{color:#ef4444!important}
 
 </style></head><body>
 <div class="wrap">
@@ -1903,6 +1898,150 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
   }
   window.addEventListener('load',async()=>{await refresh();const tip=document.getElementById('tooltip');if(tip)new MutationObserver(()=>fix()).observe(tip,{childList:true,subtree:true,characterData:true,attributes:true});document.addEventListener('mousemove',()=>setTimeout(fix,0),true);});
   setInterval(refresh,60000);
+})();
+</script>
+
+
+<script id="same-day-trend-history-direct-fix">
+(function(){
+  const N=v=>{const x=Number(v);return Number.isFinite(x)?x:null};
+  const C=v=>{const x=N(v);return x==null?'—':x.toFixed(3).replace(/\.?0+$/,'')+'°C'};
+  const F=v=>{const x=N(v);return x==null?'—':x.toFixed(1).replace(/\.0$/,'')+'°F'};
+  const CF=(c,f)=>`${C(c)} / ${F(f)}`;
+  const todayIST=()=>new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});
+
+  async function fetchJson(url){
+    try{const r=await fetch(url,{cache:'no-store'}); if(!r.ok)throw new Error('HTTP '+r.status); return await r.json();}
+    catch(e){console.warn('fetch failed',url,e); return null;}
+  }
+
+  function extractTrendFromHistory(h){
+    const rows = h && (h.forecast_snapshot_rows || h.snapshots || h.forecastSnapshots) || [];
+    const today = todayIST();
+    const map = new Map();
+    for(const r of rows){
+      const target = r.target_date || r.date || r.forecast_date;
+      if(target && target !== today) continue;
+      const c = N(r.high_c ?? r.today_c ?? r.max_c);
+      const f = N(r.high_f ?? r.today_f ?? (c!=null ? c*9/5+32 : null));
+      if(c==null) continue;
+      const t = r.fetch_time_ist || r.fetched_at || r.created_at || r.forecast_issue_time_ist || '';
+      const key = String(t) + '_' + c;
+      map.set(key,{time:String(t),c:+c.toFixed(3),f:+(f??(c*9/5+32)).toFixed(1)});
+    }
+    return [...map.values()].sort((a,b)=>String(a.time).localeCompare(String(b.time)));
+  }
+
+  function findPanel(){
+    const panels=[...document.querySelectorAll('section,div')].filter(el=>{
+      const txt=(el.textContent||'').toLowerCase();
+      const r=el.getBoundingClientRect();
+      return txt.includes('current day high forecast trend') && r.width>400 && r.height>250;
+    });
+    return panels.sort((a,b)=>a.getBoundingClientRect().height-b.getBoundingClientRect().height)[0]||null;
+  }
+
+  function findCard(title){
+    const needle=title.toLowerCase();
+    const cards=[...document.querySelectorAll('div')].filter(el=>{
+      const txt=(el.textContent||'').toLowerCase();
+      const r=el.getBoundingClientRect();
+      return txt.includes(needle) && r.width>120 && r.height>60 && r.height<260;
+    });
+    return cards.sort((a,b)=>a.getBoundingClientRect().height-b.getBoundingClientRect().height)[0]||null;
+  }
+
+  function setCard(title,value,sub,cls){
+    const card=findCard(title); if(!card)return;
+    card.querySelectorAll('.trendBigValue,.trendStatusText').forEach(x=>x.remove());
+    const v=document.createElement('div'); v.className='trendBigValue '+(cls||''); v.textContent=value;
+    const s=document.createElement('div'); s.className='trendStatusText'; s.textContent=sub||'';
+    card.appendChild(v); card.appendChild(s);
+  }
+
+  function draw(points){
+    const panel=findPanel(); if(!panel)return;
+    let host=panel.querySelector('#directHistoryTrendSvg');
+    if(!host){
+      const old=[...panel.querySelectorAll('canvas,svg,div')].find(el=>{
+        const r=el.getBoundingClientRect();
+        return r.width>400 && r.height>150 && (getComputedStyle(el).backgroundColor.includes('255') || el.tagName.toLowerCase()==='canvas');
+      });
+      host=document.createElementNS('http://www.w3.org/2000/svg','svg');
+      host.setAttribute('id','directHistoryTrendSvg');
+      if(old&&old.parentNode) old.parentNode.replaceChild(host,old); else panel.appendChild(host);
+    }
+    const w=900,h=240,pad=36;
+    host.setAttribute('viewBox',`0 0 ${w} ${h}`);
+    if(!points.length){
+      host.innerHTML='<rect width="900" height="240" fill="white" rx="14"/><text x="25" y="45" fill="#111" font-size="20" font-family="monospace">No same-day forecast trend snapshots yet</text>';
+      return;
+    }
+    const min=Math.min(...points.map(p=>p.c))-0.2, max=Math.max(...points.map(p=>p.c))+0.2;
+    const x=i=>pad+(w-pad*2)*(i/Math.max(1,points.length-1));
+    const y=v=>h-pad-(h-pad*2)*((v-min)/(max-min||1));
+    const path=points.map((p,i)=>`${i?'L':'M'}${x(i)},${y(p.c)}`).join(' ');
+    host.innerHTML=`<rect width="${w}" height="${h}" fill="white" rx="14"/>
+      <text x="22" y="30" fill="#111" font-size="17" font-family="monospace">Same-day WU forecast trend: ${CF(points[0].c,points[0].f)} → ${CF(points.at(-1).c,points.at(-1).f)}</text>
+      <path d="${path}" fill="none" stroke="#f97316" stroke-width="4"/>
+      ${points.map((p,i)=>`<circle cx="${x(i)}" cy="${y(p.c)}" r="4" fill="#f97316"><title>${p.time} ${CF(p.c,p.f)}</title></circle>`).join('')}
+      <text x="${w-235}" y="${y(points.at(-1).c)-10}" fill="#111" font-size="15" font-family="monospace">latest ${CF(points.at(-1).c,points.at(-1).f)}</text>`;
+  }
+
+  async function render(){
+    const date=todayIST();
+    const [history, highs] = await Promise.all([
+      fetchJson('/api/history?date='+date+'&t='+Date.now()),
+      fetchJson('/api/polymarket-highs?date='+date+'&t='+Date.now())
+    ]);
+    let pts=extractTrendFromHistory(history);
+    const day=highs && highs.days && highs.days[date];
+    if(!pts.length && day && N(day.high_c)!=null){
+      pts=[{time:day.issue_time||highs.updated_at||'',c:N(day.high_c),f:N(day.high_f??(N(day.high_c)*9/5+32))}];
+    }
+    const latest=pts.at(-1);
+    const start=pts[0];
+    const change = latest&&start ? latest.c-start.c : null;
+    const cls=change>0?'trendUp':change<0?'trendDown':'trendSame';
+    const sign=change>0?'+':'';
+    setCard('latest wu forecast high', latest?CF(latest.c,latest.f):'—', 'same-day latest forecast high', '');
+    setCard('start of day forecast', start?CF(start.c,start.f):'—', 'first same-day saved forecast', '');
+    setCard('change today', change==null?'—':`${sign}${C(change)} / ${sign}${F(change*9/5)}`, 'latest minus start', cls);
+    const bin = latest ? Math.round(latest.c)+'°C' : (day&&day.daily_market_bin?day.daily_market_bin+'°C':'—');
+    setCard('market bin now', bin, 'rounded latest forecast bin', '');
+    draw(pts);
+  }
+
+  window.addEventListener('load',()=>setTimeout(render,1000));
+  setInterval(render,60000);
+})();
+</script>
+
+
+<script id="live-crosscheck-clean-ui-fix">
+(function(){
+  // Clean UI when CHECKWX key missing; WU card should never show "historyPayload is not defined" after worker fix.
+  const todayIST=()=>new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});
+  async function run(){
+    try{
+      const r=await fetch('/api/live-crosscheck?date='+todayIST()+'&t='+Date.now(),{cache:'no-store'});
+      if(!r.ok)return;
+      const j=await r.json();
+      const cwRaw=document.getElementById('lcCwRaw');
+      if(cwRaw && !j.checkwx_enabled) cwRaw.innerHTML='<span class="crossDisabled">CHECKWX_KEY not set — optional source disabled</span>';
+      const wuRaw=document.getElementById('lcWuRaw');
+      const wuVal=document.getElementById('lcWu');
+      if(wuRaw && /historyPayload/i.test(wuRaw.textContent||'')){
+        wuRaw.innerHTML='<span class="crossError">WU history unavailable from worker</span>';
+      }
+      if(wuVal && j.wu_latest && j.wu_latest.temp_c!=null){
+        const c=Number(j.wu_latest.temp_c), f=Number(j.wu_latest.temp_f || (c*9/5+32));
+        wuVal.textContent=`${c.toFixed(1).replace(/\.0$/,'')}°C / ${f.toFixed(1).replace(/\.0$/,'')}°F`;
+      }
+    }catch(e){}
+  }
+  window.addEventListener('load',()=>setTimeout(run,1200));
+  setInterval(run,60000);
 })();
 </script>
 
