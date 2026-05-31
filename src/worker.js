@@ -342,16 +342,28 @@ async function polymarketDailyAndHourlyHighsFinal(env, day){
   const currentRawF=latestWu?n(latestWu.temp_f):null;
 
   let obsPeakC=null, obsPeakF=null, obsPeakTime=null;
+  function istHourFromAny(x){
+    const s=String(x||'');
+    const m=s.match(/(?:^|\s)(\d{1,2}):(\d{2})(?::\d{2})?/);
+    if(!m) return null;
+    return Number(m[1])+Number(m[2])/60;
+  }
+  // Market-day peak: only same-day WU observations after 07:00 IST.
+  // This prevents yesterday/midnight peak carry like 00:05 -> 33C.
   for(const r of wu){
-    const pc=n(r.peak_since_7am_c), pf=n(r.peak_since_7am_f);
+    const h=istHourFromAny(r.obs_time||r.saved_at||r.fetched_at||r.slot);
+    if(h==null || h<7) continue;
     const tc=n(r.temp_c), tf=n(r.temp_f);
-    const c=pc!=null?pc:tc;
-    const f=pf!=null?pf:tf;
-    if(c!=null && (obsPeakC==null || c>obsPeakC)){
-      obsPeakC=c;
-      obsPeakF=f!=null?f:cToF(c);
-      obsPeakTime=r.obs_time||r.fetched_at||null;
+    if(tc!=null && (obsPeakC==null || tc>obsPeakC)){
+      obsPeakC=tc;
+      obsPeakF=tf!=null?tf:cToF(tc);
+      obsPeakTime=r.obs_time||r.saved_at||r.fetched_at||r.slot||null;
     }
+  }
+  if(obsPeakC==null && latestWu){
+    obsPeakC=currentRawC;
+    obsPeakF=currentRawF!=null?currentRawF:(currentRawC!=null?cToF(currentRawC):null);
+    obsPeakTime=latestWu.obs_time||latestWu.saved_at||latestWu.fetched_at||null;
   }
 
   function parseJsonMaybe(x){
@@ -626,4 +638,15 @@ async function polymarketDailyAndHourlyHighsFinal(env, day){
 }
 
 async function forecastSnapshots(env, day){ const rows=await env.DB.prepare('SELECT * FROM forecast_snapshots WHERE target_date=? ORDER BY forecast_date, forecast_issue_time_ist, fetch_time_ist LIMIT 1000').bind(day).all(); return {ok:true,target_date:day,rows:rows.results||[]}; }
-export default { async fetch(request, env){ const url=new URL(request.url); if(url.pathname==='/api/collect') return json(await collect(env)); if(url.pathname==='/api/history') return json(await history(env, url.searchParams.get('date')||dateIST())); if(url.pathname==='/api/wu-latest') { const day=url.searchParams.get('date')||dateIST(); const row=await env.DB.prepare('SELECT * FROM wu_obs WHERE obs_date=? ORDER BY obs_time DESC LIMIT 1').bind(day).first(); return json({ok:true,row}); } if(url.pathname==='/api/polymarket-highs') return json(await polymarketDailyAndHourlyHighsFinal(env, url.searchParams.get('date')||dateIST())); if(url.pathname==='/api/forecast-snapshots') return json(await forecastSnapshots(env, url.searchParams.get('date')||dateIST())); if(url.pathname==='/api/forecast-high-debug') return json(await forecastHighDebug(env, url.searchParams.get('date')||dateIST())); return env.ASSETS.fetch(request); }, async scheduled(event, env, ctx){ctx.waitUntil(collect(env));} };
+
+function parseMetarTempFromRaw(raw){raw=String(raw||'');const m=raw.match(/\s(M?\d{2})\/(M?\d{2})\s/);if(!m)return{temp_c:null,dewpoint_c:null};const cv=s=>s.startsWith('M')?-Number(s.slice(1)):Number(s);return{temp_c:cv(m[1]),dewpoint_c:cv(m[2])};}
+function toF(c){return c==null?null:(c*9/5+32);}
+function round1(x){return x==null?null:Math.round(Number(x)*10)/10;}
+function pickLatestWuFromHistory(hist){const rows=hist?.wu_obs_rows||{};let best=null;for(const slot of Object.keys(rows)){for(const r of (rows[slot]||[])){const t=r.saved_at||r.fetched_at||slot;if(r.temp_c==null)continue;if(!best||String(t)>String(best.time))best={source:'WU Obs',temp_c:n(r.temp_c),temp_f:n(r.temp_f)??toF(n(r.temp_c)),time:t,raw:null,slot,condition:r.condition||null,humidity:r.humidity??null};}}return best;}
+function tempVote(sources){const valid=sources.filter(x=>x&&x.temp_c!=null);if(!valid.length)return{final_temp_c:null,final_temp_f:null,confidence:'NO DATA',verdict:'no data',majority:[],warnings:[]};const groups=[];for(const s of valid){let g=groups.find(g=>Math.abs(g.temp_c-s.temp_c)<=1.0);if(!g){g={temp_c:s.temp_c,items:[]};groups.push(g);}g.items.push(s);g.temp_c=g.items.reduce((a,b)=>a+b.temp_c,0)/g.items.length;}groups.sort((a,b)=>b.items.length-a.items.length);const top=groups[0];let confidence='LOW';if(top.items.length>=2&&valid.length>=2)confidence='HIGH';else if(valid.length===1)confidence='SINGLE SOURCE';const aw=valid.find(x=>x.source==='AviationWeather'),cw=valid.find(x=>x.source==='CheckWX'),wu=valid.find(x=>x.source==='WU Obs');const warnings=[];if(aw&&cw&&Math.abs(aw.temp_c-cw.temp_c)>3)warnings.push('AviationWeather vs CheckWX mismatch >3°C');if(aw&&wu&&Math.abs(aw.temp_c-wu.temp_c)>5)warnings.push('AviationWeather vs WU mismatch >5°C');if(cw&&wu&&Math.abs(cw.temp_c-wu.temp_c)>5)warnings.push('CheckWX vs WU mismatch >5°C');const finalC=round1(top.temp_c);return{final_temp_c:finalC,final_temp_f:round1(toF(finalC)),confidence,verdict:warnings.length?'cross-check warning':'trusted by majority/available source',majority:top.items.map(x=>x.source),warnings};}
+async function fetchCheckWxMetar(env,station){if(!env.CHECKWX_KEY)return{ok:false,error:'CHECKWX_KEY missing',latest:null};try{const r=await fetch(`https://api.checkwx.com/v2/metar/${station}/decoded`,{headers:{'X-API-KEY':env.CHECKWX_KEY,'Accept':'application/json'}});const txt=await r.text();if(!r.ok)return{ok:false,error:`HTTP ${r.status}: ${txt.slice(0,160)}`,latest:null};const j=JSON.parse(txt);const d=(j.data||[])[0]||null;if(!d)return{ok:false,error:'No CheckWX data',latest:null};let c=null,f=null;if(d.temperature){c=n(d.temperature.celsius??d.temperature.degrees_celsius??d.temperature.value);f=n(d.temperature.fahrenheit??d.temperature.degrees_fahrenheit);}if(c==null){const p=parseMetarTempFromRaw(d.raw_text||d.raw||'');c=p.temp_c;}if(f==null&&c!=null)f=toF(c);return{ok:true,error:null,latest:{source:'CheckWX',temp_c:c,temp_f:f,time:d.observed||d.observed_at||d.timestamp||null,raw:d.raw_text||d.raw||null,station:d.icao||station}};}catch(e){return{ok:false,error:String(e.message||e),latest:null};}}
+async function fetchAviationWeatherMetar(station){try{const arr=await getJson(`https://aviationweather.gov/api/data/metar?ids=${station}&hours=6&format=json`,1);const latest=Array.isArray(arr)?arr[0]:null;if(!latest)return{ok:false,error:'No AviationWeather data',latest:null,rows:[]};const c=n(latest.temp);return{ok:true,error:null,latest:{source:'AviationWeather',temp_c:c,temp_f:toF(c),time:latest.reportTime||latest.obsTime||null,raw:latest.rawOb||null,station:latest.icaoId||station},rows:arr};}catch(e){return{ok:false,error:String(e.message||e),latest:null,rows:[]};}}
+async function liveCrosscheck(env,date){const station=env.METAR_STATION||env.WU_ICAO||'VILK';let hist={};try{hist=await historyPayload(env,date);}catch(e){hist={ok:false,error:String(e.message||e)};}const aw=await fetchAviationWeatherMetar(station);const cw=await fetchCheckWxMetar(env,station);const wuLatest=pickLatestWuFromHistory(hist);const sources=[aw.latest,cw.latest,wuLatest].filter(Boolean);const vote=tempVote(sources);return{ok:true,station,date,updated_at:timeIST(),checkwx_enabled:!!env.CHECKWX_KEY,aviationweather:aw.latest,checkwx:cw.latest,wu_latest:wuLatest,final_live:vote,source_status:{aviationweather_ok:aw.ok,checkwx_ok:cw.ok,history_ok:!!hist.ok},errors:{aviationweather:aw.error,checkwx:cw.error,history:hist.error||null},rule:'Live final = majority within 1°C among AviationWeather, CheckWX, WU Obs. If one source differs by >3–5°C it is flagged, not blindly used.'};}
+
+export default { async fetch(request, env){ const url=new URL(request.url); if(url.pathname==='/api/collect') return json(await collect(env)); if(url.pathname==='/api/live-crosscheck') return json(await liveCrosscheck(env, url.searchParams.get('date')||dateIST()));
+  if(url.pathname==='/api/history') return json(await history(env, url.searchParams.get('date')||dateIST())); if(url.pathname==='/api/wu-latest') { const day=url.searchParams.get('date')||dateIST(); const row=await env.DB.prepare('SELECT * FROM wu_obs WHERE obs_date=? ORDER BY obs_time DESC LIMIT 1').bind(day).first(); return json({ok:true,row}); } if(url.pathname==='/api/polymarket-highs') return json(await polymarketDailyAndHourlyHighsFinal(env, url.searchParams.get('date')||dateIST())); if(url.pathname==='/api/forecast-snapshots') return json(await forecastSnapshots(env, url.searchParams.get('date')||dateIST())); if(url.pathname==='/api/forecast-high-debug') return json(await forecastHighDebug(env, url.searchParams.get('date')||dateIST())); return env.ASSETS.fetch(request); }, async scheduled(event, env, ctx){ctx.waitUntil(collect(env));} };
