@@ -1,5 +1,85 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<html lang="en"><head>
+
+<script id="no-big-localstorage-cache-fix">
+(function(){
+  const originalSetItem = Storage.prototype.setItem;
+  const HEAVY_KEY = /^(snaps_|history_|forecast_|forecastSnapshots|trendCache)/;
+  const MAX_LEN = 50000;
+
+  function cleanupHeavy(){
+    try{
+      for(let i=localStorage.length-1;i>=0;i--){
+        const k = localStorage.key(i);
+        if(HEAVY_KEY.test(k)) localStorage.removeItem(k);
+      }
+    }catch(e){}
+  }
+
+  cleanupHeavy();
+
+  Storage.prototype.setItem = function(key, value){
+    const k = String(key || '');
+    const v = String(value || '');
+
+    // Never store big API payloads in browser. Backend/API is source of truth.
+    if(HEAVY_KEY.test(k)){
+      if(v.length > MAX_LEN){
+        try{
+          return originalSetItem.call(this, k + '_summary', JSON.stringify({
+            skipped:true,
+            chars:v.length,
+            saved_at:new Date().toISOString(),
+            reason:'large api payload not cached'
+          }));
+        }catch(e){ return; }
+      }
+    }
+
+    try{
+      return originalSetItem.call(this, key, value);
+    }catch(e){
+      const msg = String((e && e.message) || e || '').toLowerCase();
+      if(msg.includes('quota') || (e && e.name === 'QuotaExceededError')){
+        cleanupHeavy();
+        console.warn('localStorage quota prevented, cache skipped:', k);
+        return;
+      }
+      console.warn('localStorage write skipped:', k, e);
+      return;
+    }
+  };
+
+  window.clearWeatherToolCache = function(){
+    cleanupHeavy();
+    console.log('Weather tool heavy cache cleared');
+  };
+})();
+</script>
+
+
+<script id="weather-safe-cache-api">
+(function(){
+  window.weatherSafeSetItem = function(key, value){
+    try{
+      const text = typeof value === 'string' ? value : JSON.stringify(value);
+      if(/^(snaps_|history_|forecast_|forecastSnapshots|trendCache)/.test(String(key)) && text.length > 50000){
+        console.log('Skipped heavy cache:', key, text.length);
+        return false;
+      }
+      localStorage.setItem(key, text);
+      return true;
+    }catch(e){
+      console.warn('Skipped cache write:', key, e && e.message || e);
+      return false;
+    }
+  };
+})();
+</script>
+
+
+
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>VILK Live Signal</title>
 <style>
 :root{--bg:#020912;--panel:#071827;--panel2:#0b2033;--line:#17435f;--cyan:#00d4ff;--green:#12d88f;--orange:#ff8a3d;--red:#ff4f45;--muted:#8bb4d6;--text:#f4fbff;--yellow:#ffd433;--purple:#a855f7;}
