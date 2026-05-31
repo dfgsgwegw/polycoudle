@@ -323,14 +323,18 @@ async function polymarketDailyHighs(env, day){
 
 
 function buildForecastTrendFromRows(baseDate, fcRows){
-  const out=[]; const fc=(fcRows||[]);
-  for(const row of fc){
-    const rawC=n(row.today_c), rawF=n(row.today_f); let c=null,f=null;
-    if(rawF!=null){f=rawF;c=fToC(rawF);} else if(rawC!=null){c=rawC;f=cToF(rawC);} else continue;
+  const out=[];
+  for(const row of (fcRows||[])){
+    const rawF=n(row.today_f), rawC=n(row.today_c);
+    let c=null,f=null;
+    if(rawF!=null){f=rawF;c=fToC(rawF);}
+    else if(rawC!=null){c=rawC;f=cToF(rawC);}
+    if(c==null) continue;
     out.push({time:row.issue_time||row.fetched_at||row.created_at||'',c:+c.toFixed(3),f:+f.toFixed(1),bin:Math.round(c)});
   }
   return out;
 }
+
 async function polymarketDailyAndHourlyHighsFinal(env, day){
   const d0=day, d1=addDaysIST(day,1), d2=addDaysIST(day,2), d3=addDaysIST(day,3);
   const targets=[d0,d1,d2,d3];
