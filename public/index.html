@@ -662,6 +662,13 @@ td{
 .pmBox{margin-top:12px;padding:12px;border:1px solid rgba(0,212,255,.22);background:rgba(0,0,0,.16);border-radius:14px;font-family:ui-monospace,Consolas,monospace}
 .pmTitle{font-size:14px;color:#00d4ff;font-weight:1000;letter-spacing:1.4px;margin-bottom:8px}.pmRow{display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid rgba(0,212,255,.1);padding:7px 0;font-size:15px}.pmRow b{color:#9bd4ff}.pmVal{font-weight:1000;color:#fff;text-align:right}.pmUp{color:#22c55e}.pmDown{color:#ef4444}.pmSame{color:#ffd433}.todayForecastBox{border-color:#f59e0b;background:rgba(245,158,11,.07)}.highForecastCard{min-height:250px!important}.trendFilledNote{font-family:ui-monospace,Consolas,monospace;color:#9bd4ff;font-size:14px;margin-top:6px}#forecastTrendFallbackSvg{width:100%;height:240px;background:#fff;border-radius:14px;margin-top:10px}
 
+
+/* ===== FORCE FORECAST TREND VALUES PATCH ===== */
+.forceTrendVal{font-family:ui-monospace,Consolas,monospace;font-size:28px;font-weight:1000;color:#fff;margin-top:12px}
+.forceTrendSub{font-family:ui-monospace,Consolas,monospace;font-size:14px;color:#9bd4ff;margin-top:6px}
+.forceUp{color:#22c55e!important}.forceDown{color:#ef4444!important}.forceSame{color:#ffd433!important}
+#forceTrendSvg{width:100%;height:240px;background:#fff;border-radius:14px;margin-top:12px;display:block}
+
 </style></head><body>
 <div class="wrap">
   <div class="header"><div><h1>VILK <span class="cyan">Live Signal</span></h1><div class="sub">● UI refresh 30 sec · cron save 1 min · Lucknow Airport (VILK) · D1 archive</div></div><div><button class="btn" id="refreshBtn">↻ Refresh Now</button><div class="updated" id="updated">Updated --</div></div></div>
@@ -1550,23 +1557,107 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
 
 
 
-<script id="final-clean-polymarket-ui">
+
+
+
+<script id="force-trend-panel-final">
 (function(){
- const $=id=>document.getElementById(id),N=v=>{const x=Number(v);return Number.isFinite(x)?x:null};
- const C=v=>{const x=N(v);return x==null?'—':x.toFixed(3).replace(/\.?0+$/,'')+'°C'},F=v=>{const x=N(v);return x==null?'—':x.toFixed(1).replace(/\.0$/,'')+'°F'},CF=(c,f)=>`${C(c)} / ${F(f)}`;
- const todayIST=()=>new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});
- function addDays(d,n){const [y,m,dd]=d.split('-').map(Number);return new Date(y,m-1,dd+n,12).toLocaleDateString('en-CA')}
- function pretty(d){try{return new Date(d+'T00:00:00').toLocaleDateString('en-IN',{weekday:'short',day:'2-digit',month:'short',year:'numeric'})}catch(e){return d}}
- function delta(c){const x=N(c);if(x==null)return '<span class="pmSame">—</span>';const f=x*9/5,cls=x>0?'pmUp':x<0?'pmDown':'pmSame',ar=x>0?'↑':x<0?'↓':'→',s=x>0?'+':'';return `<span class="${cls}">${ar} ${s}${C(x)} / ${s}${F(f)}</span>`}
- function row(k,v){return `<div class="pmRow"><b>${k}</b><span class="pmVal">${v}</span></div>`}
- async function load(){try{const r=await fetch('/api/polymarket-highs?date='+todayIST()+'&t='+Date.now(),{cache:'no-store'});if(!r.ok)throw Error(r.status);const j=await r.json();window.__polyHighs=j;return j}catch(e){return window.__polyHighs||null}}
- function todayCard(d){return `<div class="pmBox"><div class="pmTitle">LIVE OBS ONLY</div>${row('Now',CF(d.current_c,d.current_f))}${row('Peak after 7 AM',CF(d.today_main_c??d.obs_peak_c,d.today_main_f??d.obs_peak_f))}${row('Peak time',d.obs_peak_time||'—')}${row('Live bin',(Math.round(N(d.today_main_c??d.obs_peak_c??d.current_c))||'—')+'°C')}</div><div class="pmBox todayForecastBox"><div class="pmTitle">TODAY FORECAST SEPARATE</div>${row('Daily max',CF(d.high_c,d.high_f))}${row('Hourly max',CF(d.hourly_high_c,d.hourly_high_f))}${row('Daily - hourly',delta(d.daily_minus_hourly_c))}${row('Forecast bin',`daily ${d.daily_market_bin??'—'}°C · hourly ${d.hourly_market_bin??'—'}°C`)}</div>`}
- function futureCard(d){return `<div class="pmBox"><div class="pmTitle">DAILY FORECAST</div>${row('Current',CF(d.high_c,d.high_f))}${row('Previous',CF(d.daily_previous_c,d.daily_previous_f))}${row('Highest seen',CF(d.daily_highest_seen_c,d.daily_highest_seen_f))}${row('Lowest seen',CF(d.daily_lowest_seen_c,d.daily_lowest_seen_f))}${row('Change',delta(d.daily_change_from_previous_c))}</div><div class="pmBox"><div class="pmTitle">HOURLY FORECAST</div>${row('Current max',CF(d.hourly_high_c,d.hourly_high_f))}${row('Highest seen',CF(d.hourly_highest_seen_c,d.hourly_highest_seen_f))}${row('Lowest seen',CF(d.hourly_lowest_seen_c,d.hourly_lowest_seen_f))}${row('Peak time',String(d.hourly_peak_time||'—').replace('T',' ').replace('+0530',''))}</div><div class="pmBox">${row('Daily - hourly',delta(d.daily_minus_hourly_c))}${row('Bins',`daily ${d.daily_market_bin??'—'}°C · hourly ${d.hourly_market_bin??'—'}°C`)}</div>`}
- function setCard(prefix,d,type){const v=$(prefix),m=$(prefix+'Meta'),b=$(prefix+'Bin');if(!v||!m||!b||!d)return;const topC=type==='today'?(N(d.today_main_c)??N(d.obs_peak_c)??N(d.current_c)):N(d.high_c),topF=type==='today'?(N(d.today_main_f)??N(d.obs_peak_f)??N(d.current_f)):N(d.high_f);v.textContent=C(topC);m.innerHTML=`${pretty(d.date)}<br><b>${type==='today'?'Live peak':'Daily max'}:</b> ${CF(topC,topF)}${type==='today'?todayCard(d):futureCard(d)}`;b.textContent=type==='today'?`Bin live ≈ ${Math.round(topC)}°C · forecast daily ≈ ${d.daily_market_bin??'—'}°C`:`Bin daily ≈ ${d.daily_market_bin??'—'}°C · hourly ≈ ${d.hourly_market_bin??'—'}°C`}
- function fillTrend(j){const d=j.days&&j.days[todayIST()];if(!d)return;const latest=CF(d.high_c,d.high_f),start=CF(d.daily_lowest_seen_c,d.daily_lowest_seen_f),chg=(N(d.high_c)!=null&&N(d.daily_lowest_seen_c)!=null)?N(d.high_c)-N(d.daily_lowest_seen_c):d.daily_change_from_previous_c,bin=`${d.daily_market_bin??Math.round(N(d.high_c))}°C`;const vals=[['latest wu forecast high',latest],['start of day forecast',start],['change today',delta(chg)],['market bin now',bin]];document.querySelectorAll('.statCard,.miniCard,.card').forEach(card=>{const t=(card.textContent||'').toLowerCase();for(const [k,v] of vals){if(t.includes(k)&&!card.dataset.filled){card.dataset.filled='1';card.innerHTML+=`<div class="trendFilledNote">${v}</div>`}}});drawTrend(j.forecast_trend||[])}
- function drawTrend(points){let host=document.querySelector('#forecastTrendFallbackSvg');const box=[...document.querySelectorAll('canvas,svg,div')].find(el=>{const r=el.getBoundingClientRect&&el.getBoundingClientRect();return r&&r.height>150&&r.width>400&&(el.closest('section')?.textContent||'').toLowerCase().includes('current day high forecast trend')});if(!host){host=document.createElementNS('http://www.w3.org/2000/svg','svg');host.id='forecastTrendFallbackSvg';if(box&&box.parentNode)box.parentNode.replaceChild(host,box);else return}const arr=(points||[]).filter(p=>N(p.c)!=null);if(!arr.length){host.innerHTML='<rect width="900" height="240" fill="white"/><text x="20" y="40" fill="#111" font-size="18">No forecast trend rows yet</text>';return}const w=900,h=240,p=35,min=Math.min(...arr.map(x=>x.c))-.5,max=Math.max(...arr.map(x=>x.c))+.5,x=i=>p+(w-p*2)*(i/Math.max(1,arr.length-1)),y=v=>h-p-(h-p*2)*((v-min)/(max-min||1)),path=arr.map((q,i)=>`${i?'L':'M'}${x(i)},${y(q.c)}`).join(' ');host.setAttribute('viewBox',`0 0 ${w} ${h}`);host.innerHTML=`<rect width="${w}" height="${h}" fill="white" rx="14"/><text x="20" y="26" fill="#111" font-size="16" font-family="monospace">WU forecast trend: ${C(arr[0].c)} → ${C(arr.at(-1).c)}</text><path d="${path}" fill="none" stroke="#f97316" stroke-width="4"/>${arr.map((q,i)=>`<circle cx="${x(i)}" cy="${y(q.c)}" r="4" fill="#f97316"/>`).join('')}`}
- function render(j){if(!j||!j.days)return;const d0=todayIST(),d1=addDays(d0,1),d2=addDays(d0,2),d3=addDays(d0,3);setCard('hfToday',j.days[d0],'today');setCard('hfTomorrow',j.days[d1],'future');setCard('hfDayAfter',j.days[d2],'future');setCard('hfD3',j.days[d3],'future');fillTrend(j)}
- async function run(){render(await load())}window.addEventListener('load',()=>setTimeout(run,800));setInterval(run,60000);
+  const N=v=>{const x=Number(v);return Number.isFinite(x)?x:null};
+  const C=v=>{const x=N(v);return x==null?'—':x.toFixed(3).replace(/\.?0+$/,'')+'°C'};
+  const F=v=>{const x=N(v);return x==null?'—':x.toFixed(1).replace(/\.0$/,'')+'°F'};
+  const CF=(c,f)=>`${C(c)} / ${F(f)}`;
+  const todayIST=()=>new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});
+  async function load(){
+    try{
+      const r=await fetch('/api/polymarket-highs?date='+todayIST()+'&t='+Date.now(),{cache:'no-store'});
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      return await r.json();
+    }catch(e){ console.warn('trend load failed',e); return null; }
+  }
+  function setBoxByTitle(title,value,sub,cls){
+    const needle=title.toLowerCase();
+    const candidates=[...document.querySelectorAll('div,section,article')].filter(el=>{
+      const txt=(el.textContent||'').toLowerCase();
+      const r=el.getBoundingClientRect();
+      return txt.includes(needle) && r.width>120 && r.height>60 && r.height<250;
+    });
+    let box=candidates.sort((a,b)=>a.getBoundingClientRect().height-b.getBoundingClientRect().height)[0];
+    if(!box) return false;
+    box.querySelectorAll('.forceTrendVal,.forceTrendSub').forEach(x=>x.remove());
+    const v=document.createElement('div');
+    v.className='forceTrendVal '+(cls||'');
+    v.textContent=value;
+    const s=document.createElement('div');
+    s.className='forceTrendSub';
+    s.textContent=sub||'';
+    box.appendChild(v); box.appendChild(s);
+    // Hide old Loading text if possible
+    box.childNodes.forEach(n=>{
+      if(n.nodeType===3 && /loading/i.test(n.textContent)) n.textContent='';
+    });
+    return true;
+  }
+  function findTrendPanel(){
+    const panels=[...document.querySelectorAll('section,div')].filter(el=>{
+      const txt=(el.textContent||'').toLowerCase();
+      const r=el.getBoundingClientRect();
+      return txt.includes('current day high forecast trend') && r.width>400 && r.height>250;
+    });
+    return panels.sort((a,b)=>a.getBoundingClientRect().height-b.getBoundingClientRect().height)[0];
+  }
+  function draw(panel,points){
+    if(!panel) return;
+    let svg=panel.querySelector('#forceTrendSvg');
+    if(!svg){
+      const white=[...panel.querySelectorAll('canvas,svg,div')].find(el=>{
+        const r=el.getBoundingClientRect();
+        return r.width>400 && r.height>150 && getComputedStyle(el).backgroundColor.includes('255');
+      });
+      svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+      svg.setAttribute('id','forceTrendSvg');
+      if(white && white.parentNode) white.parentNode.replaceChild(svg,white);
+      else panel.appendChild(svg);
+    }
+    const arr=(points||[]).filter(p=>N(p.c)!=null);
+    const w=900,h=240,pad=36;
+    svg.setAttribute('viewBox',`0 0 ${w} ${h}`);
+    if(!arr.length){
+      svg.innerHTML='<rect width="900" height="240" fill="white" rx="14"/><text x="25" y="45" fill="#111" font-size="20" font-family="monospace">No forecast trend snapshots yet</text>';
+      return;
+    }
+    const min=Math.min(...arr.map(p=>p.c))-0.2, max=Math.max(...arr.map(p=>p.c))+0.2;
+    const x=i=>pad+(w-pad*2)*(i/Math.max(1,arr.length-1));
+    const y=v=>h-pad-(h-pad*2)*((v-min)/(max-min||1));
+    const path=arr.map((p,i)=>`${i?'L':'M'}${x(i)},${y(p.c)}`).join(' ');
+    svg.innerHTML=`<rect width="${w}" height="${h}" fill="white" rx="14"/>
+      <text x="22" y="30" fill="#111" font-size="17" font-family="monospace">WU forecast trend: ${CF(arr[0].c,arr[0].f)} → ${CF(arr.at(-1).c,arr.at(-1).f)}</text>
+      <path d="${path}" fill="none" stroke="#f97316" stroke-width="4"/>
+      ${arr.map((p,i)=>`<circle cx="${x(i)}" cy="${y(p.c)}" r="4" fill="#f97316"><title>${p.time||''} ${CF(p.c,p.f)}</title></circle>`).join('')}
+      <text x="${w-235}" y="${y(arr.at(-1).c)-10}" fill="#111" font-size="15" font-family="monospace">latest ${CF(arr.at(-1).c,arr.at(-1).f)}</text>`;
+  }
+  function render(j){
+    if(!j||!j.days) return;
+    const d=j.days[todayIST()];
+    if(!d) return;
+    const latest=CF(d.high_c,d.high_f);
+    const startC=N(d.daily_lowest_seen_c??d.lowest_seen_c);
+    const startF=N(d.daily_lowest_seen_f??d.lowest_seen_f);
+    const start=CF(startC,startF);
+    const chC=(N(d.high_c)!=null&&startC!=null)?N(d.high_c)-startC:N(d.daily_change_from_previous_c??d.change_from_previous_c);
+    const chF=chC==null?null:chC*9/5;
+    const cls=chC>0?'forceUp':chC<0?'forceDown':'forceSame';
+    const sign=chC>0?'+':'';
+    const change=chC==null?'—':`${sign}${C(chC)} / ${sign}${F(chF)}`;
+    const bin=`${d.daily_market_bin??(N(d.high_c)!=null?Math.round(N(d.high_c)):'—')}°C`;
+    setBoxByTitle('latest wu forecast high',latest,'current WU daily forecast high','');
+    setBoxByTitle('start of day forecast',start,'lowest/start saved forecast today','');
+    setBoxByTitle('change today',change,'latest minus start/lowest',cls);
+    setBoxByTitle('market bin now',bin,'rounded latest forecast bin','');
+    draw(findTrendPanel(),j.forecast_trend||[]);
+  }
+  async function run(){render(await load());}
+  window.addEventListener('load',()=>setTimeout(run,1000));
+  setInterval(run,30000);
 })();
 </script>
 
