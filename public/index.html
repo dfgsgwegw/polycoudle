@@ -771,6 +771,24 @@ td{
 
 .officialFloorNote{margin-top:8px;color:#ffd433;font-size:12px;line-height:1.45}
 
+
+/* ===== AI CHART OVERLAY: BIN + PEAK TIME PROBABILITIES ===== */
+.aiChartOverlay{
+  position:fixed;right:24px;top:96px;z-index:50;width:330px;max-width:calc(100vw - 32px);
+  border:1px solid rgba(168,85,247,.55);border-radius:18px;background:rgba(2,10,20,.93);
+  box-shadow:0 18px 55px rgba(0,0,0,.45);padding:14px;font-family:ui-monospace,Consolas,monospace;color:#eaf6ff
+}
+.aiOverlayTitle{font-weight:1000;font-size:15px;letter-spacing:1.2px;color:#d8b4fe;margin-bottom:8px}
+.aiOverlayStatus{font-size:21px;font-weight:1000;margin:5px 0 10px}
+.aiOverlayRow{display:grid;grid-template-columns:44px 1fr 48px;gap:8px;align-items:center;margin:6px 0;font-size:13px}
+.aiOverlayBar{height:10px;border-radius:99px;background:rgba(255,255,255,.13);overflow:hidden}
+.aiOverlayBar span{display:block;height:100%;background:linear-gradient(90deg,#22c55e,#a855f7)}
+.aiOverlaySmall{font-size:12px;color:#9bd4ff;line-height:1.45;margin-top:8px}
+.aiOverlayBest{color:#ffd433;font-weight:1000}
+.aiOverlayToggle{position:absolute;right:10px;top:8px;border:0;background:#17324a;color:#9bd4ff;border-radius:8px;padding:2px 7px;cursor:pointer}
+.aiProbMini{margin-top:10px;border-top:1px solid rgba(255,255,255,.12);padding-top:8px}
+@media(max-width:900px){.aiChartOverlay{position:static;width:auto;margin:12px 0}.aiOverlayToggle{display:none}}
+
 </style></head><body>
 <div class="wrap">
   <div class="header"><div><h1>VILK <span class="cyan">Live Signal</span></h1><div class="sub">● UI refresh 30 sec · cron save 1 min · Lucknow Airport (VILK) · D1 archive</div></div><div><button class="btn" id="refreshBtn">↻ Refresh Now</button><div class="updated" id="updated">Updated --</div></div></div>
@@ -2186,7 +2204,7 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
       <div class="tradeSmall">Escape ${d.escape_risk_2}% · Cost ${d.cost_2??'—'} · EV ${d.ev_2??'—'}</div>
       <div class="tradeBig" style="font-size:20px">3-bin: ${d.safe_3_bins?.join(' / ')} <span class="bestStar">${d.safe_3_prob}%</span></div>
       <div class="tradeSmall">Escape ${d.escape_risk_3}% · Cost ${d.cost_3??'—'} · EV ${d.ev_3??'—'}</div>
-      <div class="tradeSmall">Peak done ${d.peak_done_prob}% · late peak ${d.late_peak_prob}% · official floor ${d.official_floor_bin??'—'} · WU soft ${d.wu_soft_floor_bin??'—'}</div>
+      <div class="tradeSmall">Peak done ${d.peak_done_prob}% · late peak ${d.late_peak_prob}% · peak window ${d.peak_time_best_window||'—'} (${d.peak_time_best_prob||'—'}%) · official floor ${d.official_floor_bin??'—'} · WU soft ${d.wu_soft_floor_bin??'—'}</div>
       <div class="officialFloorNote">Hard floor uses METAR/CheckWX only. WU obs peak is soft signal, not final settlement floor.</div><div class="tradeSmall">${(d.reasons||[]).slice(0,6).join('<br>')}</div>
     </div>`;
   }
@@ -2204,6 +2222,64 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
     box.innerHTML=Object.values(j.decisions||{}).map(card).join('');
   }
   window.addEventListener('load',()=>setTimeout(render,700));
+  setInterval(render,60000);
+})();
+</script>
+
+
+<div class="aiChartOverlay" id="aiChartOverlay">
+  <button class="aiOverlayToggle" onclick="this.parentElement.style.display='none'">×</button>
+  <div class="aiOverlayTitle">🎯 Chart AI Overlay</div>
+  <div id="aiOverlayBody"><div class="aiOverlaySmall">Loading AI trade decision...</div></div>
+</div>
+
+
+<script id="ai-chart-overlay-ui">
+(function(){
+  const todayIST=()=>new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});
+  function rows(map,best){
+    return Object.entries(map||{}).sort((a,b)=>Number(a[0])-Number(b[0])).map(([k,v])=>{
+      const star=Number(k)===Number(best)?'⭐':'';
+      return `<div class="aiOverlayRow"><b>${k}${star}</b><div class="aiOverlayBar"><span style="width:${Math.max(2,Number(v)||0)}%"></span></div><span>${v}%</span></div>`;
+    }).join('');
+  }
+  function peakRows(map){
+    return Object.entries(map||{}).sort((a,b)=>Number(b[1])-Number(a[1])).slice(0,3).map(([k,v])=>
+      `<div class="aiOverlayRow" style="grid-template-columns:82px 1fr 48px"><b>${k}</b><div class="aiOverlayBar"><span style="width:${Math.max(2,Number(v)||0)}%"></span></div><span>${v}%</span></div>`
+    ).join('');
+  }
+  async function load(){
+    try{
+      const r=await fetch('/api/ai-trade-decision?date='+todayIST()+'&t='+Date.now(),{cache:'no-store'});
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      return await r.json();
+    }catch(e){return {ok:false,error:String(e.message||e)}}
+  }
+  function renderDecision(d){
+    if(!d)return '<div class="aiOverlaySmall">No today decision.</div>';
+    if(d.error)return `<div class="aiOverlaySmall">${d.error}</div>`;
+    return `
+      <div class="aiOverlayStatus status${String(d.status||'WAIT')}">${d.status} · ${d.action||'WAIT'}</div>
+      <div class="aiOverlaySmall">Best bin: <span class="aiOverlayBest">${d.best_bin}°C (${d.bin_probs?.[d.best_bin]||0}%)</span></div>
+      ${rows(d.bin_probs,d.best_bin)}
+      <div class="aiOverlaySmall">2-bin: <span class="aiOverlayBest">${(d.safe_2_bins||[]).join(' / ')} = ${d.safe_2_prob}%</span> · escape ${d.escape_risk_2}%</div>
+      <div class="aiOverlaySmall">3-bin: <span class="aiOverlayBest">${(d.safe_3_bins||[]).join(' / ')} = ${d.safe_3_prob}%</span> · escape ${d.escape_risk_3}%</div>
+      <div class="aiProbMini">
+        <div class="aiOverlayTitle">⏰ Peak time guess</div>
+        <div class="aiOverlaySmall">Most likely: <span class="aiOverlayBest">${d.peak_time_best_window||'—'} (${d.peak_time_best_prob||'—'}%)</span></div>
+        ${peakRows(d.peak_time_probs)}
+      </div>
+      <div class="aiOverlaySmall">Official floor: ${d.official_floor_bin??'—'} · WU soft: ${d.wu_soft_floor_bin??'—'}</div>
+    `;
+  }
+  async function render(){
+    const body=document.getElementById('aiOverlayBody'); if(!body)return;
+    const j=await load();
+    if(!j.ok){body.innerHTML=`<div class="aiOverlaySmall">${j.error||'AI endpoint failed'}</div>`;return;}
+    const d=j.decisions&&j.decisions[todayIST()];
+    body.innerHTML=renderDecision(d);
+  }
+  window.addEventListener('load',()=>setTimeout(render,800));
   setInterval(render,60000);
 })();
 </script>
