@@ -801,6 +801,22 @@ td{
 .aiProbMini{margin-top:10px;border-top:1px solid rgba(255,255,255,.12);padding-top:8px}
 @media(max-width:900px){.aiChartOverlay{position:static;width:auto;margin:12px 0}.aiOverlayToggle{display:none}}
 
+
+/* ===== UNIFIED AI MODULE CLEAN ===== */
+.unifiedAI{margin:22px 0;padding:24px;border-radius:24px;border:2px solid #22c55e;background:linear-gradient(180deg,#061d13,#071929);font-family:ui-monospace,Consolas,monospace;color:#eaf6ff}
+.unifiedAITitle{font-size:30px;font-weight:1000;letter-spacing:2px;color:#fff;margin-bottom:8px}
+.unifiedAIGrid{display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:14px}
+.unifiedCard{border:1px solid rgba(34,197,94,.35);border-radius:18px;background:rgba(0,0,0,.22);padding:16px}
+.unifiedCard h4{margin:0 0 8px;color:#9bd4ff;font-size:14px;letter-spacing:1.3px}
+.uStatus{font-size:32px;font-weight:1000;margin:8px 0}.uLOCKED{color:#22c55e}.uREADY{color:#84cc16}.uBUILDING{color:#ffd433}.uWAIT{color:#f97316}
+.uBig{font-size:26px;font-weight:1000;color:#fff;margin:8px 0}.uSmall{font-size:13px;color:#bfeaff;line-height:1.5}
+.uRow{display:grid;grid-template-columns:52px 1fr 56px;gap:8px;align-items:center;margin:7px 0;font-size:13px}
+.uBar{height:11px;border-radius:99px;background:rgba(255,255,255,.13);overflow:hidden}.uBar span{display:block;height:100%;background:linear-gradient(90deg,#22c55e,#a855f7)}
+.uBest{color:#ffd433;font-weight:1000}.uOverlay{position:fixed;right:24px;top:92px;z-index:80;width:340px;max-width:calc(100vw - 32px);border:1px solid rgba(34,197,94,.5);border-radius:18px;background:rgba(2,10,20,.95);box-shadow:0 18px 55px rgba(0,0,0,.45);padding:14px;font-family:ui-monospace,Consolas,monospace;color:#eaf6ff}
+.uClose{position:absolute;right:10px;top:8px;border:0;background:#17324a;color:#9bd4ff;border-radius:8px;padding:2px 7px;cursor:pointer}
+#cleanTrendSvg{width:100%;height:240px;background:#fff;border-radius:14px;margin-top:12px;display:block}
+@media(max-width:1100px){.unifiedAIGrid{grid-template-columns:1fr}.uOverlay{position:static;width:auto;margin:12px 0}.uClose{display:none}}
+
 </style></head><body>
 <div class="wrap">
   <div class="header"><div><h1>VILK <span class="cyan">Live Signal</span></h1><div class="sub">● UI refresh 30 sec · cron save 1 min · Lucknow Airport (VILK) · D1 archive</div></div><div><button class="btn" id="refreshBtn">↻ Refresh Now</button><div class="updated" id="updated">Updated --</div></div></div>
@@ -942,6 +958,18 @@ td{
 
   
 
+
+
+<section class="unifiedAI" id="unifiedAI">
+  <div class="unifiedAITitle">🧠 UNIFIED AI TRADE ENGINE</div>
+  <div class="uSmall" id="uLast">Loading /api/ai...</div>
+  <div class="unifiedAIGrid" id="unifiedAIGrid"></div>
+</section>
+<div class="uOverlay" id="uOverlay">
+  <button class="uClose" onclick="this.parentElement.style.display='none'">×</button>
+  <h4>🎯 Chart AI Overlay</h4>
+  <div id="uOverlayBody" class="uSmall">Loading...</div>
+</div>
 
 <section class="tradeEnginePanel" id="tradeEnginePanel">
   <div class="tradeTitle">🧠 AI TRADE DECISION ENGINE</div>
@@ -2122,88 +2150,13 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
 </script>
 
 
-<script id="ai-bin-signal-ui">
-(function(){
-  const todayIST=()=>new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});
-  async function load(){
-    try{
-      const r=await fetch('/api/ai-bin-signal?date='+todayIST()+'&t='+Date.now(),{cache:'no-store'});
-      if(!r.ok) throw new Error('HTTP '+r.status);
-      return await r.json();
-    }catch(e){return {ok:false,error:String(e.message||e)}}
-  }
-  function card(s){
-    if(!s) return '';
-    const buy2=s.escape_risk_2<=20?'aiBuy':'aiWarn';
-    return `<div class="aiBinCard">
-      <h4>${s.label} · ${s.stage}</h4>
-      <div class="aiRisk">Base ${s.base_c??'—'}°C / ${s.base_f??'—'}°F</div>
-      <div class="aiBins">2-bin: ${s.best_2_bins.join(' / ')}</div>
-      <div class="aiRisk ${buy2}">2-bin conf ${s.confidence_2}% · escape ${s.escape_risk_2}%</div>
-      <div class="aiBins" style="font-size:22px">3-bin: ${s.safe_3_bins.join(' / ')}</div>
-      <div class="aiRisk aiBuy">3-bin conf ${s.confidence_3}% · escape ${s.escape_risk_3}%</div>
-      <div class="aiRisk">${s.lower_signal?'Lower hedge active':'Upper hedge active'}<br>${(s.reasons||[]).slice(0,3).join('<br>')}</div>
-    </div>`;
-  }
-  async function render(){
-    const box=document.getElementById('aiBinGrid'); if(!box) return;
-    const j=await load();
-    if(!j.ok){box.innerHTML=`<div class="aiBinCard"><h4>Error</h4><div class="aiRisk aiBad">${j.error||'failed'}</div></div>`;return;}
-    box.innerHTML=Object.values(j.signals||{}).map(card).join('');
-  }
-  window.addEventListener('load',()=>setTimeout(render,900));
-  setInterval(render,60000);
-})();
-</script>
 
 
 
 
 
-<script id="ai-trade-decision-ui">
-(function(){
-  const todayIST=()=>new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});
-  function probRows(map,best){
-    const entries=Object.entries(map||{}).sort((a,b)=>Number(a[0])-Number(b[0]));
-    return entries.map(([bin,p])=>{
-      const star=Number(bin)===Number(best)?' ⭐':'';
-      return `<div class="binProbRow"><b>${bin}${star}</b><div class="binBar"><span style="width:${Math.max(2,Number(p))}%"></span></div><span>${p}%</span></div>`;
-    }).join('');
-  }
-  function statusClass(s){return 'status'+String(s||'WAIT').replace(/[^A-Z]/g,'')}
-  function card(d){
-    if(!d || d.error) return `<div class="tradeCard"><h4>${d?.label||'DAY'}</h4><div class="tradeSmall">${d?.error||'No signal'}</div></div>`;
-    return `<div class="tradeCard">
-      <h4>${d.label} · ${d.date}</h4>
-      <div class="tradeStatus ${statusClass(d.status)}">${d.status}</div>
-      <div class="tradeSmall">Action: <b>${d.action}</b> · Lock score ${d.lock_score}/100</div>
-      <div class="tradeBig">Best: ${d.best_bin}°C <span class="bestStar">${d.bin_probs?.[d.best_bin]||0}%</span></div>
-      ${probRows(d.bin_probs,d.best_bin)}
-      <div class="tradeBig" style="font-size:20px">2-bin: ${d.safe_2_bins?.join(' / ')} <span class="bestStar">${d.safe_2_prob}%</span></div>
-      <div class="tradeSmall">Escape ${d.escape_risk_2}% · Cost ${d.cost_2??'—'} · EV ${d.ev_2??'—'}</div>
-      <div class="tradeBig" style="font-size:20px">3-bin: ${d.safe_3_bins?.join(' / ')} <span class="bestStar">${d.safe_3_prob}%</span></div>
-      <div class="tradeSmall">Escape ${d.escape_risk_3}% · Cost ${d.cost_3??'—'} · EV ${d.ev_3??'—'}</div>
-      <div class="tradeSmall">Peak done ${d.peak_done_prob}% · late peak ${d.late_peak_prob}% · peak window ${d.peak_time_best_window||'—'} (${d.peak_time_best_prob||'—'}%) · official floor ${d.official_floor_bin??'—'} · WU soft ${d.wu_soft_floor_bin??'—'}</div>
-      <div class="officialFloorNote">Hard floor uses METAR/CheckWX only. WU obs peak is soft signal, not final settlement floor.</div><div class="tradeSmall">${(d.reasons||[]).slice(0,6).join('<br>')}</div>
-    </div>`;
-  }
-  async function load(){
-    try{
-      const r=await fetch('/api/ai-trade-decision?date='+todayIST()+'&t='+Date.now(),{cache:'no-store'});
-      if(!r.ok)throw new Error('HTTP '+r.status);
-      return await r.json();
-    }catch(e){return {ok:false,error:String(e.message||e)}}
-  }
-  async function render(){
-    const box=document.getElementById('tradeGrid'); if(!box)return;
-    const j=await load();
-    if(!j.ok){box.innerHTML=`<div class="tradeCard"><h4>Error</h4><div class="tradeSmall">${j.error||'failed'}</div></div>`;return;}
-    box.innerHTML=Object.values(j.decisions||{}).map(card).join('');
-  }
-  window.addEventListener('load',()=>setTimeout(render,700));
-  setInterval(render,60000);
-})();
-</script>
+
+
 
 
 <div class="aiChartOverlay" id="aiChartOverlay">
@@ -2216,141 +2169,103 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
 
 
 
-<script id="clean-trend-chart-ai-overlay-final">
+
+
+
+<script id="unified-ai-ui">
 (function(){
   const N=v=>{const x=Number(v);return Number.isFinite(x)?x:null};
   const C=v=>{const x=N(v);return x==null?'—':x.toFixed(3).replace(/\.?0+$/,'')+'°C'};
   const F=v=>{const x=N(v);return x==null?'—':x.toFixed(1).replace(/\.0$/,'')+'°F'};
-  const CF=(c,f)=>`${C(c)} / ${F(f)}`;
   const todayIST=()=>new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});
-
-  async function fetchJson(url){
-    try{const r=await fetch(url,{cache:'no-store'});if(!r.ok)throw new Error('HTTP '+r.status);return await r.json();}
-    catch(e){console.warn('fetch failed',url,e);return null;}
+  async function fetchJson(url){try{const r=await fetch(url,{cache:'no-store'});if(!r.ok)throw new Error('HTTP '+r.status);return await r.json();}catch(e){return {ok:false,error:String(e.message||e)}}}
+  function rows(map,best){
+    return Object.entries(map||{}).sort((a,b)=>Number(a[0])-Number(b[0])).map(([k,v])=>
+      `<div class="uRow"><b>${k}${Number(k)===Number(best)?'⭐':''}</b><div class="uBar"><span style="width:${Math.max(2,Number(v)||0)}%"></span></div><span>${v}%</span></div>`).join('');
   }
-
-  function extractTrendRows(history, highs){
+  function peakRows(map){
+    return Object.entries(map||{}).sort((a,b)=>Number(b[1])-Number(a[1])).slice(0,4).map(([k,v])=>
+      `<div class="uRow" style="grid-template-columns:82px 1fr 52px"><b>${k}</b><div class="uBar"><span style="width:${Math.max(2,Number(v)||0)}%"></span></div><span>${v}%</span></div>`).join('');
+  }
+  function card(d){
+    if(!d||d.error)return `<div class="unifiedCard"><h4>${d?.label||'DAY'}</h4><div class="uSmall">${d?.error||'No data'}</div></div>`;
+    return `<div class="unifiedCard">
+      <h4>${d.label} · ${d.date||''}</h4>
+      <div class="uStatus u${d.status}">${d.status}</div>
+      <div class="uSmall">Action <b>${d.action}</b> · lock ${d.lock_score}/100</div>
+      <div class="uBig">Best ${d.best_bin}°C <span class="uBest">${d.best_bin_prob}%</span></div>
+      ${rows(d.probabilities,d.best_bin)}
+      <div class="uBig" style="font-size:20px">2-bin ${d.safe_2_bins?.join(' / ')} <span class="uBest">${d.safe_2_prob}%</span></div>
+      <div class="uSmall">Escape ${d.escape_2}%</div>
+      <div class="uBig" style="font-size:20px">3-bin ${d.safe_3_bins?.join(' / ')} <span class="uBest">${d.safe_3_prob}%</span></div>
+      <div class="uSmall">Escape ${d.escape_3}%</div>
+      <div class="uSmall">Peak: <span class="uBest">${d.peak_time_best_window||'—'} (${d.peak_time_best_prob||'—'}%)</span></div>
+      ${peakRows(d.peak_time_probs)}
+      <div class="uSmall">Official floor ${d.official_floor_bin??'—'} · WU soft ${d.wu_soft_floor_bin??'—'}</div>
+      <div class="uSmall">${(d.reasons||[]).join('<br>')}</div>
+    </div>`;
+  }
+  function overlay(d,j){
+    const el=document.getElementById('uOverlayBody'); if(!el)return;
+    if(!d||d.error){el.innerHTML=d?.error||'No data';return;}
+    el.innerHTML=`Last AI update: <span class="uBest">${j.updated_at||'—'}</span><br>
+    <div class="uStatus u${d.status}" style="font-size:22px">${d.status} · ${d.action}</div>
+    Best: <span class="uBest">${d.best_bin}°C (${d.best_bin_prob}%)</span>
+    ${rows(d.probabilities,d.best_bin)}
+    <br>2-bin: <span class="uBest">${d.safe_2_bins.join(' / ')} = ${d.safe_2_prob}%</span> · escape ${d.escape_2}%
+    <br>3-bin: <span class="uBest">${d.safe_3_bins.join(' / ')} = ${d.safe_3_prob}%</span> · escape ${d.escape_3}%
+    <br><br>Peak time: <span class="uBest">${d.peak_time_best_window||'—'} (${d.peak_time_best_prob||'—'}%)</span>
+    ${peakRows(d.peak_time_probs)}
+    <br>Official floor ${d.official_floor_bin??'—'} · WU soft ${d.wu_soft_floor_bin??'—'}`;
+  }
+  function extractTrend(history, highs){
     const today=todayIST();
     const rows=(history&&(history.forecast_snapshot_rows||history.snapshots||history.forecastSnapshots))||[];
     const raw=[];
     for(const r of rows){
       const target=r.target_date||r.date||r.forecast_date;
-      if(target && target!==today) continue;
-      const c=N(r.high_c??r.today_c??r.max_c);
-      const f=N(r.high_f??r.today_f??(c!=null?c*9/5+32:null));
-      if(c==null) continue;
-      const time=String(r.fetch_time_ist||r.fetched_at||r.created_at||r.forecast_issue_time_ist||r.issue_time||'');
-      raw.push({time,c:+c.toFixed(3),f:+(f??(c*9/5+32)).toFixed(1)});
+      if(target&&target!==today)continue;
+      const c=N(r.high_c??r.today_c??r.max_c), f=N(r.high_f??r.today_f??(c!=null?c*9/5+32:null));
+      if(c==null)continue;
+      raw.push({time:String(r.fetch_time_ist||r.fetched_at||r.created_at||r.forecast_issue_time_ist||''),c,f});
     }
     if(!raw.length){
-      const d=highs&&highs.days&&highs.days[today];
-      if(d&&N(d.high_c)!=null) raw.push({time:highs.updated_at||d.issue_time||'',c:N(d.high_c),f:N(d.high_f??(N(d.high_c)*9/5+32))});
+      const d=highs&&highs.days&&highs.days[today]; if(d&&N(d.high_c)!=null)raw.push({time:highs.updated_at||'',c:N(d.high_c),f:N(d.high_f??(N(d.high_c)*9/5+32))});
     }
-    raw.sort((a,b)=>String(a.time).localeCompare(String(b.time)));
+    raw.sort((a,b)=>a.time.localeCompare(b.time));
     const out=[];
-    for(const p of raw){
-      const last=out[out.length-1];
-      if(!last){out.push(p);continue;}
-      if(last.time===p.time){out[out.length-1]=p;continue;}
-      // keep only actual changes; skip same-value spam that creates orange block
-      if(Math.abs(last.c-p.c)<0.001) continue;
-      out.push(p);
-    }
-    // if everything is flat, show first and latest only as a clean straight line
-    if(out.length===1 && raw.length>1){
-      const first=raw[0], last=raw[raw.length-1];
-      if(first.time!==last.time) return [first,last];
-    }
+    for(const p of raw){const last=out[out.length-1]; if(!last){out.push(p);continue;} if(last.time===p.time){out[out.length-1]=p;continue;} if(Math.abs(last.c-p.c)<0.001)continue; out.push(p);}
+    if(out.length===1&&raw.length>1&&raw[0].time!==raw.at(-1).time)return [raw[0],raw.at(-1)];
     return out;
   }
-
-  function findTrendPanel(){
-    const panels=[...document.querySelectorAll('section,div')].filter(el=>{
-      const txt=(el.textContent||'').toLowerCase();
-      const r=el.getBoundingClientRect();
-      return txt.includes('current day high forecast trend') && r.width>400 && r.height>250;
-    });
-    return panels.sort((a,b)=>a.getBoundingClientRect().height-b.getBoundingClientRect().height)[0]||null;
-  }
-
   function drawTrend(points){
-    const panel=findTrendPanel(); if(!panel)return;
-    // Remove/replace old broken white chart/svg/canvas inside trend panel
+    const panels=[...document.querySelectorAll('section,div')].filter(el=>{const t=(el.textContent||'').toLowerCase();const r=el.getBoundingClientRect();return t.includes('current day high forecast trend')&&r.width>400&&r.height>250;});
+    const panel=panels.sort((a,b)=>a.getBoundingClientRect().height-b.getBoundingClientRect().height)[0]; if(!panel)return;
     let host=panel.querySelector('#cleanTrendSvg');
-    const old=[...panel.querySelectorAll('#directHistoryTrendSvg,#forceTrendSvg,canvas,svg')].find(el=>el.id!=='cleanTrendSvg');
     if(!host){
-      host=document.createElementNS('http://www.w3.org/2000/svg','svg');
-      host.setAttribute('id','cleanTrendSvg');
-      if(old&&old.parentNode) old.parentNode.replaceChild(host,old);
-      else {
-        const box=[...panel.querySelectorAll('div')].find(el=>{
-          const r=el.getBoundingClientRect();
-          return r.width>400&&r.height>140&&getComputedStyle(el).backgroundColor.includes('255');
-        });
-        if(box&&box.parentNode) box.parentNode.replaceChild(host,box); else panel.appendChild(host);
-      }
-    } else if(old && old!==host) old.remove();
-
-    const w=900,h=240,pad=38;
-    host.setAttribute('viewBox',`0 0 ${w} ${h}`);
-    if(!points.length){
-      host.innerHTML='<rect width="900" height="240" fill="white" rx="14"/><text x="25" y="45" fill="#111" font-size="20" font-family="monospace">No same-day forecast trend yet</text>';
-      return;
+      const old=[...panel.querySelectorAll('canvas,svg,div')].find(el=>{const r=el.getBoundingClientRect();return r.width>400&&r.height>140&&(el.tagName.toLowerCase()==='canvas'||getComputedStyle(el).backgroundColor.includes('255'));});
+      host=document.createElementNS('http://www.w3.org/2000/svg','svg');host.setAttribute('id','cleanTrendSvg');
+      if(old&&old.parentNode)old.parentNode.replaceChild(host,old);else panel.appendChild(host);
     }
-    const min=Math.min(...points.map(p=>p.c))-0.25, max=Math.max(...points.map(p=>p.c))+0.25;
-    const x=i=>points.length===1?w/2:pad+(w-pad*2)*(i/(points.length-1));
-    const y=v=>h-pad-(h-pad*2)*((v-min)/(max-min||1));
-    const path=points.map((p,i)=>`${i?'L':'M'}${x(i)},${y(p.c)}`).join(' ');
-    const latest=points[points.length-1], first=points[0];
-    host.innerHTML=`<rect width="${w}" height="${h}" fill="white" rx="14"/>
-      <text x="22" y="30" fill="#111" font-size="17" font-family="monospace">Clean WU trend: ${CF(first.c,first.f)} → ${CF(latest.c,latest.f)}</text>
-      <path d="${path}" fill="none" stroke="#f97316" stroke-width="4"/>
-      ${points.map((p,i)=>`<circle cx="${x(i)}" cy="${y(p.c)}" r="5" fill="#f97316"><title>${p.time} ${CF(p.c,p.f)}</title></circle>`).join('')}
-      <text x="${w-260}" y="${Math.max(50,y(latest.c)-10)}" fill="#111" font-size="15" font-family="monospace">latest ${CF(latest.c,latest.f)}</text>
-      <text x="22" y="${h-12}" fill="#555" font-size="13" font-family="monospace">Only unique value changes shown. Same-value spam compressed.</text>`;
+    const w=900,h=240,pad=38;host.setAttribute('viewBox',`0 0 ${w} ${h}`);
+    if(!points.length){host.innerHTML='<rect width="900" height="240" fill="white" rx="14"/><text x="25" y="45" fill="#111" font-size="20" font-family="monospace">No trend yet</text>';return;}
+    const min=Math.min(...points.map(p=>p.c))-0.25,max=Math.max(...points.map(p=>p.c))+0.25;
+    const x=i=>points.length===1?w/2:pad+(w-pad*2)*(i/(points.length-1)); const y=v=>h-pad-(h-pad*2)*((v-min)/(max-min||1));
+    const path=points.map((p,i)=>`${i?'L':'M'}${x(i)},${y(p.c)}`).join(' '); const first=points[0], latest=points.at(-1);
+    host.innerHTML=`<rect width="${w}" height="${h}" fill="white" rx="14"/><text x="22" y="30" fill="#111" font-size="17" font-family="monospace">Clean WU trend: ${C(first.c)} / ${F(first.f)} → ${C(latest.c)} / ${F(latest.f)}</text><path d="${path}" fill="none" stroke="#f97316" stroke-width="4"/>${points.map((p,i)=>`<circle cx="${x(i)}" cy="${y(p.c)}" r="5" fill="#f97316"><title>${p.time} ${C(p.c)}</title></circle>`).join('')}<text x="22" y="${h-12}" fill="#555" font-size="13" font-family="monospace">Unique changes only. Same-value spam compressed.</text>`;
   }
-
-  function probRows(map,best){
-    return Object.entries(map||{}).sort((a,b)=>Number(a[0])-Number(b[0])).map(([k,v])=>{
-      const star=Number(k)===Number(best)?'⭐':'';
-      return `<div class="aiOverlayRow"><b>${k}${star}</b><div class="aiOverlayBar"><span style="width:${Math.max(2,Number(v)||0)}%"></span></div><span>${v}%</span></div>`;
-    }).join('');
-  }
-  function peakRows(map){
-    return Object.entries(map||{}).sort((a,b)=>Number(b[1])-Number(a[1])).slice(0,3).map(([k,v])=>
-      `<div class="aiOverlayRow" style="grid-template-columns:82px 1fr 48px"><b>${k}</b><div class="aiOverlayBar"><span style="width:${Math.max(2,Number(v)||0)}%"></span></div><span>${v}%</span></div>`
-    ).join('');
-  }
-  function renderOverlay(j){
-    const body=document.getElementById('aiOverlayBody'); if(!body)return;
-    if(!j||!j.ok){body.innerHTML=`<div class="aiOverlaySmall">${j?.error||'AI endpoint failed'}</div>`;return;}
-    const d=j.decisions&&j.decisions[todayIST()];
-    if(!d){body.innerHTML='<div class="aiOverlaySmall">No today decision.</div>';return;}
-    body.innerHTML=`
-      <div class="aiOverlaySmall">Last AI update: <span class="aiOverlayBest">${j.updated_at||'—'}</span></div>
-      <div class="aiOverlayStatus status${String(d.status||'WAIT')}">${d.status} · ${d.action||'WAIT'}</div>
-      <div class="aiOverlaySmall">Best bin: <span class="aiOverlayBest">${d.best_bin}°C (${d.bin_probs?.[d.best_bin]||0}%)</span></div>
-      ${probRows(d.bin_probs,d.best_bin)}
-      <div class="aiOverlaySmall">2-bin: <span class="aiOverlayBest">${(d.safe_2_bins||[]).join(' / ')} = ${d.safe_2_prob}%</span> · escape ${d.escape_risk_2}%</div>
-      <div class="aiOverlaySmall">3-bin: <span class="aiOverlayBest">${(d.safe_3_bins||[]).join(' / ')} = ${d.safe_3_prob}%</span> · escape ${d.escape_risk_3}%</div>
-      <div class="aiProbMini"><div class="aiOverlayTitle">⏰ Peak time guess</div>
-      <div class="aiOverlaySmall">Most likely: <span class="aiOverlayBest">${d.peak_time_best_window||'—'} (${d.peak_time_best_prob||'—'}%)</span></div>
-      ${peakRows(d.peak_time_probs)}</div>
-      <div class="aiOverlaySmall">Official floor: ${d.official_floor_bin??'—'} · WU soft: ${d.wu_soft_floor_bin??'—'}</div>`;
-  }
-
-  async function run(){
+  async function render(){
     const date=todayIST();
-    const [history, highs, ai]=await Promise.all([
-      fetchJson('/api/history?date='+date+'&t='+Date.now()),
-      fetchJson('/api/polymarket-highs?date='+date+'&t='+Date.now()),
-      fetchJson('/api/ai-trade-decision?date='+date+'&t='+Date.now())
-    ]);
-    drawTrend(extractTrendRows(history,highs));
-    renderOverlay(ai);
+    const [ai,history,highs]=await Promise.all([fetchJson('/api/ai?date='+date+'&t='+Date.now()),fetchJson('/api/history?date='+date+'&t='+Date.now()),fetchJson('/api/polymarket-highs?date='+date+'&t='+Date.now())]);
+    const grid=document.getElementById('unifiedAIGrid'), last=document.getElementById('uLast');
+    if(!ai.ok){if(grid)grid.innerHTML=`<div class="unifiedCard"><h4>Error</h4><div class="uSmall">${ai.error}</div></div>`;return;}
+    if(last)last.textContent='Last AI update: '+(ai.updated_at||'—');
+    if(grid)grid.innerHTML=Object.values(ai.days||{}).map(card).join('');
+    overlay(ai.today,ai);
+    drawTrend(extractTrend(history,highs));
   }
-  window.addEventListener('load',()=>setTimeout(run,900));
-  setInterval(run,60000);
+  window.addEventListener('load',()=>setTimeout(render,700));
+  setInterval(render,60000);
 })();
 </script>
 
