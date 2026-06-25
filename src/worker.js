@@ -760,6 +760,7 @@ function aiSignalForDay(item, label, horizonDays){
   const escapeRisk2=+(100*(1-conf2)).toFixed(1);
   const escapeRisk3=+(100*(1-conf3)).toFixed(1);
 
+  const peakTime=peakTimeProbAI(item);
   const reasons=[];
   reasons.push(`Base = WU hourly max ${hourly!=null?hourly+'°C':'—'}; daily ${daily!=null?daily+'°C':'—'}`);
   if(lowerSignal) reasons.push('Lower-side hedge: rain/cloud/mist/falling or daily > hourly suppression signal');
@@ -898,6 +899,32 @@ function wuSoftFloorFromItemAI(item){
   return vals.length?Math.round(Math.max(...vals)):null;
 }
 
+
+function peakTimeProbAI(item){
+  item=item||{};
+  const phrase=safeStrAI(item?.phrase ?? item?.condition).toLowerCase();
+  const rain=safeNumAI(item?.rain_pct)||0;
+  const cloud=/rain|shower|drizzle|storm|thunder|cloud|mist|haze|br|hz/i.test(phrase);
+  const current=safeNumAI(item?.current_c), obsPeak=safeNumAI(item?.today_main_c ?? item?.obs_peak_c);
+  const holding=current!=null&&obsPeak!=null&&Math.abs(current-obsPeak)<=0.4;
+  let scores={
+    "12-1 PM": cloud?0.9:0.45,
+    "1-2 PM": cloud?1.0:0.8,
+    "2-3 PM": holding?1.2:1.05,
+    "3-4 PM": (!cloud?1.15:0.75),
+    "4-5 PM": (!cloud&&rain<15?0.85:0.45),
+    "5 PM+": (!cloud&&rain<10?0.35:0.2)
+  };
+  if(rain>=30){ scores["12-1 PM"]+=0.45; scores["1-2 PM"]+=0.35; scores["3-4 PM"]-=0.25; scores["4-5 PM"]-=0.25; }
+  const max=Math.max(...Object.values(scores));
+  let sum=0, ex={};
+  for(const k of Object.keys(scores)){ ex[k]=Math.exp(scores[k]-max); sum+=ex[k]; }
+  const out={};
+  for(const k of Object.keys(ex)) out[k]=+(100*ex[k]/sum).toFixed(1);
+  const best=Object.entries(out).sort((a,b)=>b[1]-a[1])[0];
+  return {probs:out,best_window:best?best[0]:null,best_prob:best?best[1]:null};
+}
+
 function aiDecisionForDay(item,label,horizonDays,prices){
   item=item||{};
   const hourly=safeNumAI(item?.hourly_high_c ?? item?.hourly_max_c ?? item?.hourlyHighC);
@@ -1005,6 +1032,9 @@ function aiDecisionForDay(item,label,horizonDays,prices){
     live_floor_bin:liveFloor,
     peak_done_prob:Math.round(peakRisk.peak_done_prob),
     late_peak_prob:Math.round(peakRisk.late_peak_prob),
+    peak_time_probs:peakTime.probs,
+    peak_time_best_window:peakTime.best_window,
+    peak_time_best_prob:peakTime.best_prob,
     bin_probs:probs,
     best_bin:bestBin,
     top_3_bins:top3,

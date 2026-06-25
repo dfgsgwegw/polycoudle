@@ -789,6 +789,18 @@ td{
 .aiProbMini{margin-top:10px;border-top:1px solid rgba(255,255,255,.12);padding-top:8px}
 @media(max-width:900px){.aiChartOverlay{position:static;width:auto;margin:12px 0}.aiOverlayToggle{display:none}}
 
+
+/* ===== CLEAN TREND CHART + AI OVERLAY FINAL ===== */
+#cleanTrendSvg{width:100%;height:240px;background:#fff;border-radius:14px;margin-top:12px;display:block}
+.aiChartOverlay{position:fixed;right:24px;top:92px;z-index:60;width:340px;max-width:calc(100vw - 32px);border:1px solid rgba(168,85,247,.55);border-radius:18px;background:rgba(2,10,20,.95);box-shadow:0 18px 55px rgba(0,0,0,.45);padding:14px;font-family:ui-monospace,Consolas,monospace;color:#eaf6ff}
+.aiOverlayTitle{font-weight:1000;font-size:15px;letter-spacing:1.2px;color:#d8b4fe;margin-bottom:8px}
+.aiOverlayStatus{font-size:21px;font-weight:1000;margin:5px 0 10px}
+.aiOverlayRow{display:grid;grid-template-columns:48px 1fr 52px;gap:8px;align-items:center;margin:6px 0;font-size:13px}
+.aiOverlayBar{height:10px;border-radius:99px;background:rgba(255,255,255,.13);overflow:hidden}.aiOverlayBar span{display:block;height:100%;background:linear-gradient(90deg,#22c55e,#a855f7)}
+.aiOverlaySmall{font-size:12px;color:#9bd4ff;line-height:1.45;margin-top:8px}.aiOverlayBest{color:#ffd433;font-weight:1000}.aiOverlayToggle{position:absolute;right:10px;top:8px;border:0;background:#17324a;color:#9bd4ff;border-radius:8px;padding:2px 7px;cursor:pointer}
+.aiProbMini{margin-top:10px;border-top:1px solid rgba(255,255,255,.12);padding-top:8px}
+@media(max-width:900px){.aiChartOverlay{position:static;width:auto;margin:12px 0}.aiOverlayToggle{display:none}}
+
 </style></head><body>
 <div class="wrap">
   <div class="header"><div><h1>VILK <span class="cyan">Live Signal</span></h1><div class="sub">● UI refresh 30 sec · cron save 1 min · Lucknow Airport (VILK) · D1 archive</div></div><div><button class="btn" id="refreshBtn">↻ Refresh Now</button><div class="updated" id="updated">Updated --</div></div></div>
@@ -2145,40 +2157,7 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
 </script>
 
 
-<script id="trend-duplicate-sort-fix">
-(function(){
-  function N(v){const x=Number(v);return Number.isFinite(x)?x:null}
-  function cleanTrendPoints(points){
-    const arr=(points||[]).filter(p=>p&&N(p.c)!=null).map(p=>({
-      time:String(p.time||p.fetch_time_ist||p.fetched_at||p.created_at||''),
-      c:N(p.c),
-      f:N(p.f ?? (N(p.c)*9/5+32))
-    }));
-    arr.sort((a,b)=>a.time.localeCompare(b.time));
-    const out=[];
-    for(const p of arr){
-      const last=out[out.length-1];
-      if(!last){out.push(p);continue;}
-      if(last.time===p.time){out[out.length-1]=p;continue;}
-      if(Math.abs(last.c-p.c)<0.001) continue;
-      out.push(p);
-    }
-    return out;
-  }
-  window.cleanTrendPoints=cleanTrendPoints;
-  function simplifyExistingSvg(){
-    const svg=document.querySelector('#directHistoryTrendSvg,#forceTrendSvg');
-    if(!svg)return;
-    const circles=[...svg.querySelectorAll('circle')];
-    if(circles.length>100){
-      const step=Math.ceil(circles.length/80);
-      circles.forEach((c,i)=>{ if(i%step!==0) c.style.display='none'; });
-    }
-  }
-  window.addEventListener('load',()=>setTimeout(simplifyExistingSvg,2500));
-  setInterval(simplifyExistingSvg,5000);
-})();
-</script>
+
 
 
 <script id="ai-trade-decision-ui">
@@ -2234,10 +2213,104 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
 </div>
 
 
-<script id="ai-chart-overlay-ui">
+
+
+
+<script id="clean-trend-chart-ai-overlay-final">
 (function(){
+  const N=v=>{const x=Number(v);return Number.isFinite(x)?x:null};
+  const C=v=>{const x=N(v);return x==null?'—':x.toFixed(3).replace(/\.?0+$/,'')+'°C'};
+  const F=v=>{const x=N(v);return x==null?'—':x.toFixed(1).replace(/\.0$/,'')+'°F'};
+  const CF=(c,f)=>`${C(c)} / ${F(f)}`;
   const todayIST=()=>new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});
-  function rows(map,best){
+
+  async function fetchJson(url){
+    try{const r=await fetch(url,{cache:'no-store'});if(!r.ok)throw new Error('HTTP '+r.status);return await r.json();}
+    catch(e){console.warn('fetch failed',url,e);return null;}
+  }
+
+  function extractTrendRows(history, highs){
+    const today=todayIST();
+    const rows=(history&&(history.forecast_snapshot_rows||history.snapshots||history.forecastSnapshots))||[];
+    const raw=[];
+    for(const r of rows){
+      const target=r.target_date||r.date||r.forecast_date;
+      if(target && target!==today) continue;
+      const c=N(r.high_c??r.today_c??r.max_c);
+      const f=N(r.high_f??r.today_f??(c!=null?c*9/5+32:null));
+      if(c==null) continue;
+      const time=String(r.fetch_time_ist||r.fetched_at||r.created_at||r.forecast_issue_time_ist||r.issue_time||'');
+      raw.push({time,c:+c.toFixed(3),f:+(f??(c*9/5+32)).toFixed(1)});
+    }
+    if(!raw.length){
+      const d=highs&&highs.days&&highs.days[today];
+      if(d&&N(d.high_c)!=null) raw.push({time:highs.updated_at||d.issue_time||'',c:N(d.high_c),f:N(d.high_f??(N(d.high_c)*9/5+32))});
+    }
+    raw.sort((a,b)=>String(a.time).localeCompare(String(b.time)));
+    const out=[];
+    for(const p of raw){
+      const last=out[out.length-1];
+      if(!last){out.push(p);continue;}
+      if(last.time===p.time){out[out.length-1]=p;continue;}
+      // keep only actual changes; skip same-value spam that creates orange block
+      if(Math.abs(last.c-p.c)<0.001) continue;
+      out.push(p);
+    }
+    // if everything is flat, show first and latest only as a clean straight line
+    if(out.length===1 && raw.length>1){
+      const first=raw[0], last=raw[raw.length-1];
+      if(first.time!==last.time) return [first,last];
+    }
+    return out;
+  }
+
+  function findTrendPanel(){
+    const panels=[...document.querySelectorAll('section,div')].filter(el=>{
+      const txt=(el.textContent||'').toLowerCase();
+      const r=el.getBoundingClientRect();
+      return txt.includes('current day high forecast trend') && r.width>400 && r.height>250;
+    });
+    return panels.sort((a,b)=>a.getBoundingClientRect().height-b.getBoundingClientRect().height)[0]||null;
+  }
+
+  function drawTrend(points){
+    const panel=findTrendPanel(); if(!panel)return;
+    // Remove/replace old broken white chart/svg/canvas inside trend panel
+    let host=panel.querySelector('#cleanTrendSvg');
+    const old=[...panel.querySelectorAll('#directHistoryTrendSvg,#forceTrendSvg,canvas,svg')].find(el=>el.id!=='cleanTrendSvg');
+    if(!host){
+      host=document.createElementNS('http://www.w3.org/2000/svg','svg');
+      host.setAttribute('id','cleanTrendSvg');
+      if(old&&old.parentNode) old.parentNode.replaceChild(host,old);
+      else {
+        const box=[...panel.querySelectorAll('div')].find(el=>{
+          const r=el.getBoundingClientRect();
+          return r.width>400&&r.height>140&&getComputedStyle(el).backgroundColor.includes('255');
+        });
+        if(box&&box.parentNode) box.parentNode.replaceChild(host,box); else panel.appendChild(host);
+      }
+    } else if(old && old!==host) old.remove();
+
+    const w=900,h=240,pad=38;
+    host.setAttribute('viewBox',`0 0 ${w} ${h}`);
+    if(!points.length){
+      host.innerHTML='<rect width="900" height="240" fill="white" rx="14"/><text x="25" y="45" fill="#111" font-size="20" font-family="monospace">No same-day forecast trend yet</text>';
+      return;
+    }
+    const min=Math.min(...points.map(p=>p.c))-0.25, max=Math.max(...points.map(p=>p.c))+0.25;
+    const x=i=>points.length===1?w/2:pad+(w-pad*2)*(i/(points.length-1));
+    const y=v=>h-pad-(h-pad*2)*((v-min)/(max-min||1));
+    const path=points.map((p,i)=>`${i?'L':'M'}${x(i)},${y(p.c)}`).join(' ');
+    const latest=points[points.length-1], first=points[0];
+    host.innerHTML=`<rect width="${w}" height="${h}" fill="white" rx="14"/>
+      <text x="22" y="30" fill="#111" font-size="17" font-family="monospace">Clean WU trend: ${CF(first.c,first.f)} → ${CF(latest.c,latest.f)}</text>
+      <path d="${path}" fill="none" stroke="#f97316" stroke-width="4"/>
+      ${points.map((p,i)=>`<circle cx="${x(i)}" cy="${y(p.c)}" r="5" fill="#f97316"><title>${p.time} ${CF(p.c,p.f)}</title></circle>`).join('')}
+      <text x="${w-260}" y="${Math.max(50,y(latest.c)-10)}" fill="#111" font-size="15" font-family="monospace">latest ${CF(latest.c,latest.f)}</text>
+      <text x="22" y="${h-12}" fill="#555" font-size="13" font-family="monospace">Only unique value changes shown. Same-value spam compressed.</text>`;
+  }
+
+  function probRows(map,best){
     return Object.entries(map||{}).sort((a,b)=>Number(a[0])-Number(b[0])).map(([k,v])=>{
       const star=Number(k)===Number(best)?'⭐':'';
       return `<div class="aiOverlayRow"><b>${k}${star}</b><div class="aiOverlayBar"><span style="width:${Math.max(2,Number(v)||0)}%"></span></div><span>${v}%</span></div>`;
@@ -2248,39 +2321,36 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
       `<div class="aiOverlayRow" style="grid-template-columns:82px 1fr 48px"><b>${k}</b><div class="aiOverlayBar"><span style="width:${Math.max(2,Number(v)||0)}%"></span></div><span>${v}%</span></div>`
     ).join('');
   }
-  async function load(){
-    try{
-      const r=await fetch('/api/ai-trade-decision?date='+todayIST()+'&t='+Date.now(),{cache:'no-store'});
-      if(!r.ok) throw new Error('HTTP '+r.status);
-      return await r.json();
-    }catch(e){return {ok:false,error:String(e.message||e)}}
-  }
-  function renderDecision(d){
-    if(!d)return '<div class="aiOverlaySmall">No today decision.</div>';
-    if(d.error)return `<div class="aiOverlaySmall">${d.error}</div>`;
-    return `
+  function renderOverlay(j){
+    const body=document.getElementById('aiOverlayBody'); if(!body)return;
+    if(!j||!j.ok){body.innerHTML=`<div class="aiOverlaySmall">${j?.error||'AI endpoint failed'}</div>`;return;}
+    const d=j.decisions&&j.decisions[todayIST()];
+    if(!d){body.innerHTML='<div class="aiOverlaySmall">No today decision.</div>';return;}
+    body.innerHTML=`
+      <div class="aiOverlaySmall">Last AI update: <span class="aiOverlayBest">${j.updated_at||'—'}</span></div>
       <div class="aiOverlayStatus status${String(d.status||'WAIT')}">${d.status} · ${d.action||'WAIT'}</div>
       <div class="aiOverlaySmall">Best bin: <span class="aiOverlayBest">${d.best_bin}°C (${d.bin_probs?.[d.best_bin]||0}%)</span></div>
-      ${rows(d.bin_probs,d.best_bin)}
+      ${probRows(d.bin_probs,d.best_bin)}
       <div class="aiOverlaySmall">2-bin: <span class="aiOverlayBest">${(d.safe_2_bins||[]).join(' / ')} = ${d.safe_2_prob}%</span> · escape ${d.escape_risk_2}%</div>
       <div class="aiOverlaySmall">3-bin: <span class="aiOverlayBest">${(d.safe_3_bins||[]).join(' / ')} = ${d.safe_3_prob}%</span> · escape ${d.escape_risk_3}%</div>
-      <div class="aiProbMini">
-        <div class="aiOverlayTitle">⏰ Peak time guess</div>
-        <div class="aiOverlaySmall">Most likely: <span class="aiOverlayBest">${d.peak_time_best_window||'—'} (${d.peak_time_best_prob||'—'}%)</span></div>
-        ${peakRows(d.peak_time_probs)}
-      </div>
-      <div class="aiOverlaySmall">Official floor: ${d.official_floor_bin??'—'} · WU soft: ${d.wu_soft_floor_bin??'—'}</div>
-    `;
+      <div class="aiProbMini"><div class="aiOverlayTitle">⏰ Peak time guess</div>
+      <div class="aiOverlaySmall">Most likely: <span class="aiOverlayBest">${d.peak_time_best_window||'—'} (${d.peak_time_best_prob||'—'}%)</span></div>
+      ${peakRows(d.peak_time_probs)}</div>
+      <div class="aiOverlaySmall">Official floor: ${d.official_floor_bin??'—'} · WU soft: ${d.wu_soft_floor_bin??'—'}</div>`;
   }
-  async function render(){
-    const body=document.getElementById('aiOverlayBody'); if(!body)return;
-    const j=await load();
-    if(!j.ok){body.innerHTML=`<div class="aiOverlaySmall">${j.error||'AI endpoint failed'}</div>`;return;}
-    const d=j.decisions&&j.decisions[todayIST()];
-    body.innerHTML=renderDecision(d);
+
+  async function run(){
+    const date=todayIST();
+    const [history, highs, ai]=await Promise.all([
+      fetchJson('/api/history?date='+date+'&t='+Date.now()),
+      fetchJson('/api/polymarket-highs?date='+date+'&t='+Date.now()),
+      fetchJson('/api/ai-trade-decision?date='+date+'&t='+Date.now())
+    ]);
+    drawTrend(extractTrendRows(history,highs));
+    renderOverlay(ai);
   }
-  window.addEventListener('load',()=>setTimeout(render,800));
-  setInterval(render,60000);
+  window.addEventListener('load',()=>setTimeout(run,900));
+  setInterval(run,60000);
 })();
 </script>
 
