@@ -1879,7 +1879,7 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
     setCard('start of day forecast',start,'lowest/start saved forecast today','');
     setCard('change today',change,'latest minus start/lowest',cls);
     setCard('market bin now',bin,'rounded latest forecast bin','');
-    draw(findPanel(),j.forecast_trend||[]);
+    draw(findPanel(), window.cleanTrendPoints?window.cleanTrendPoints(j.forecast_trend||[]):(j.forecast_trend||[]));
   }
   async function run(){render(await load());}
   window.addEventListener('load',()=>setTimeout(run,1200));
@@ -2014,7 +2014,7 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
       fetchJson('/api/history?date='+date+'&t='+Date.now()),
       fetchJson('/api/polymarket-highs?date='+date+'&t='+Date.now())
     ]);
-    let pts=extractTrendFromHistory(history);
+    let pts=window.cleanTrendPoints?window.cleanTrendPoints(extractTrendFromHistory(history)):extractTrendFromHistory(history);
     const day=highs && highs.days && highs.days[date];
     if(!pts.length && day && N(day.high_c)!=null){
       pts=[{time:day.issue_time||highs.updated_at||'',c:N(day.high_c),f:N(day.high_f??(N(day.high_c)*9/5+32))}];
@@ -2097,6 +2097,42 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
   }
   window.addEventListener('load',()=>setTimeout(render,900));
   setInterval(render,60000);
+})();
+</script>
+
+
+<script id="trend-duplicate-sort-fix">
+(function(){
+  function N(v){const x=Number(v);return Number.isFinite(x)?x:null}
+  function cleanTrendPoints(points){
+    const arr=(points||[]).filter(p=>p&&N(p.c)!=null).map(p=>({
+      time:String(p.time||p.fetch_time_ist||p.fetched_at||p.created_at||''),
+      c:N(p.c),
+      f:N(p.f ?? (N(p.c)*9/5+32))
+    }));
+    arr.sort((a,b)=>a.time.localeCompare(b.time));
+    const out=[];
+    for(const p of arr){
+      const last=out[out.length-1];
+      if(!last){out.push(p);continue;}
+      if(last.time===p.time){out[out.length-1]=p;continue;}
+      if(Math.abs(last.c-p.c)<0.001) continue;
+      out.push(p);
+    }
+    return out;
+  }
+  window.cleanTrendPoints=cleanTrendPoints;
+  function simplifyExistingSvg(){
+    const svg=document.querySelector('#directHistoryTrendSvg,#forceTrendSvg');
+    if(!svg)return;
+    const circles=[...svg.querySelectorAll('circle')];
+    if(circles.length>100){
+      const step=Math.ceil(circles.length/80);
+      circles.forEach((c,i)=>{ if(i%step!==0) c.style.display='none'; });
+    }
+  }
+  window.addEventListener('load',()=>setTimeout(simplifyExistingSvg,2500));
+  setInterval(simplifyExistingSvg,5000);
 })();
 </script>
 

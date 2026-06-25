@@ -685,10 +685,10 @@ async function historyPayload(env,date){
 async function liveCrosscheck(env,date){const station=env.METAR_STATION||env.WU_ICAO||'VILK';let hist={};try{hist=await historyPayload(env,date);}catch(e){hist={ok:false,error:String(e.message||e),wu_obs_rows:{},metar_rows:[],forecast_rows:[],forecast_snapshot_rows:[]};}const aw=await fetchAviationWeatherMetar(station);const cw=await fetchCheckWxMetar(env,station);const wuLatest=pickLatestWuFromHistory(hist);const sources=[aw.latest,cw.latest,wuLatest].filter(Boolean);const vote=tempVote(sources);return{ok:true,station,date,updated_at:timeIST(),checkwx_enabled:!!env.CHECKWX_KEY,aviationweather:aw.latest,checkwx:cw.latest,wu_latest:wuLatest,final_live:vote,source_status:{aviationweather_ok:aw.ok,checkwx_ok:cw.ok,history_ok:!!hist.ok},errors:{aviationweather:aw.error,checkwx:cw.error,history:hist.error||null},rule:'Live final = majority within 1°C among AviationWeather, CheckWX, WU Obs. If one source differs by >3–5°C it is flagged, not blindly used.'};}
 
 
-function aiRoundBins(base, lowerSignal, n){
-  const b=n(base);
+function aiRoundBins(base, lowerSignal, binCount){
+  const b=safeNumAI(base);
   if(b==null) return [];
-  if(n===2){
+  if(binCount===2){
     if(lowerSignal){
       const hi=Math.ceil(b+0.6);
       return [hi-1,hi];
@@ -706,17 +706,19 @@ function aiRoundBins(base, lowerSignal, n){
     return [lo,lo+1,lo+2];
   }
 }
+function safeNumAI(v){ const x=Number(v); return Number.isFinite(x)?x:null; }
+function safeStrAI(v){ return String(v==null?'':v); }
 function aiSignalForDay(item, label, horizonDays){
-  const hourly=n(item.hourly_high_c);
-  const daily=n(item.high_c);
+  const hourly=safeNumAI(item?.hourly_high_c ?? item?.hourly_max_c ?? item?.hourlyHighC);
+  const daily=safeNumAI(item?.high_c ?? item?.daily_high_c ?? item?.today_c);
   const base=hourly!=null?hourly:daily;
   const dailyMinusHourly=(daily!=null&&hourly!=null)?+(daily-hourly).toFixed(3):null;
-  const dailyTrend=String(item.daily_trend||item.trend||'').toLowerCase();
-  const hourlyTrend=String(item.hourly_trend||'').toLowerCase();
-  const phrase=String(item.phrase||item.condition||'').toLowerCase();
-  const rainPct=n(item.rain_pct)||0;
-  const current=n(item.current_c);
-  const obsPeak=n(item.today_main_c||item.obs_peak_c);
+  const dailyTrend=safeStrAI(item?.daily_trend ?? item?.trend).toLowerCase();
+  const hourlyTrend=safeStrAI(item?.hourly_trend).toLowerCase();
+  const phrase=safeStrAI(item?.phrase ?? item?.condition).toLowerCase();
+  const rainPct=safeNumAI(item?.rain_pct)||0;
+  const current=safeNumAI(item?.current_c);
+  const obsPeak=safeNumAI(item?.today_main_c ?? item?.obs_peak_c);
   const slowObs=(current!=null&&obsPeak!=null&&current<obsPeak-0.7);
   const lowerSignal =
     rainPct>=10 ||
@@ -775,19 +777,39 @@ function aiSignalForDay(item, label, horizonDays){
   };
 }
 async function aiBinSignal(env, day){
-  const highs=await polymarketDailyAndHourlyHighsFinal(env,day);
-  const dates=Object.keys(highs.days||{}).sort();
-  const signals={};
-  dates.forEach((d,i)=>{
-    signals[d]=aiSignalForDay(highs.days[d], highs.days[d].label||(`D+${i}`), i);
-  });
-  return {
-    ok:true,
-    base_date:day,
-    updated_at:timeIST(),
-    note:'Highest-winrate backtest mode: WU hourly max primary, rain/cloud/WU obs suppression decides lower/upper hedge. 3-bin is safest early; 2-bin only when price is cheap.',
-    signals
-  };
+  try{
+    const highs=await polymarketDailyAndHourlyHighsFinal(env,day);
+    const dates=Object.keys(highs.days||{}).sort();
+    const signals={};
+    dates.forEach((d,i)=>{
+      try{
+        const item=highs.days[d]||{};
+        signals[d]=aiSignalForDay(item, item.label||(`D+${i}`), i);
+      }catch(e){
+        signals[d]={
+          date:d,
+          label:(highs.days[d]&&highs.days[d].label)||`D+${i}`,
+          error:String(e.message||e),
+          best_2_bins:[],
+          safe_3_bins:[],
+          confidence_2:0,
+          confidence_3:0,
+          escape_risk_2:100,
+          escape_risk_3:100,
+          reasons:['AI signal failed for this day but endpoint stayed alive']
+        };
+      }
+    });
+    return {
+      ok:true,
+      base_date:day,
+      updated_at:timeIST(),
+      note:'Highest-winrate mode: WU hourly max primary; rain/cloud/WU obs suppression decides lower/upper hedge. Endpoint is null-safe.',
+      signals
+    };
+  }catch(e){
+    return {ok:false,base_date:day,updated_at:timeIST(),error:String(e.message||e),signals:{}};
+  }
 }
 
 export default { async fetch(request, env){ const url=new URL(request.url); if(url.pathname==='/api/collect') return json(await collect(env)); if(url.pathname==='/api/live-crosscheck') return json(await liveCrosscheck(env, url.searchParams.get('date')||dateIST()));
