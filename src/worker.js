@@ -739,16 +739,21 @@ function aiSignalForDay(item, label, horizonDays){
   else {stage='SAME DAY CONFIRM'; conf2=0.83; conf3=0.96;}
 
   // Same-day after live floor exists, reduce escape risk.
-  if(horizonDays===0 && obsPeak!=null && base!=null){
-    const floorBin=Math.round(obsPeak);
-    if(!bins2.includes(floorBin)){
-      // force live floor into 2-bin if needed
-      const c=Math.round(Math.max(obsPeak,base));
-      bins2.splice(0,bins2.length,c-1,c);
-    }
-    if(!bins3.includes(floorBin)){
-      const c=Math.round(Math.max(obsPeak,base));
-      bins3.splice(0,bins3.length,c-2,c-1,c);
+  if(horizonDays===0 && base!=null){
+    const officialFloor=officialMetarFloorFromItemAI(item);
+    if(officialFloor!=null){
+      if(!bins2.includes(officialFloor) || bins2.some(x=>x<officialFloor)){
+        const c=Math.max(officialFloor,Math.round(base));
+        bins2.splice(0,bins2.length,Math.max(officialFloor,c-1),Math.max(officialFloor,c));
+        bins2.splice(0,bins2.length,...[...new Set(bins2)].sort((a,b)=>a-b));
+        while(bins2.length<2) bins2.push(bins2.at(-1)+1);
+      }
+      if(!bins3.includes(officialFloor) || bins3.some(x=>x<officialFloor)){
+        const c=Math.max(officialFloor,Math.round(base));
+        bins3.splice(0,bins3.length,Math.max(officialFloor,c-2),Math.max(officialFloor,c-1),Math.max(officialFloor,c));
+        bins3.splice(0,bins3.length,...[...new Set(bins3)].sort((a,b)=>a-b));
+        while(bins3.length<3) bins3.push(bins3.at(-1)+1);
+      }
     }
   }
 
@@ -760,7 +765,8 @@ function aiSignalForDay(item, label, horizonDays){
   if(lowerSignal) reasons.push('Lower-side hedge: rain/cloud/mist/falling or daily > hourly suppression signal');
   else reasons.push('Upper-side hedge: clearer/rising or hourly supports heat');
   if(dailyMinusHourly!=null) reasons.push(`Daily-hourly gap ${dailyMinusHourly>0?'+':''}${dailyMinusHourly}°C`);
-  if(current!=null) reasons.push(`WU obs now ${current}°C, live peak ${obsPeak??'—'}°C`);
+  if(current!=null) reasons.push(`WU obs now ${current}°C, WU peak ${obsPeak??'—'}°C (soft only)`);
+  const officialFloorReason=officialMetarFloorFromItemAI(item); if(officialFloorReason!=null) reasons.push(`Official METAR/CheckWX floor locked: ${officialFloorReason}°C`);
 
   return {
     date:item.date, label, horizon_days:horizonDays, stage,
@@ -856,6 +862,42 @@ function estimatePeakTimeRiskAI(item){
   if(hour<16) return {peak_done_prob:62+(cloud?12:0)+(rain>20?10:0), late_peak_prob:18};
   return {peak_done_prob:82, late_peak_prob:6};
 }
+
+function officialMetarFloorFromItemAI(item){
+  item=item||{};
+  // Only official sources can create the hard floor for current day:
+  // METAR / CheckWX / AviationWeather / final_live cross-check.
+  const candidates=[
+    item.metar_peak_c,
+    item.metar_high_c,
+    item.official_peak_c,
+    item.official_high_c,
+    item.checkwx_peak_c,
+    item.aviationweather_peak_c,
+    item.final_live_peak_c,
+    item.final_metar_c
+  ].map(safeNumAI).filter(x=>x!=null);
+  if(candidates.length) return Math.round(Math.max(...candidates));
+
+  // Some payloads only expose latest official METAR temp, not peak.
+  const latestOfficial=[
+    item.metar_c,
+    item.metar_temp_c,
+    item.latest_metar_c,
+    item.checkwx_c,
+    item.aviationweather_c,
+    item.final_live_c
+  ].map(safeNumAI).filter(x=>x!=null);
+  if(latestOfficial.length) return Math.round(Math.max(...latestOfficial));
+
+  return null;
+}
+function wuSoftFloorFromItemAI(item){
+  item=item||{};
+  const vals=[item.today_main_c,item.obs_peak_c,item.current_c].map(safeNumAI).filter(x=>x!=null);
+  return vals.length?Math.round(Math.max(...vals)):null;
+}
+
 function aiDecisionForDay(item,label,horizonDays,prices){
   item=item||{};
   const hourly=safeNumAI(item?.hourly_high_c ?? item?.hourly_max_c ?? item?.hourlyHighC);
@@ -887,7 +929,8 @@ function aiDecisionForDay(item,label,horizonDays,prices){
   if(current!=null && obsPeak!=null && current<obsPeak-1.0){ bias-=0.25; lowerSignals.push('current below earlier peak'); }
 
   const center=base+bias;
-  const liveFloor=obsPeak!=null ? Math.round(obsPeak) : null;
+  const liveFloor = horizonDays===0 ? officialMetarFloorFromItemAI(item) : null;
+  const wuSoftFloor = horizonDays===0 ? wuSoftFloorFromItemAI(item) : null;
   const minBin=Math.floor(center)-3;
   const maxBin=Math.ceil(center)+3;
   const scores={};
@@ -895,9 +938,10 @@ function aiDecisionForDay(item,label,horizonDays,prices){
   for(let b=minBin;b<=maxBin;b++){
     let dist=Math.abs(b-center);
     let score= -dist*1.15;
-    if(liveFloor!=null && b<liveFloor) score-=3.0; // possible only if official peak glitch/rounding, but very unlikely
-    if(liveFloor!=null && b===liveFloor) score += peakRisk.peak_done_prob/100*0.95;
+    if(liveFloor!=null && b<liveFloor) score-=9.0; // official METAR/CheckWX confirmed floor: lower bins impossible
+    if(liveFloor!=null && b===liveFloor) score += peakRisk.peak_done_prob/100*1.05;
     if(liveFloor!=null && b>liveFloor) score += peakRisk.late_peak_prob/100*0.55;
+    if(liveFloor==null && wuSoftFloor!=null && b<wuSoftFloor) score-=0.35; // WU obs is soft only, not final
     if(rain>=30 && b>=Math.round(center)+1) score-=0.45;
     scores[String(b)]=score;
   }
@@ -944,6 +988,7 @@ function aiDecisionForDay(item,label,horizonDays,prices){
 
   const reasons=[
     `base ${base.toFixed(3)}°C; bias ${bias>=0?'+':''}${bias.toFixed(2)}°C; adjusted ${center.toFixed(3)}°C`,
+    `official METAR floor ${liveFloor??'not confirmed'}; WU soft floor ${wuSoftFloor??'—'}`,
     `best bin ${bestBin} = ${probs[String(bestBin)]}%`,
     `2-bin ${best2.bins.join('/')} = ${best2.p}% hit, escape ${escape2}%`,
     `3-bin ${best3.bins.join('/')} = ${best3.p}% hit, escape ${escape3}%`,
@@ -955,6 +1000,8 @@ function aiDecisionForDay(item,label,horizonDays,prices){
     date:item.date,label,horizon_days:horizonDays,
     status,action,lock_score:Math.round(lockScore),
     base_c:+base.toFixed(3),adjusted_c:+center.toFixed(3),
+    official_floor_bin:liveFloor,
+    wu_soft_floor_bin:wuSoftFloor,
     live_floor_bin:liveFloor,
     peak_done_prob:Math.round(peakRisk.peak_done_prob),
     late_peak_prob:Math.round(peakRisk.late_peak_prob),

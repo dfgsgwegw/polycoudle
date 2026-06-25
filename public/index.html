@@ -768,6 +768,9 @@ td{
 .tradeSmall{font-size:13px;color:#bfeaff;line-height:1.5}.bestStar{color:#ffd433;font-weight:1000}
 @media(max-width:1150px){.tradeGrid{grid-template-columns:repeat(2,minmax(250px,1fr))}}@media(max-width:680px){.tradeGrid{grid-template-columns:1fr}.tradeStatus{font-size:24px}}
 
+
+.officialFloorNote{margin-top:8px;color:#ffd433;font-size:12px;line-height:1.45}
+
 </style></head><body>
 <div class="wrap">
   <div class="header"><div><h1>VILK <span class="cyan">Live Signal</span></h1><div class="sub">● UI refresh 30 sec · cron save 1 min · Lucknow Airport (VILK) · D1 archive</div></div><div><button class="btn" id="refreshBtn">↻ Refresh Now</button><div class="updated" id="updated">Updated --</div></div></div>
@@ -2183,8 +2186,8 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
       <div class="tradeSmall">Escape ${d.escape_risk_2}% · Cost ${d.cost_2??'—'} · EV ${d.ev_2??'—'}</div>
       <div class="tradeBig" style="font-size:20px">3-bin: ${d.safe_3_bins?.join(' / ')} <span class="bestStar">${d.safe_3_prob}%</span></div>
       <div class="tradeSmall">Escape ${d.escape_risk_3}% · Cost ${d.cost_3??'—'} · EV ${d.ev_3??'—'}</div>
-      <div class="tradeSmall">Peak done ${d.peak_done_prob}% · late peak ${d.late_peak_prob}% · live floor ${d.live_floor_bin??'—'}</div>
-      <div class="tradeSmall">${(d.reasons||[]).slice(0,5).join('<br>')}</div>
+      <div class="tradeSmall">Peak done ${d.peak_done_prob}% · late peak ${d.late_peak_prob}% · official floor ${d.official_floor_bin??'—'} · WU soft ${d.wu_soft_floor_bin??'—'}</div>
+      <div class="officialFloorNote">Hard floor uses METAR/CheckWX only. WU obs peak is soft signal, not final settlement floor.</div><div class="tradeSmall">${(d.reasons||[]).slice(0,6).join('<br>')}</div>
     </div>`;
   }
   async function load(){
