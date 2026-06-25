@@ -968,7 +968,7 @@ function aiDecisionForDay(item,label,horizonDays,prices){
     if(liveFloor!=null && b<liveFloor) score-=9.0; // official METAR/CheckWX confirmed floor: lower bins impossible
     if(liveFloor!=null && b===liveFloor) score += peakRisk.peak_done_prob/100*1.05;
     if(liveFloor!=null && b>liveFloor) score += peakRisk.late_peak_prob/100*0.55;
-    if(liveFloor==null && wuSoftFloor!=null && b<wuSoftFloor) score-=0.35; // WU obs is soft only, not final
+    if(wuSoftFloor!=null && b<wuSoftFloor) score-=12; // current-day WU/obs hit floor: lower bin not tradable
     if(rain>=30 && b>=Math.round(center)+1) score-=0.45;
     scores[String(b)]=score;
   }
@@ -1126,6 +1126,7 @@ function aiDecision(item,label,horizon){
   const dailyGap=(daily!=null&&hourly!=null)?daily-hourly:0;
   const officialFloor=horizon===0?aiOfficialFloor(item):null;
   const wuFloor=horizon===0?aiWuSoftFloor(item):null;
+  const tradeFloor = horizon===0 ? Math.max(...[officialFloor, wuFloor].filter(x=>x!=null)) : null;
 
   let bias=0; const reasons=[];
   if(rain>=30){bias-=0.8;reasons.push('rain risk high');}
@@ -1143,18 +1144,17 @@ function aiDecision(item,label,horizon){
   const scores={};
   for(let b=minBin;b<=maxBin;b++){
     let score=-Math.abs(b-adjusted)*1.15;
-    if(officialFloor!=null && b<officialFloor) score-=10;      // official floor hard
-    if(officialFloor==null && wuFloor!=null && b<wuFloor) score-=0.35; // WU floor soft
-    if(officialFloor!=null && b===officialFloor) score+=0.65;
-    if(officialFloor!=null && b>officialFloor) score+=0.25;
+    if(tradeFloor!=null && b<tradeFloor) score-=12;      // current-day already-hit floor: no lower bin trade probability
+    if(tradeFloor!=null && b===tradeFloor) score+=0.85;
+    if(tradeFloor!=null && b>tradeFloor) score+=0.25;
     if(rain>=30 && b>Math.round(adjusted)) score-=0.35;
     scores[String(b)]=score;
   }
   let probabilities=aiSoftmax(scores);
   // force official impossible bins close to 0 and renormalize
-  if(officialFloor!=null){
+  if(tradeFloor!=null){
     const filtered={};
-    for(const [k,v] of Object.entries(probabilities)) filtered[k]=Number(k)<officialFloor?0:v;
+    for(const [k,v] of Object.entries(probabilities)) filtered[k]=Number(k)<tradeFloor?0:v;
     const sum=Object.values(filtered).reduce((a,b)=>a+b,0)||1;
     probabilities={};
     for(const [k,v] of Object.entries(filtered)) probabilities[k]=+(100*v/sum).toFixed(1);
@@ -1181,9 +1181,9 @@ function aiDecision(item,label,horizon){
     probabilities, safe_2_bins:safe2.bins, safe_2_prob:safe2.prob, escape_2:+(100-safe2.prob).toFixed(1),
     safe_3_bins:safe3.bins, safe_3_prob:safe3.prob, escape_3:+(100-safe3.prob).toFixed(1),
     peak_time_probs:peak.probs, peak_time_best_window:peak.best_window, peak_time_best_prob:peak.best_prob,
-    official_floor_bin:officialFloor, wu_soft_floor_bin:wuFloor,
+    official_floor_bin:officialFloor, wu_soft_floor_bin:wuFloor, trade_floor_bin:tradeFloor,
     base_c:+base.toFixed(3), adjusted_c:+adjusted.toFixed(3),
-    reasons:[`base ${base.toFixed(3)}°C → adjusted ${adjusted.toFixed(3)}°C`,`official floor ${officialFloor??'not confirmed'}; WU soft ${wuFloor??'—'}`,`peak window ${peak.best_window||'—'} ${peak.best_prob||'—'}%`,...reasons].slice(0,8)
+    reasons:[`base ${base.toFixed(3)}°C → adjusted ${adjusted.toFixed(3)}°C`,`official floor ${officialFloor??'not confirmed'}; WU hit floor ${wuFloor??'—'}; trade floor ${tradeFloor??'—'}`,`peak window ${peak.best_window||'—'} ${peak.best_prob||'—'}%`,...reasons].slice(0,8)
   };
 }
 async function unifiedAI(env, day){

@@ -817,6 +817,10 @@ td{
 #cleanTrendSvg{width:100%;height:240px;background:#fff;border-radius:14px;margin-top:12px;display:block}
 @media(max-width:1100px){.unifiedAIGrid{grid-template-columns:1fr}.uOverlay{position:static;width:auto;margin:12px 0}.uClose{display:none}}
 
+
+/* Hide old duplicate AI panels; unified AI is the only live engine */
+.tradeEnginePanel,.aiBinPanel{display:none!important}
+
 </style></head><body>
 <div class="wrap">
   <div class="header"><div><h1>VILK <span class="cyan">Live Signal</span></h1><div class="sub">● UI refresh 30 sec · cron save 1 min · Lucknow Airport (VILK) · D1 archive</div></div><div><button class="btn" id="refreshBtn">↻ Refresh Now</button><div class="updated" id="updated">Updated --</div></div></div>
@@ -2188,7 +2192,8 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
       `<div class="uRow" style="grid-template-columns:82px 1fr 52px"><b>${k}</b><div class="uBar"><span style="width:${Math.max(2,Number(v)||0)}%"></span></div><span>${v}%</span></div>`).join('');
   }
   function card(d){
-    if(!d||d.error)return `<div class="unifiedCard"><h4>${d?.label||'DAY'}</h4><div class="uSmall">${d?.error||'No data'}</div></div>`;
+    if(!d||d.error)d=window.guardTradeFloor?window.guardTradeFloor(d):d;
+    return `<div class="unifiedCard"><h4>${d?.label||'DAY'}</h4><div class="uSmall">${d?.error||'No data'}</div></div>`;
     return `<div class="unifiedCard">
       <h4>${d.label} · ${d.date||''}</h4>
       <div class="uStatus u${d.status}">${d.status}</div>
@@ -2201,13 +2206,14 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
       <div class="uSmall">Escape ${d.escape_3}%</div>
       <div class="uSmall">Peak: <span class="uBest">${d.peak_time_best_window||'—'} (${d.peak_time_best_prob||'—'}%)</span></div>
       ${peakRows(d.peak_time_probs)}
-      <div class="uSmall">Official floor ${d.official_floor_bin??'—'} · WU soft ${d.wu_soft_floor_bin??'—'}</div>
+      <div class="uSmall">Trade floor ${d.trade_floor_bin??'—'} · official ${d.official_floor_bin??'—'} · WU hit ${d.wu_soft_floor_bin??'—'}</div>
       <div class="uSmall">${(d.reasons||[]).join('<br>')}</div>
     </div>`;
   }
   function overlay(d,j){
     const el=document.getElementById('uOverlayBody'); if(!el)return;
     if(!d||d.error){el.innerHTML=d?.error||'No data';return;}
+    d=window.guardTradeFloor?window.guardTradeFloor(d):d;
     el.innerHTML=`Last AI update: <span class="uBest">${j.updated_at||'—'}</span><br>
     <div class="uStatus u${d.status}" style="font-size:22px">${d.status} · ${d.action}</div>
     Best: <span class="uBest">${d.best_bin}°C (${d.best_bin_prob}%)</span>
@@ -2216,7 +2222,7 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
     <br>3-bin: <span class="uBest">${d.safe_3_bins.join(' / ')} = ${d.safe_3_prob}%</span> · escape ${d.escape_3}%
     <br><br>Peak time: <span class="uBest">${d.peak_time_best_window||'—'} (${d.peak_time_best_prob||'—'}%)</span>
     ${peakRows(d.peak_time_probs)}
-    <br>Official floor ${d.official_floor_bin??'—'} · WU soft ${d.wu_soft_floor_bin??'—'}`;
+    <br>Trade floor ${d.trade_floor_bin??'—'} · official ${d.official_floor_bin??'—'} · WU hit ${d.wu_soft_floor_bin??'—'}`;
   }
   function extractTrend(history, highs){
     const today=todayIST();
@@ -2266,6 +2272,43 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
   }
   window.addEventListener('load',()=>setTimeout(render,700));
   setInterval(render,60000);
+})();
+</script>
+
+
+<script id="frontend-trade-floor-probability-guard">
+(function(){
+  window.guardTradeFloor = function(d){
+    if(!d || !d.probabilities) return d;
+    const floor = Number(d.trade_floor_bin ?? d.wu_soft_floor_bin ?? d.official_floor_bin);
+    if(!Number.isFinite(floor)) return d;
+    let changed=false, sum=0;
+    const p={};
+    for(const [k,v] of Object.entries(d.probabilities)){
+      if(Number(k)<floor){ p[k]=0; changed=true; }
+      else { p[k]=Number(v)||0; sum+=p[k]; }
+    }
+    if(changed && sum>0){
+      for(const k of Object.keys(p)) p[k]=+(100*p[k]/sum).toFixed(1);
+      d.probabilities=p;
+      const best=Object.entries(p).sort((a,b)=>b[1]-a[1])[0];
+      d.best_bin=Number(best[0]); d.best_bin_prob=best[1];
+      function bestContig(count){
+        const bins=Object.keys(p).map(Number).sort((a,b)=>a-b);
+        let best={bins:[],prob:0};
+        for(let i=0;i<=bins.length-count;i++){
+          const arr=bins.slice(i,i+count);
+          const prob=+arr.reduce((s,b)=>s+(p[String(b)]||0),0).toFixed(1);
+          if(prob>best.prob) best={bins:arr,prob};
+        }
+        return best;
+      }
+      const b2=bestContig(2), b3=bestContig(3);
+      d.safe_2_bins=b2.bins; d.safe_2_prob=b2.prob; d.escape_2=+(100-b2.prob).toFixed(1);
+      d.safe_3_bins=b3.bins; d.safe_3_prob=b3.prob; d.escape_3=+(100-b3.prob).toFixed(1);
+    }
+    return d;
+  };
 })();
 </script>
 
