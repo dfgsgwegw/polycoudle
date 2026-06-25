@@ -684,5 +684,112 @@ async function historyPayload(env,date){
 
 async function liveCrosscheck(env,date){const station=env.METAR_STATION||env.WU_ICAO||'VILK';let hist={};try{hist=await historyPayload(env,date);}catch(e){hist={ok:false,error:String(e.message||e),wu_obs_rows:{},metar_rows:[],forecast_rows:[],forecast_snapshot_rows:[]};}const aw=await fetchAviationWeatherMetar(station);const cw=await fetchCheckWxMetar(env,station);const wuLatest=pickLatestWuFromHistory(hist);const sources=[aw.latest,cw.latest,wuLatest].filter(Boolean);const vote=tempVote(sources);return{ok:true,station,date,updated_at:timeIST(),checkwx_enabled:!!env.CHECKWX_KEY,aviationweather:aw.latest,checkwx:cw.latest,wu_latest:wuLatest,final_live:vote,source_status:{aviationweather_ok:aw.ok,checkwx_ok:cw.ok,history_ok:!!hist.ok},errors:{aviationweather:aw.error,checkwx:cw.error,history:hist.error||null},rule:'Live final = majority within 1°C among AviationWeather, CheckWX, WU Obs. If one source differs by >3–5°C it is flagged, not blindly used.'};}
 
+
+function aiRoundBins(base, lowerSignal, n){
+  const b=n(base);
+  if(b==null) return [];
+  if(n===2){
+    if(lowerSignal){
+      const hi=Math.ceil(b+0.6);
+      return [hi-1,hi];
+    }else{
+      const lo=Math.floor(b+0.2);
+      return [lo,lo+1];
+    }
+  }
+  // 3-bin highest winrate mode from backtest: rain/cloud/falling = lower hedge, sunny/rising = upper hedge
+  if(lowerSignal){
+    const hi=Math.ceil(b+0.6);
+    return [hi-2,hi-1,hi];
+  }else{
+    const lo=Math.floor(b+0.8);
+    return [lo,lo+1,lo+2];
+  }
+}
+function aiSignalForDay(item, label, horizonDays){
+  const hourly=n(item.hourly_high_c);
+  const daily=n(item.high_c);
+  const base=hourly!=null?hourly:daily;
+  const dailyMinusHourly=(daily!=null&&hourly!=null)?+(daily-hourly).toFixed(3):null;
+  const dailyTrend=String(item.daily_trend||item.trend||'').toLowerCase();
+  const hourlyTrend=String(item.hourly_trend||'').toLowerCase();
+  const phrase=String(item.phrase||item.condition||'').toLowerCase();
+  const rainPct=n(item.rain_pct)||0;
+  const current=n(item.current_c);
+  const obsPeak=n(item.today_main_c||item.obs_peak_c);
+  const slowObs=(current!=null&&obsPeak!=null&&current<obsPeak-0.7);
+  const lowerSignal =
+    rainPct>=10 ||
+    /rain|shower|drizzle|storm|thunder|cloud|mist|haze|br|hz|du/i.test(phrase) ||
+    dailyMinusHourly>0.4 ||
+    dailyTrend==='falling' ||
+    hourlyTrend==='falling' ||
+    slowObs;
+
+  const bins2=aiRoundBins(base,lowerSignal,2);
+  const bins3=aiRoundBins(base,lowerSignal,3);
+
+  let stage='WAIT';
+  let conf2=0.70, conf3=0.88;
+  if(horizonDays>=3){stage='EARLY 3-BIN'; conf2=0.77; conf3=0.96;}
+  else if(horizonDays===2){stage='D-2 3-BIN SAFE'; conf2=0.81; conf3=0.93;}
+  else if(horizonDays===1){stage='D-1 PRIME'; conf2=0.79; conf3=0.93;}
+  else {stage='SAME DAY CONFIRM'; conf2=0.83; conf3=0.96;}
+
+  // Same-day after live floor exists, reduce escape risk.
+  if(horizonDays===0 && obsPeak!=null && base!=null){
+    const floorBin=Math.round(obsPeak);
+    if(!bins2.includes(floorBin)){
+      // force live floor into 2-bin if needed
+      const c=Math.round(Math.max(obsPeak,base));
+      bins2.splice(0,bins2.length,c-1,c);
+    }
+    if(!bins3.includes(floorBin)){
+      const c=Math.round(Math.max(obsPeak,base));
+      bins3.splice(0,bins3.length,c-2,c-1,c);
+    }
+  }
+
+  const escapeRisk2=+(100*(1-conf2)).toFixed(1);
+  const escapeRisk3=+(100*(1-conf3)).toFixed(1);
+
+  const reasons=[];
+  reasons.push(`Base = WU hourly max ${hourly!=null?hourly+'°C':'—'}; daily ${daily!=null?daily+'°C':'—'}`);
+  if(lowerSignal) reasons.push('Lower-side hedge: rain/cloud/mist/falling or daily > hourly suppression signal');
+  else reasons.push('Upper-side hedge: clearer/rising or hourly supports heat');
+  if(dailyMinusHourly!=null) reasons.push(`Daily-hourly gap ${dailyMinusHourly>0?'+':''}${dailyMinusHourly}°C`);
+  if(current!=null) reasons.push(`WU obs now ${current}°C, live peak ${obsPeak??'—'}°C`);
+
+  return {
+    date:item.date, label, horizon_days:horizonDays, stage,
+    base_c:base, base_f:base!=null?cToF(base):null,
+    lower_signal:lowerSignal,
+    best_2_bins:bins2,
+    safe_3_bins:bins3,
+    confidence_2:Math.round(conf2*100),
+    confidence_3:Math.round(conf3*100),
+    escape_risk_2:escapeRisk2,
+    escape_risk_3:escapeRisk3,
+    buy_rule:'2-bin only if total cost <= 60 and escape risk <= 20%; otherwise use 3-bin or skip.',
+    reasons
+  };
+}
+async function aiBinSignal(env, day){
+  const highs=await polymarketDailyAndHourlyHighsFinal(env,day);
+  const dates=Object.keys(highs.days||{}).sort();
+  const signals={};
+  dates.forEach((d,i)=>{
+    signals[d]=aiSignalForDay(highs.days[d], highs.days[d].label||(`D+${i}`), i);
+  });
+  return {
+    ok:true,
+    base_date:day,
+    updated_at:timeIST(),
+    note:'Highest-winrate backtest mode: WU hourly max primary, rain/cloud/WU obs suppression decides lower/upper hedge. 3-bin is safest early; 2-bin only when price is cheap.',
+    signals
+  };
+}
+
 export default { async fetch(request, env){ const url=new URL(request.url); if(url.pathname==='/api/collect') return json(await collect(env)); if(url.pathname==='/api/live-crosscheck') return json(await liveCrosscheck(env, url.searchParams.get('date')||dateIST()));
+  if(url.pathname==='/api/ai-bin-signal') return json(await aiBinSignal(env, url.searchParams.get('date')||dateIST()));
   if(url.pathname==='/api/history') return json(await history(env, url.searchParams.get('date')||dateIST())); if(url.pathname==='/api/wu-latest') { const day=url.searchParams.get('date')||dateIST(); const row=await env.DB.prepare('SELECT * FROM wu_obs WHERE obs_date=? ORDER BY obs_time DESC LIMIT 1').bind(day).first(); return json({ok:true,row}); } if(url.pathname==='/api/polymarket-highs') return json(await polymarketDailyAndHourlyHighsFinal(env, url.searchParams.get('date')||dateIST())); if(url.pathname==='/api/forecast-snapshots') return json(await forecastSnapshots(env, url.searchParams.get('date')||dateIST())); if(url.pathname==='/api/forecast-high-debug') return json(await forecastHighDebug(env, url.searchParams.get('date')||dateIST())); return env.ASSETS.fetch(request); }, async scheduled(event, env, ctx){ctx.waitUntil(collect(env));} };
