@@ -753,6 +753,21 @@ td{
 .aiBuy{color:#22c55e;font-weight:1000}.aiWarn{color:#ffd433}.aiBad{color:#ef4444}
 @media(max-width:1100px){.aiBinGrid{grid-template-columns:repeat(2,minmax(230px,1fr))}}@media(max-width:650px){.aiBinGrid{grid-template-columns:1fr}.aiBins{font-size:24px}}
 
+
+/* ===== AI TRADE DECISION ENGINE ===== */
+.tradeEnginePanel{margin:22px 0;padding:24px;border-radius:24px;border:2px solid #a855f7;background:linear-gradient(180deg,#160b2f,#071929);font-family:ui-monospace,Consolas,monospace;color:#eaf6ff}
+.tradeTitle{font-size:30px;font-weight:1000;letter-spacing:2px;color:#fff;margin-bottom:12px}
+.tradeGrid{display:grid;grid-template-columns:repeat(4,minmax(250px,1fr));gap:14px}
+.tradeCard{border:1px solid rgba(168,85,247,.45);border-radius:18px;background:rgba(0,0,0,.2);padding:16px}
+.tradeCard h4{margin:0 0 8px;color:#d8b4fe;font-size:14px;letter-spacing:1.4px}
+.tradeStatus{font-size:28px;font-weight:1000;margin:8px 0}
+.statusLOCKED{color:#22c55e}.statusREADY{color:#84cc16}.statusBUILDING{color:#ffd433}.statusWAIT{color:#f97316}
+.binProbRow{display:grid;grid-template-columns:46px 1fr 54px;gap:8px;align-items:center;margin:7px 0;font-size:14px}
+.binBar{height:12px;border-radius:99px;background:rgba(255,255,255,.12);overflow:hidden}.binBar>span{display:block;height:100%;background:linear-gradient(90deg,#60a5fa,#a855f7)}
+.tradeBig{font-size:25px;font-weight:1000;color:#fff;margin:8px 0}
+.tradeSmall{font-size:13px;color:#bfeaff;line-height:1.5}.bestStar{color:#ffd433;font-weight:1000}
+@media(max-width:1150px){.tradeGrid{grid-template-columns:repeat(2,minmax(250px,1fr))}}@media(max-width:680px){.tradeGrid{grid-template-columns:1fr}.tradeStatus{font-size:24px}}
+
 </style></head><body>
 <div class="wrap">
   <div class="header"><div><h1>VILK <span class="cyan">Live Signal</span></h1><div class="sub">● UI refresh 30 sec · cron save 1 min · Lucknow Airport (VILK) · D1 archive</div></div><div><button class="btn" id="refreshBtn">↻ Refresh Now</button><div class="updated" id="updated">Updated --</div></div></div>
@@ -893,6 +908,14 @@ td{
 </section>
 
   
+
+
+<section class="tradeEnginePanel" id="tradeEnginePanel">
+  <div class="tradeTitle">🧠 AI TRADE DECISION ENGINE</div>
+  <div class="tradeGrid" id="tradeGrid">
+    <div class="tradeCard"><h4>Loading...</h4><div class="tradeSmall">Fetching /api/ai-trade-decision</div></div>
+  </div>
+</section>
 
 <section class="aiBinPanel" id="aiBinPanel">
   <div class="aiBinTitle">🎯 AI HIGHEST WINRATE BIN SIGNAL</div>
@@ -2133,6 +2156,52 @@ $('chart').addEventListener('wheel',e=>{e.preventDefault();if(!state.chartGeom)r
   }
   window.addEventListener('load',()=>setTimeout(simplifyExistingSvg,2500));
   setInterval(simplifyExistingSvg,5000);
+})();
+</script>
+
+
+<script id="ai-trade-decision-ui">
+(function(){
+  const todayIST=()=>new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});
+  function probRows(map,best){
+    const entries=Object.entries(map||{}).sort((a,b)=>Number(a[0])-Number(b[0]));
+    return entries.map(([bin,p])=>{
+      const star=Number(bin)===Number(best)?' ⭐':'';
+      return `<div class="binProbRow"><b>${bin}${star}</b><div class="binBar"><span style="width:${Math.max(2,Number(p))}%"></span></div><span>${p}%</span></div>`;
+    }).join('');
+  }
+  function statusClass(s){return 'status'+String(s||'WAIT').replace(/[^A-Z]/g,'')}
+  function card(d){
+    if(!d || d.error) return `<div class="tradeCard"><h4>${d?.label||'DAY'}</h4><div class="tradeSmall">${d?.error||'No signal'}</div></div>`;
+    return `<div class="tradeCard">
+      <h4>${d.label} · ${d.date}</h4>
+      <div class="tradeStatus ${statusClass(d.status)}">${d.status}</div>
+      <div class="tradeSmall">Action: <b>${d.action}</b> · Lock score ${d.lock_score}/100</div>
+      <div class="tradeBig">Best: ${d.best_bin}°C <span class="bestStar">${d.bin_probs?.[d.best_bin]||0}%</span></div>
+      ${probRows(d.bin_probs,d.best_bin)}
+      <div class="tradeBig" style="font-size:20px">2-bin: ${d.safe_2_bins?.join(' / ')} <span class="bestStar">${d.safe_2_prob}%</span></div>
+      <div class="tradeSmall">Escape ${d.escape_risk_2}% · Cost ${d.cost_2??'—'} · EV ${d.ev_2??'—'}</div>
+      <div class="tradeBig" style="font-size:20px">3-bin: ${d.safe_3_bins?.join(' / ')} <span class="bestStar">${d.safe_3_prob}%</span></div>
+      <div class="tradeSmall">Escape ${d.escape_risk_3}% · Cost ${d.cost_3??'—'} · EV ${d.ev_3??'—'}</div>
+      <div class="tradeSmall">Peak done ${d.peak_done_prob}% · late peak ${d.late_peak_prob}% · live floor ${d.live_floor_bin??'—'}</div>
+      <div class="tradeSmall">${(d.reasons||[]).slice(0,5).join('<br>')}</div>
+    </div>`;
+  }
+  async function load(){
+    try{
+      const r=await fetch('/api/ai-trade-decision?date='+todayIST()+'&t='+Date.now(),{cache:'no-store'});
+      if(!r.ok)throw new Error('HTTP '+r.status);
+      return await r.json();
+    }catch(e){return {ok:false,error:String(e.message||e)}}
+  }
+  async function render(){
+    const box=document.getElementById('tradeGrid'); if(!box)return;
+    const j=await load();
+    if(!j.ok){box.innerHTML=`<div class="tradeCard"><h4>Error</h4><div class="tradeSmall">${j.error||'failed'}</div></div>`;return;}
+    box.innerHTML=Object.values(j.decisions||{}).map(card).join('');
+  }
+  window.addEventListener('load',()=>setTimeout(render,700));
+  setInterval(render,60000);
 })();
 </script>
 

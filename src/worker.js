@@ -812,6 +812,184 @@ async function aiBinSignal(env, day){
   }
 }
 
+
+function clampAI(x,a,b){ x=Number(x); if(!Number.isFinite(x)) return a; return Math.max(a,Math.min(b,x)); }
+function sigmoidAI(x){ return 1/(1+Math.exp(-x)); }
+function normProbMapAI(scores){
+  const vals=Object.values(scores).map(Number);
+  const max=Math.max(...vals);
+  const exps={}; let sum=0;
+  for(const k of Object.keys(scores)){ const e=Math.exp((scores[k]-max)/0.85); exps[k]=e; sum+=e; }
+  const out={};
+  for(const k of Object.keys(exps)) out[k]=+(100*exps[k]/sum).toFixed(1);
+  return out;
+}
+function binArrayProbAI(probMap,bins){
+  let s=0; for(const b of bins) s += Number(probMap[String(b)]||0);
+  return +s.toFixed(1);
+}
+function chooseTopBinsAI(probMap,count){
+  return Object.entries(probMap).sort((a,b)=>b[1]-a[1]).slice(0,count).map(x=>Number(x[0])).sort((a,b)=>a-b);
+}
+function contiguousBestBinsAI(probMap,count){
+  const bins=Object.keys(probMap).map(Number).sort((a,b)=>a-b);
+  let best=null;
+  for(let i=0;i<=bins.length-count;i++){
+    const arr=bins.slice(i,i+count);
+    const p=binArrayProbAI(probMap,arr);
+    if(!best || p>best.p) best={bins:arr,p};
+  }
+  return best || {bins:[],p:0};
+}
+function getHourISTAI(){
+  try{ return Number(new Date().toLocaleString('en-GB',{timeZone:'Asia/Kolkata',hour:'2-digit',hour12:false})); }
+  catch(e){ return new Date().getUTCHours()+5.5; }
+}
+function estimatePeakTimeRiskAI(item){
+  const hour=getHourISTAI();
+  const phrase=String(item?.phrase||item?.condition||'').toLowerCase();
+  const rain=Number(item?.rain_pct||0);
+  const cloud=/rain|shower|drizzle|storm|thunder|cloud|mist|haze|br|hz/i.test(phrase);
+  if(hour<10) return {peak_done_prob:8, late_peak_prob:70};
+  if(hour<12) return {peak_done_prob:18+(cloud?12:0), late_peak_prob:55-(rain>20?8:0)};
+  if(hour<14) return {peak_done_prob:38+(cloud?18:0)+(rain>20?12:0), late_peak_prob:35-(rain>20?12:0)};
+  if(hour<16) return {peak_done_prob:62+(cloud?12:0)+(rain>20?10:0), late_peak_prob:18};
+  return {peak_done_prob:82, late_peak_prob:6};
+}
+function aiDecisionForDay(item,label,horizonDays,prices){
+  item=item||{};
+  const hourly=safeNumAI(item?.hourly_high_c ?? item?.hourly_max_c ?? item?.hourlyHighC);
+  const daily=safeNumAI(item?.high_c ?? item?.daily_high_c ?? item?.today_c);
+  const current=safeNumAI(item?.current_c);
+  const obsPeak=safeNumAI(item?.today_main_c ?? item?.obs_peak_c);
+  const rain=safeNumAI(item?.rain_pct)||0;
+  const phrase=safeStrAI(item?.phrase ?? item?.condition).toLowerCase();
+  const dailyMinusHourly=(daily!=null&&hourly!=null)?daily-hourly:0;
+  const dailyTrend=safeStrAI(item?.daily_trend ?? item?.trend).toLowerCase();
+  const hourlyTrend=safeStrAI(item?.hourly_trend).toLowerCase();
+  const base = hourly!=null ? hourly : (daily!=null ? daily : (obsPeak!=null ? obsPeak : current));
+  if(base==null){
+    return {date:item.date,label,error:'No usable forecast/obs data',status:'WAIT',bin_probs:{},best_bin:null,safe_2_bins:[],safe_3_bins:[]};
+  }
+
+  let bias=0;
+  const lowerSignals=[];
+  const upperSignals=[];
+  if(rain>=30){ bias-=0.8; lowerSignals.push('rain risk high'); }
+  else if(rain>=10){ bias-=0.35; lowerSignals.push('rain risk'); }
+  if(/rain|shower|drizzle|storm|thunder/i.test(phrase)){ bias-=0.75; lowerSignals.push('rain/storm phrase'); }
+  else if(/cloud|mist|haze|br|hz/i.test(phrase)){ bias-=0.25; lowerSignals.push('cloud/mist/haze'); }
+  if(dailyMinusHourly>0.4){ bias-=0.35; lowerSignals.push('daily higher than hourly = suppression risk'); }
+  if(dailyTrend==='falling' || hourlyTrend==='falling'){ bias-=0.35; lowerSignals.push('forecast falling'); }
+  if(dailyMinusHourly<-0.3){ bias+=0.25; upperSignals.push('hourly stronger than daily'); }
+  if(dailyTrend==='rising' || hourlyTrend==='rising'){ bias+=0.35; upperSignals.push('forecast rising'); }
+  if(obsPeak!=null && base<obsPeak){ bias += (obsPeak-base)*0.55; upperSignals.push('live peak already above forecast base'); }
+  if(current!=null && obsPeak!=null && current<obsPeak-1.0){ bias-=0.25; lowerSignals.push('current below earlier peak'); }
+
+  const center=base+bias;
+  const liveFloor=obsPeak!=null ? Math.round(obsPeak) : null;
+  const minBin=Math.floor(center)-3;
+  const maxBin=Math.ceil(center)+3;
+  const scores={};
+  const peakRisk=estimatePeakTimeRiskAI(item);
+  for(let b=minBin;b<=maxBin;b++){
+    let dist=Math.abs(b-center);
+    let score= -dist*1.15;
+    if(liveFloor!=null && b<liveFloor) score-=3.0; // possible only if official peak glitch/rounding, but very unlikely
+    if(liveFloor!=null && b===liveFloor) score += peakRisk.peak_done_prob/100*0.95;
+    if(liveFloor!=null && b>liveFloor) score += peakRisk.late_peak_prob/100*0.55;
+    if(rain>=30 && b>=Math.round(center)+1) score-=0.45;
+    scores[String(b)]=score;
+  }
+  const probs=normProbMapAI(scores);
+  const bestBin=Number(Object.entries(probs).sort((a,b)=>b[1]-a[1])[0]?.[0]);
+  const best2=contiguousBestBinsAI(probs,2);
+  const best3=contiguousBestBinsAI(probs,3);
+  const top3=chooseTopBinsAI(probs,3);
+  const escape2=+(100-best2.p).toFixed(1);
+  const escape3=+(100-best3.p).toFixed(1);
+
+  let status='WAIT';
+  const hour=getHourISTAI();
+  let lockScore=0;
+  if(best2.p>=78) lockScore+=35;
+  if(best3.p>=90) lockScore+=20;
+  if(escape2<=22) lockScore+=20;
+  if(horizonDays<=1) lockScore+=10;
+  if(hour>=8) lockScore+=10;
+  if(hour>=10) lockScore+=10;
+  if(rain>=30) lockScore-=12;
+  if(Math.abs(dailyMinusHourly)>0.8) lockScore-=6;
+  if(lockScore>=75) status='LOCKED';
+  else if(lockScore>=55) status='READY';
+  else if(lockScore>=35) status='BUILDING';
+
+  const pricesObj=prices||{};
+  function costForBins(arr){
+    let c=0, ok=false;
+    for(const b of arr){
+      const p=safeNumAI(pricesObj[String(b)] ?? pricesObj[b]);
+      if(p!=null){ c+=p; ok=true; }
+    }
+    return ok?+c.toFixed(2):null;
+  }
+  const cost2=costForBins(best2.bins);
+  const cost3=costForBins(best3.bins);
+  const ev2=cost2!=null ? +((best2.p/100)-cost2/100).toFixed(3) : null;
+  const ev3=cost3!=null ? +((best3.p/100)-cost3/100).toFixed(3) : null;
+  let action='WAIT';
+  if(status==='LOCKED' && (cost2==null || cost2<=60) && escape2<=22) action='BUY_2_BIN';
+  else if((status==='READY'||status==='LOCKED') && (cost3==null || cost3<=75) && escape3<=10) action='BUY_3_BIN_SAFE';
+  else if(status==='READY') action='WAIT_FOR_PRICE_OR_CONFIRM';
+
+  const reasons=[
+    `base ${base.toFixed(3)}°C; bias ${bias>=0?'+':''}${bias.toFixed(2)}°C; adjusted ${center.toFixed(3)}°C`,
+    `best bin ${bestBin} = ${probs[String(bestBin)]}%`,
+    `2-bin ${best2.bins.join('/')} = ${best2.p}% hit, escape ${escape2}%`,
+    `3-bin ${best3.bins.join('/')} = ${best3.p}% hit, escape ${escape3}%`,
+    ...lowerSignals.map(x=>'lower: '+x),
+    ...upperSignals.map(x=>'upper: '+x)
+  ].slice(0,9);
+
+  return {
+    date:item.date,label,horizon_days:horizonDays,
+    status,action,lock_score:Math.round(lockScore),
+    base_c:+base.toFixed(3),adjusted_c:+center.toFixed(3),
+    live_floor_bin:liveFloor,
+    peak_done_prob:Math.round(peakRisk.peak_done_prob),
+    late_peak_prob:Math.round(peakRisk.late_peak_prob),
+    bin_probs:probs,
+    best_bin:bestBin,
+    top_3_bins:top3,
+    safe_2_bins:best2.bins,
+    safe_2_prob:best2.p,
+    escape_risk_2:escape2,
+    safe_3_bins:best3.bins,
+    safe_3_prob:best3.p,
+    escape_risk_3:escape3,
+    cost_2:cost2,cost_3:cost3,ev_2:ev2,ev_3:ev3,
+    reasons
+  };
+}
+async function aiTradeDecision(env, day, url){
+  try{
+    const highs=await polymarketDailyAndHourlyHighsFinal(env,day);
+    const priceParam=url?.searchParams?.get('prices');
+    let prices={};
+    if(priceParam){ try{ prices=JSON.parse(priceParam); }catch(e){} }
+    const dates=Object.keys(highs.days||{}).sort();
+    const decisions={};
+    dates.forEach((d,i)=>{
+      try{ decisions[d]=aiDecisionForDay(highs.days[d], highs.days[d].label||`D+${i}`, i, prices); }
+      catch(e){ decisions[d]={date:d,label:(highs.days[d]&&highs.days[d].label)||`D+${i}`,status:'WAIT',error:String(e.message||e)}; }
+    });
+    return {ok:true,base_date:day,updated_at:timeIST(),note:'AI trade decision engine: per-bin probability, best 2/3 bins, escape risk, trade timing lock, optional EV with prices JSON.',decisions};
+  }catch(e){
+    return {ok:false,base_date:day,updated_at:timeIST(),error:String(e.message||e),decisions:{}};
+  }
+}
+
 export default { async fetch(request, env){ const url=new URL(request.url); if(url.pathname==='/api/collect') return json(await collect(env)); if(url.pathname==='/api/live-crosscheck') return json(await liveCrosscheck(env, url.searchParams.get('date')||dateIST()));
+  if(url.pathname==='/api/ai-trade-decision') return json(await aiTradeDecision(env, url.searchParams.get('date')||dateIST(), url));
   if(url.pathname==='/api/ai-bin-signal') return json(await aiBinSignal(env, url.searchParams.get('date')||dateIST()));
   if(url.pathname==='/api/history') return json(await history(env, url.searchParams.get('date')||dateIST())); if(url.pathname==='/api/wu-latest') { const day=url.searchParams.get('date')||dateIST(); const row=await env.DB.prepare('SELECT * FROM wu_obs WHERE obs_date=? ORDER BY obs_time DESC LIMIT 1').bind(day).first(); return json({ok:true,row}); } if(url.pathname==='/api/polymarket-highs') return json(await polymarketDailyAndHourlyHighsFinal(env, url.searchParams.get('date')||dateIST())); if(url.pathname==='/api/forecast-snapshots') return json(await forecastSnapshots(env, url.searchParams.get('date')||dateIST())); if(url.pathname==='/api/forecast-high-debug') return json(await forecastHighDebug(env, url.searchParams.get('date')||dateIST())); return env.ASSETS.fetch(request); }, async scheduled(event, env, ctx){ctx.waitUntil(collect(env));} };
