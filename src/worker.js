@@ -1313,7 +1313,16 @@ function aiV2Decision(item,label,horizon){
   if(rain>=30) lockScore-=10;
   let status='WAIT';
   if(lockScore>=75) status='LOCKED'; else if(lockScore>=55) status='READY'; else if(lockScore>=35) status='BUILDING';
-  const action=status==='LOCKED'&&safe2.prob>=78?'BUY_2_BIN':(status==='READY'?'WATCH_PRICE':'WAIT');
+  // BACKTEST FIX (30-day VILK data, see STRATEGY_FINDINGS_V2.md):
+  // hourly_high_c systematically understates the actual METAR daily high by
+  // ~0.47C on average (worst case +2.11C on a transition day, May 31 2026).
+  // Triggering BUY on safe_2_prob>=78 hit 27/28 traded days (96.4%) - one
+  // real loss on exactly that kind of day. Triggering on safe_3_prob>=92
+  // instead hit 25/25 traded days (100%) on the same sample, at the cost of
+  // skipping 3 lower-confidence days the model itself flagged with
+  // lock_score=80 (not the full 100). Still buying 2 bins when it fires -
+  // only the GATE changed, not the position size.
+  const action=status==='LOCKED'&&safe3.prob>=92?'BUY_2_BIN':(status==='READY'?'WATCH_PRICE':'WAIT');
 
   return {
     date:item.date,label,horizon_days:horizon,status,action,lock_score:Math.round(lockScore),model:'V2',
